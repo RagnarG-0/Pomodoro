@@ -131,7 +131,7 @@
     padding-bottom: 6px;
     cursor: grab;
     user-select: none;
-    /* hide scrollbar visually but keep functional */
+    flex: 1;
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
   }
@@ -170,10 +170,10 @@
   .tile {
     width: 16px; height: 16px; border-radius: 3px;
     position: relative; cursor: pointer;
-    transition: opacity 0.1s;
     flex-shrink: 0;
+    z-index: 0;
   }
-  .tile:hover { opacity: 0.82; }
+  .tile:hover { z-index: 100; }
 
   /* strikethrough: diagonal lines via SVG background */
   .tile.off {
@@ -196,19 +196,18 @@
 
   /* tooltip */
   .tile .tip {
-    display: none; position: absolute;
-    bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    display: none; position: fixed;
     background: var(--text); color: var(--bg);
     border-radius: 5px; padding: 4px 9px;
     font-size: 10px; white-space: nowrap;
-    z-index: 30; pointer-events: none;
+    z-index: 999; pointer-events: none;
   }
   .tile:hover .tip { display: block; }
 
   /* month labels row */
   .month-row {
     display: flex; gap: 0; margin-bottom: 4px;
-    padding-left: 0; overflow: hidden;
+    padding-left: 0;
   }
   .month-lbl {
     font-size: 9px; color: var(--text-muted); letter-spacing: 0.05em;
@@ -399,14 +398,15 @@
     <div class="hmap-hint">← scrollen · klick = freier Tag</div>
   </div>
 
-  <!-- month labels sit above the scroll -->
-  <div id="month-label-row" style="margin-left:22px; overflow:hidden; margin-bottom:3px; display:flex;"></div>
-
   <div class="hmap-outer">
-    <!-- DOW labels -->
-    <div class="dow-col" id="dow-col"></div>
-    <!-- scrollable grid -->
+    <!-- DOW labels (fixed left) -->
+    <div>
+      <div style="height:14px;"></div><!-- month label spacer -->
+      <div class="dow-col" id="dow-col"></div>
+    </div>
+    <!-- scrollable: month labels + tile grid -->
     <div class="hmap-scroll-wrap" id="hmap-scroll">
+      <div id="month-label-row" style="display:flex; margin-bottom:3px;"></div>
       <div id="heatmap-inner"></div>
     </div>
   </div>
@@ -607,7 +607,20 @@
     scroller.scrollLeft = scroller.scrollWidth;
   }
 
-  /* ── Drag-to-scroll ── */
+  /* ── Tooltip via mousemove ── */
+  function initTooltip() {
+    document.addEventListener('mousemove', e => {
+      const tip = document.querySelector('.tile:hover .tip');
+      if (!tip) return;
+      const tw = tip.offsetWidth || 120;
+      let x = e.clientX - tw / 2;
+      let y = e.clientY - 38;
+      x = Math.max(8, Math.min(x, window.innerWidth - tw - 8));
+      if (y < 8) y = e.clientY + 16;
+      tip.style.left = x + 'px';
+      tip.style.top  = y + 'px';
+    });
+  }
   function initDragScroll() {
     const el = document.getElementById('hmap-scroll');
     let isDown = false, startX, scrollLeft;
@@ -789,6 +802,7 @@
   drawTicks();
   buildDowCol();
   initDragScroll();
+  initTooltip();
   load();
   syncWdBtns();
   render();
