@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pomodoro</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --surface2: #eeede9;
+    --border: rgba(0,0,0,0.12);
+    --border-strong: rgba(0,0,0,0.22);
+    --text: #1a1a18;
+    --text-muted: #6b6b66;
+    --accent: #1D9E75;
+    --accent-dark: #0F6E56;
+    --accent-light: #9FE1CB;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413;
+      --surface: #1e1e1c;
+      --surface2: #272725;
+      --border: rgba(255,255,255,0.1);
+      --border-strong: rgba(255,255,255,0.2);
+      --text: #f0efe9;
+      --text-muted: #8a8a82;
+      --accent: #1D9E75;
+      --accent-dark: #5DCAA5;
+      --accent-light: #085041;
+    }
+  }
+
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: normal;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    font-family: 'Georgia', serif;
+  }
+
+  /* ── Timer card ── */
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem 1.5rem 1.5rem;
+    width: 100%;
+    max-width: 480px;
+    margin-bottom: 1.25rem;
+  }
+
+  .mode-row {
+    display: flex; gap: 6px; justify-content: center; margin-bottom: 1.75rem;
+  }
+  .mode-btn {
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 5px 16px;
+    border: 0.5px solid var(--border-strong);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .mode-btn:hover { background: var(--surface2); color: var(--text); }
+  .mode-btn.active {
+    background: var(--surface2);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  .settings-row {
+    display: flex; gap: 20px; justify-content: center;
+    margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap;
+  }
+  .setting {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--text-muted); letter-spacing: 0.05em;
+    font-family: 'Georgia', serif;
+  }
+  .setting input[type=number] {
+    width: 44px; font-size: 12px; padding: 3px 6px; text-align: center;
+    border: 0.5px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text);
+    font-family: 'Georgia', serif;
+    outline: none;
+  }
+  .setting input:focus { border-color: var(--accent); }
+
+  #time-display {
+    font-size: 80px;
+    font-weight: normal;
+    letter-spacing: -3px;
+    color: var(--text);
+    line-height: 1;
+    text-align: center;
+    margin-bottom: 1.75rem;
+    font-variant-numeric: tabular-nums;
+    font-family: 'Georgia', 'Times New Roman', serif;
+  }
+
+  .progress-bar {
+    height: 2px;
+    background: var(--surface2);
+    border-radius: 1px;
+    margin-bottom: 1.75rem;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 1px;
+    transition: width 1s linear;
+    width: 100%;
+  }
+
+  .ctrl-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 1.5rem; }
+  .ctrl-btn {
+    padding: 9px 28px; font-size: 13px;
+    border: 0.5px solid var(--border-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer; transition: background 0.12s;
+    font-family: 'Georgia', serif;
+    letter-spacing: 0.03em;
+  }
+  .ctrl-btn:hover { background: var(--surface2); }
+  #btn-start {
+    background: var(--accent); color: #fff;
+    border-color: var(--accent-dark);
+    min-width: 100px;
+  }
+  #btn-start:hover { background: var(--accent-dark); }
+  #btn-start.paused {
+    background: transparent; color: var(--text);
+    border-color: var(--border-strong);
+  }
+  #btn-start.paused:hover { background: var(--surface2); }
+
+  .today-row {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 12px; color: var(--text-muted); letter-spacing: 0.04em;
+    font-family: 'Georgia', serif;
+    flex-wrap: wrap;
+  }
+  .tomato-dots { display: flex; gap: 4px; flex-wrap: wrap; max-width: 160px; justify-content: center; }
+  .tdot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ── Heatmap card ── */
+  .hmap-label {
+    font-size: 11px; color: var(--text-muted);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 12px; font-family: 'Georgia', serif;
+  }
+
+  #heatmap {
+    display: grid;
+    grid-template-rows: repeat(8, 1fr);
+    grid-auto-flow: column;
+    gap: 3px;
+  }
+
+  .tile {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    position: relative;
+    cursor: default;
+  }
+  .tile .tip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 5px);
+    left: 50%; transform: translateX(-50%);
+    background: var(--text);
+    color: var(--bg);
+    border-radius: 5px;
+    padding: 4px 9px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 20;
+    pointer-events: none;
+    font-family: 'Georgia', serif;
+  }
+  .tile:hover .tip { display: block; }
+
+  .legend-row {
+    display: flex; align-items: center; gap: 4px;
+    margin-top: 10px; justify-content: flex-end;
+    font-size: 11px; color: var(--text-muted); font-family: 'Georgia', serif;
+  }
+  .ltile { width: 11px; height: 11px; border-radius: 2px; }
+
+  .notif-bar {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--bg);
+    padding: 10px 24px; border-radius: 8px;
+    font-size: 13px; font-family: 'Georgia', serif;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    white-space: nowrap;
+  }
+  .notif-bar.show { opacity: 1; }
+
+  @media (max-width: 520px) {
+    #time-display { font-size: 62px; }
+    .card { padding: 1.5rem 1rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Pomodoro</h1>
+
+<div class="card">
+  <div class="mode-row">
+    <button class="mode-btn active" data-mode="work">Fokus</button>
+    <button class="mode-btn" data-mode="short">Kurze Pause</button>
+    <button class="mode-btn" data-mode="long">Lange Pause</button>
+  </div>
+
+  <div class="settings-row">
+    <div class="setting">
+      <label for="set-work">Fokus (min)</label>
+      <input type="number" id="set-work" value="25" min="1" max="90">
+    </div>
+    <div class="setting">
+      <label for="set-short">Kurz (min)</label>
+      <input type="number" id="set-short" value="5" min="1" max="30">
+    </div>
+    <div class="setting">
+      <label for="set-long">Lang (min)</label>
+      <input type="number" id="set-long" value="15" min="1" max="60">
+    </div>
+  </div>
+
+  <div id="time-display">25:00</div>
+
+  <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+
+  <div class="ctrl-row">
+    <button class="ctrl-btn" id="btn-reset">Zurück</button>
+    <button class="ctrl-btn" id="btn-start">Start</button>
+    <button class="ctrl-btn" id="btn-skip">Fertig</button>
+  </div>
+
+  <div class="today-row">
+    <span>Heute:</span>
+    <div class="tomato-dots" id="tomato-dots"></div>
+    <span id="today-count">0 Pomodoros</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="hmap-label">Letzte 160 Tage</div>
+  <div id="heatmap"></div>
+  <div class="legend-row">
+    <span style="margin-right:2px;">Weniger</span>
+    <div class="ltile" style="background:var(--surface2);border:0.5px solid var(--border);"></div>
+    <div class="ltile" style="background:#9FE1CB;"></div>
+    <div class="ltile" style="background:#5DCAA5;"></div>
+    <div class="ltile" style="background:#1D9E75;"></div>
+    <div class="ltile" style="background:#0F6E56;"></div>
+    <div class="ltile" style="background:#085041;"></div>
+    <span style="margin-left:2px;">Mehr</span>
+  </div>
+</div>
+
+<div class="notif-bar" id="notif"></div>
+
+<script>
+(function () {
+  const KEY = 'pomo_heatmap_v2';
+  let mode = 'work';
+  let totalSec = 25 * 60;
+  let remaining = totalSec;
+  let running = false;
+  let tid = null;
+  let data = {};
+
+  function todayKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function load() {
+    try { data = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) { data = {}; }
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch(e) {}
+  }
+
+  function getMin(m) {
+    return Math.max(1, parseInt(document.getElementById('set-' + m).value) || { work:25, short:5, long:15 }[m]);
+  }
+
+  function fmt(s) {
+    return String(Math.floor(s / 60)).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+  }
+
+  function tileColor(n) {
+    if (!n) return null;
+    if (n === 1) return '#9FE1CB';
+    if (n === 2) return '#5DCAA5';
+    if (n <= 4) return '#1D9E75';
+    if (n <= 6) return '#0F6E56';
+    return '#085041';
+  }
+
+  function renderHeatmap() {
+    const hm = document.getElementById('heatmap');
+    const today = new Date();
+    let html = '';
+    for (let i = 159; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const n = data[key] || 0;
+      const col = tileColor(n);
+      const bg = col
+        ? `background:${col};`
+        : `background:var(--surface2);border:0.5px solid var(--border);`;
+      const label = d.toLocaleDateString('de-DE', { day:'2-digit', month:'short' });
+      html += `<div class="tile" style="${bg}"><span class="tip">${label}: ${n}</span></div>`;
+    }
+    hm.innerHTML = html;
+  }
+
+  function renderTomatoes() {
+    const n = data[todayKey()] || 0;
+    document.getElementById('today-count').textContent = n + (n === 1 ? ' Pomodoro' : ' Pomodoros');
+    const container = document.getElementById('tomato-dots');
+    let html = '';
+    const show = Math.min(n, 20);
+    for (let i = 0; i < show; i++) html += '<div class="tdot"></div>';
+    container.innerHTML = html;
+  }
+
+  function updateProgress() {
+    const pct = totalSec > 0 ? (remaining / totalSec) * 100 : 0;
+    document.getElementById('progress').style.width = pct + '%';
+  }
+
+  function renderTimer() {
+    document.getElementById('time-display').textContent = fmt(remaining);
+    updateProgress();
+    const btn = document.getElementById('btn-start');
+    if (running) {
+      btn.textContent = 'Pause'; btn.classList.add('paused');
+    } else {
+      btn.textContent = remaining === totalSec ? 'Start' : 'Weiter';
+      btn.classList.remove('paused');
+    }
+    document.title = fmt(remaining) + ' — Pomodoro';
+  }
+
+  function render() { renderTimer(); renderTomatoes(); renderHeatmap(); }
+
+  function toast(msg) {
+    const el = document.getElementById('notif');
+    el.textContent = msg; el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  function completePomo() {
+    const key = todayKey();
+    data[key] = (data[key] || 0) + 1;
+    save();
+    toast('Pomodoro abgeschlossen! ' + data[key] + ' heute.');
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Pomodoro abgeschlossen!', { body: 'Zeit für eine Pause.' });
+    }
+  }
+
+  function tick() {
+    if (remaining <= 0) {
+      clearInterval(tid); running = false;
+      if (mode === 'work') completePomo();
+      render(); return;
+    }
+    remaining--;
+    renderTimer();
+  }
+
+  function start() {
+    if (running) {
+      clearInterval(tid); running = false;
+    } else {
+      running = true;
+      tid = setInterval(tick, 1000);
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+    renderTimer();
+  }
+
+  function reset() {
+    clearInterval(tid); running = false;
+    totalSec = getMin(mode) * 60;
+    remaining = totalSec;
+    render();
+  }
+
+  function skip() {
+    clearInterval(tid); running = false;
+    if (mode === 'work') { remaining = 0; completePomo(); }
+    remaining = 0; render();
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    reset();
+  }
+
+  document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  document.getElementById('btn-start').addEventListener('click', start);
+  document.getElementById('btn-reset').addEventListener('click', reset);
+  document.getElementById('btn-skip').addEventListener('click', skip);
+
+  ['work','short','long'].forEach(m => {
+    document.getElementById('set-' + m).addEventListener('change', () => { if (mode === m) reset(); });
+  });
+
+  load(); render();
+})();
+</script>
+</body>
+</html>
