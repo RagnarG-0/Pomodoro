@@ -455,6 +455,7 @@
   let remaining = totalSec;
   let running = false;
   let tid = null;
+  let startedAt = null; // wall-clock ms when current run started (adjusted for elapsed)
 
   // Persisted data
   let days = {};          // { 'YYYY-MM-DD': count }
@@ -743,10 +744,9 @@
 
   function switchTo(m, autoStart) {
     mode=m; syncModeBtns();
-    clearInterval(tid); running=false;
+    clearInterval(tid); running=false; startedAt=null;
     totalSec=getMin(m)*60; remaining=totalSec;
     renderTimer();
-    if (autoStart) { running=true; tid=setInterval(tick,1000); }
   }
 
   function completePomo() {
@@ -760,7 +760,8 @@
   }
 
   function onTimerEnd() {
-    clearInterval(tid); running=false;
+    clearInterval(tid); running=false; startedAt=null;
+    swSend({ type: 'TIMER_RESET' }); // SW hat schon gefeuert oder wir canceln vorsorglich
     if (mode==='work') {
       completePomo();
       const next=(totalPomodoros%getLongAfter()===0)?'long':'short';
@@ -772,30 +773,79 @@
   }
 
   function tick() {
-    if (remaining<=0) { onTimerEnd(); return; }
-    remaining--; renderTimer();
+    if (!startedAt) return;
+    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+    remaining = Math.max(0, totalSec - elapsed);
+    renderTimer();
+    if (remaining <= 0) onTimerEnd();
+  }
+
+  /* ── Service Worker ── */
+  let swReg = null;
+
+  async function registerSW() {
+    if (!('serviceWorker' in navigator)) return;
+    try {
+      swReg = await navigator.serviceWorker.register('./sw.js');
+      // Nachrichten vom SW empfangen (TIMER_DONE wenn Tab eingefroren war)
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data?.type === 'TIMER_DONE' && running) {
+          // Tab war eingefroren; SW hat den Ablauf erkannt → hier aufräumen
+          clearInterval(tid); running = false; startedAt = null;
+          if (e.data.mode === 'work') {
+            completePomo();
+            const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
+            setTimeout(() => switchTo(next, false), 1400);
+          } else {
+            toast('Pause vorbei – bereit für den nächsten Fokus!');
+            setTimeout(() => switchTo('work', false), 1400);
+          }
+        }
+      });
+    } catch(err) {
+      console.warn('SW registration failed:', err);
+    }
+  }
+
+  function swSend(msg) {
+    if (!swReg?.active) return;
+    swReg.active.postMessage(msg);
   }
 
   /* ── Controls ── */
   function start() {
-    if (running) { clearInterval(tid); running=false; }
-    else {
-      running=true; tid=setInterval(tick,1000);
+    if (running) {
+      clearInterval(tid); running=false; startedAt=null;
+      swSend({ type: 'TIMER_PAUSE' });
+    } else {
+      startedAt = Date.now() - (totalSec - remaining) * 1000;
+      running=true; tid=setInterval(tick, 250);
       if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+      swSend({ type: 'TIMER_START', endAt: startedAt + totalSec * 1000, mode });
     }
     renderTimer();
   }
 
   function reset() {
-    clearInterval(tid); running=false;
-    totalSec=getMin(mode)*60; remaining=totalSec; render();
+    clearInterval(tid); running=false; startedAt=null;
+    totalSec=getMin(mode)*60; remaining=totalSec;
+    swSend({ type: 'TIMER_RESET' });
+    render();
   }
 
   function skip() {
-    clearInterval(tid); running=false;
+    clearInterval(tid); running=false; startedAt=null;
+    swSend({ type: 'TIMER_SKIP' });
     if (mode==='work') completePomo();
     onTimerEnd();
   }
+
+  // Page Visibility API: re-anchor when tab comes back into foreground
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !running || !startedAt) return;
+    // Re-calculate immediately so display snaps to correct value
+    tick();
+  });
 
   document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; syncModeBtns(); reset(); }));
   document.getElementById('btn-start').addEventListener('click', start);
@@ -851,6 +901,7 @@
   overlay.addEventListener('click',e=>{ if(e.target===overlay){ overlay.classList.remove('open'); gearBtn.classList.remove('open'); } });
 
   /* ── Init ── */
+  registerSW();
   drawTicks();
   buildDowCol();
   initDragScroll();
