@@ -1181,25 +1181,29 @@
 
     try {
       let list;
+
       if (lbPeriod === 'today') {
-        // Direct query for today
+        // Single day — one row per user, no aggregation needed
         const url = `${SUPABASE_URL}/rest/v1/leaderboard`
           + `?date=eq.${todayKey()}`
           + `&order=count.desc&limit=15&select=name,count`;
         const res = await fetch(url, { headers: sbHeaders() });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         list = await res.json();
+
       } else {
-        // Use RPC for aggregated periods
-        let dateFrom = null;
+        // Multi-day: use RPC with explicit non-null date or far-past date for alltime
+        let dateFrom;
         if (lbPeriod === 'week') {
           const d = new Date(); d.setDate(d.getDate() - 6);
           dateFrom = d.toISOString().slice(0, 10);
         } else if (lbPeriod === 'month') {
           const d = new Date(); d.setDate(d.getDate() - 29);
           dateFrom = d.toISOString().slice(0, 10);
+        } else {
+          // alltime — use a date far in the past so filter matches everything
+          dateFrom = '2000-01-01';
         }
-        // alltime → dateFrom stays null
         const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_aggregated`, {
           method: 'POST',
           headers: sbHeaders(),
@@ -1208,6 +1212,7 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         list = await res.json();
       }
+
       renderLeaderboard(list);
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
@@ -1246,10 +1251,14 @@
   async function removeFromLeaderboard() {
     if (!userName || !supabaseReady()) return;
     try {
-      await fetch(
+      const res = await fetch(
         `${SUPABASE_URL}/rest/v1/leaderboard?name=eq.${encodeURIComponent(userName)}`,
         { method: 'DELETE', headers: sbHeaders() }
       );
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn('Remove from leaderboard failed:', res.status, err);
+      }
     } catch(e) { console.warn('Remove from leaderboard error', e); }
   }
 
