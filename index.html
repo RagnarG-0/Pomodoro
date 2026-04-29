@@ -1092,8 +1092,7 @@
       document.getElementById('welcome-overlay').style.display = 'none';
       if (userPublic) {
         document.getElementById('leaderboard-card').style.display = 'block';
-        pushLeaderboard();
-        loadLeaderboard();
+        pushLeaderboard().then(() => loadLeaderboard());
       }
     }
 
@@ -1103,8 +1102,8 @@
 
   /* ── Leaderboard via Supabase ── */
   // ↓↓↓ HIER deine Supabase-Zugangsdaten eintragen ↓↓↓
-  const SUPABASE_URL = 'https://cmbyzzfjzrhdxylopqkt.supabase.co';        // z.B. https://xyzxyz.supabase.co
-  const SUPABASE_ANON_KEY = 'sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj'; // langer JWT-String
+  const SUPABASE_URL = 'https://cmbyzzfjzrhdxylopqkt.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj';
   // ↑↑↑ ─────────────────────────────────────────── ↑↑↑
 
   function sbHeaders() {
@@ -1125,12 +1124,20 @@
     const count = days[todayKey()] || 0;
     const date  = todayKey();
     try {
-      // UPSERT: insert or update by primary key (name, date)
-      await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
         method: 'POST',
-        headers: { ...sbHeaders(), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ name: userName, count, date }),
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'Prefer': 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({ name: userName, count, date, updated_at: new Date().toISOString() }),
       });
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn('Leaderboard push failed:', res.status, err);
+      }
     } catch(e) {
       console.warn('Leaderboard push error', e);
     }
@@ -1184,10 +1191,9 @@
   function initLeaderboard() {
     if (userName && userPublic) {
       document.getElementById('leaderboard-card').style.display = 'block';
-      loadLeaderboard();
+      pushLeaderboard().then(() => loadLeaderboard());
     }
     document.getElementById('lb-refresh').addEventListener('click', loadLeaderboard);
-    // Auto-refresh every 60s when tab is visible
     setInterval(() => {
       if (userPublic && userName && !document.hidden) loadLeaderboard();
     }, 60000);
