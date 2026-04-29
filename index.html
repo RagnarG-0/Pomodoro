@@ -291,13 +291,17 @@
   .notif-bar.show { opacity: 1; }
 
   .unit-btn {
-    font-size: 11px; padding: 5px 12px;
+    font-size: 11px; padding: 5px 0;
+    width: 50%;
     border: 0.5px solid var(--border-strong);
     background: transparent; color: var(--text-muted);
-    cursor: pointer; transition: all 0.12s; font-family: 'Georgia', serif;
+    cursor: pointer; transition: background 0.12s, color 0.12s; font-family: 'Georgia', serif;
+    text-align: center;
   }
+  .unit-btn:first-child { border-radius: 6px 0 0 6px; border-right: none; }
+  .unit-btn:last-child  { border-radius: 0 6px 6px 0; }
   .unit-btn.active { background: var(--surface2); color: var(--text); }
-  .unit-btn:hover { background: var(--surface2); }
+  .unit-btn:hover  { background: var(--surface2); }
 
   .stats-row {
     display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap;
@@ -395,12 +399,9 @@
 
     <div class="panel-divider"></div>
     <div class="panel-section">Anzeigeeinheit</div>
-    <div class="panel-row">
-      <label>Einheit</label>
-      <div class="inp-wrap" style="gap:0;">
-        <button class="unit-btn active" data-unit="pomodoros" style="border-radius:6px 0 0 6px;">🍅 Pomodoros</button>
-        <button class="unit-btn" data-unit="time" style="border-radius:0 6px 6px 0;">⏱ Zeit</button>
-      </div>
+    <div style="display:flex;gap:0;width:100%;margin-bottom:0.75rem;">
+      <button class="unit-btn active" data-unit="pomodoros">🍅 Pomodoros</button>
+      <button class="unit-btn" data-unit="time">⏱ Zeit</button>
     </div>
 
     <div class="panel-divider"></div>
