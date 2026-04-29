@@ -391,6 +391,11 @@
           <option value="ding">Ding</option>
           <option value="chime">Chime</option>
           <option value="soft">Soft Pop</option>
+          <option value="bowl">Klangschale</option>
+          <option value="marimba">Marimba</option>
+          <option value="ping">Ping</option>
+          <option value="harp">Harfe</option>
+          <option value="drum">Trommel</option>
           <option value="none">Kein Ton</option>
         </select>
         <button id="sound-preview" style="padding:4px 10px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:6px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;">▶</button>
@@ -1126,6 +1131,122 @@
       osc.start(t); osc.stop(t + 0.35);
     },
     none: () => {},
+
+    // Tibetanische Klangschale — langer sinusförmiger Ton mit leichtem Tremolo
+    bowl: ctx => {
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const tremolo = ctx.createOscillator();
+      const tremoloGain = ctx.createGain();
+      tremolo.connect(tremoloGain);
+      tremoloGain.connect(gain.gain);
+      tremolo.frequency.value = 6;
+      tremoloGain.gain.value = 0.04;
+      tremolo.start(t); tremolo.stop(t + 3.5);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(396, t);
+      osc.frequency.linearRampToValueAtTime(392, t + 3.0);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.5, t + 0.08);
+      gain.gain.setValueAtTime(0.5, t + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 3.5);
+      osc.start(t); osc.stop(t + 3.5);
+      // Oberton
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc2.type = 'sine';
+      osc2.frequency.value = 792;
+      gain2.gain.setValueAtTime(0.15, t);
+      gain2.gain.exponentialRampToValueAtTime(0.001, t + 2.0);
+      osc2.start(t); osc2.stop(t + 2.0);
+    },
+
+    // Marimba — warme Holzbalken-Akkorde
+    marimba: ctx => {
+      const t = ctx.currentTime;
+      const notes = [523, 659, 784, 659, 880];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        const start = t + i * 0.14;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.35, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.7);
+        osc.start(start); osc.stop(start + 0.7);
+        // Sub-Ton für Wärme
+        const sub = ctx.createOscillator();
+        const subGain = ctx.createGain();
+        sub.connect(subGain); subGain.connect(ctx.destination);
+        sub.type = 'sine';
+        sub.frequency.value = freq / 2;
+        subGain.gain.setValueAtTime(0.1, start);
+        subGain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+        sub.start(start); sub.stop(start + 0.4);
+      });
+    },
+
+    // Ping — klarer, kurzer Metall-Ping
+    ping: ctx => {
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(2093, t);
+      osc.frequency.exponentialRampToValueAtTime(1760, t + 0.3);
+      gain.gain.setValueAtTime(0.45, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+      osc.start(t); osc.stop(t + 0.8);
+    },
+
+    // Harfe — aufsteigender Arpeggio-Glissando
+    harp: ctx => {
+      const t = ctx.currentTime;
+      const notes = [392, 494, 587, 740, 880, 1047, 1319];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = t + i * 0.08;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.28, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 1.2);
+        osc.start(start); osc.stop(start + 1.2);
+      });
+    },
+
+    // Trommel — tiefer Bassdrum-Schlag mit Noise-Anteil
+    drum: ctx => {
+      const t = ctx.currentTime;
+      // Bass-Kick
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+      gain.gain.setValueAtTime(0.8, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.start(t); osc.stop(t + 0.35);
+      // Click-Transient
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let j = 0; j < data.length; j++) data[j] = (Math.random() * 2 - 1) * (1 - j / data.length);
+      const src = ctx.createBufferSource();
+      const noiseGain = ctx.createGain();
+      src.buffer = buf;
+      src.connect(noiseGain); noiseGain.connect(ctx.destination);
+      noiseGain.gain.value = 0.3;
+      src.start(t);
+    },
   };
 
   function playSound(/* 'work' | 'break' — same sound for now, easy to split later */) {
@@ -1209,8 +1330,15 @@
   function skip() {
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_SKIP' });
-    if (mode==='work') completePomo();
-    onTimerEnd();
+    if (mode === 'work') {
+      completePomo();
+      const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
+      setTimeout(() => switchTo(next, false), 1400);
+    } else {
+      playSound('break');
+      toast('Pause vorbei – bereit für den nächsten Fokus!');
+      setTimeout(() => switchTo('work', false), 1400);
+    }
   }
 
   // Page Visibility API: re-anchor when tab comes back into foreground
