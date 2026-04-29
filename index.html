@@ -591,10 +591,10 @@
   let startedAt = null; // wall-clock ms when current run started (adjusted for elapsed)
 
   // Persisted data
-  let days = {};          // { 'YYYY-MM-DD': count }
+  let days = {};          // { 'YYYY-MM-DD': minutes } — fokussierte Minuten pro Tag
   let offDays = {};       // { 'YYYY-MM-DD': true } — manually struck out
   let offWeekdays = [];   // [0..6] JS weekday numbers (0=Sun)
-  let totalPomodoros = 0;
+  let totalPomodoros = 0; // session counter for toast messages
 
   /* ── Storage ── */
   function todayKey() { return new Date().toISOString().slice(0,10); }
@@ -658,12 +658,14 @@
   }
 
   /* ── Heatmap ── */
-  function tileColor(n) {
-    if (!n) return null;
-    if (n===1) return '#9FE1CB';
-    if (n===2) return '#5DCAA5';
-    if (n<=4)  return '#1D9E75';
-    if (n<=6)  return '#0F6E56';
+  function tileColor(mins) {
+    // Thresholds based on minutes (default 25min interval):
+    // 1–24min, 25–49min, 50–99min, 100–149min, 150+min
+    if (!mins || mins <= 0) return null;
+    if (mins < 25)  return '#9FE1CB';
+    if (mins < 50)  return '#5DCAA5';
+    if (mins < 100) return '#1D9E75';
+    if (mins < 150) return '#0F6E56';
     return '#085041';
   }
 
@@ -725,8 +727,8 @@
         continue;
       }
       const key = cell.toISOString().slice(0,10);
-      const n = days[key] || 0;
-      const col = tileColor(n);
+      const mins = days[key] || 0;
+      const col = tileColor(mins);
       const off = isOff(cell, key);
       const bg = col
         ? `background:${col};`
@@ -734,7 +736,8 @@
       const label = cell.toLocaleDateString('de-DE', {weekday:'short', day:'2-digit', month:'short'});
       const offLabel = off ? ' · frei' : '';
       const offClass = off ? ' off' : '';
-      html += `<div class="tile${offClass}" style="${bg}" data-key="${key}"><span class="tip">${label}: ${n}${offLabel}</span></div>`;
+      const tipVal = mins > 0 ? minutesToDisplay(mins) : '0';
+      html += `<div class="tile${offClass}" style="${bg}" data-key="${key}"><span class="tip">${label}: ${tipVal}${offLabel}</span></div>`;
     }
     inner.innerHTML = html;
 
@@ -791,10 +794,11 @@
 
   /* ── Render ── */
   function renderTomatoes() {
-    const n = days[todayKey()] || 0;
-    document.getElementById('today-count').textContent = n + (n===1 ? ' Pomodoro' : ' Pomodoros');
+    const mins = days[todayKey()] || 0;
+    const n = Math.floor(mins / getMin('work')); // whole pomodoros completed today
+    document.getElementById('today-count').textContent = minutesToDisplay(mins);
     let html = '';
-    for (let i = 0; i < Math.min(n,24); i++) html += '<div class="tdot"></div>';
+    for (let i = 0; i < Math.min(n, 24); i++) html += '<div class="tdot"></div>';
     document.getElementById('tomato-dots').innerHTML = html;
   }
 
@@ -813,31 +817,39 @@
   function render() { renderTimer(); renderTomatoes(); renderHeatmap(); renderStats(); }
 
   /* ── Display unit helpers ── */
-  function pomoToDisplay(count) {
-    const rounded = Math.round(count * 10) / 10; // e.g. 1.4, never 0.14285...
-    if (displayUnit === 'pomodoros') {
-      // Show as integer if whole number, one decimal otherwise
-      return (Number.isInteger(rounded) ? rounded : rounded) + ' 🍅';
+  // All display functions take MINUTES as input
+  function minutesToDisplay(mins) {
+    if (displayUnit === 'time') {
+      const h = Math.floor(mins / 60);
+      const m = Math.round(mins % 60);
+      return h > 0 ? `${h}h ${m}min` : `${m}min`;
+    } else {
+      // Convert to pomodoros using current work interval
+      const interval = getMin('work');
+      const pomos = Math.round((mins / interval) * 10) / 10;
+      return pomos + ' 🍅';
     }
-    const mins = Math.round(count * getMin('work'));
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return h > 0 ? `${h}h ${m}min` : `${m}min`;
   }
 
-  function deltaStr(diff) {
-    if (diff === 0) return { text: '± 0', cls: 'flat' };
-    const sign = diff > 0 ? '+' : '−';
-    const abs = Math.abs(diff);
-    const text = sign + ' ' + (displayUnit === 'pomodoros'
-      ? abs + ' 🍅'
-      : (() => { const h = Math.floor(abs * getMin('work') / 60); const m = (abs * getMin('work')) % 60; return h > 0 ? `${h}h ${m}min` : `${m}min`; })());
-    return { text, cls: diff > 0 ? 'up' : 'down' };
+  function deltaMinsStr(diffMins) {
+    if (diffMins === 0) return { text: '± 0', cls: 'flat' };
+    const sign = diffMins > 0 ? '+' : '−';
+    const abs = Math.abs(diffMins);
+    let text;
+    if (displayUnit === 'time') {
+      const h = Math.floor(abs / 60);
+      const m = Math.round(abs % 60);
+      text = sign + ' ' + (h > 0 ? `${h}h ${m}min` : `${m}min`);
+    } else {
+      const interval = getMin('work');
+      const pomos = Math.round((abs / interval) * 10) / 10;
+      text = sign + ' ' + pomos + ' 🍅';
+    }
+    return { text, cls: diffMins > 0 ? 'up' : 'down' };
   }
 
   /* ── Stats ── */
   function renderStats() {
-    // Sum pomodoros over a range of days ago (0 = today, 1 = yesterday, …)
     function sumRange(startDaysAgo, endDaysAgo) {
       let total = 0;
       for (let i = endDaysAgo; i <= startDaysAgo; i++) {
@@ -846,9 +858,8 @@
         if (!offDays[key] && !offWeekdays.includes(d.getDay()))
           total += days[key] || 0;
       }
-      return total;
+      return total; // returns minutes
     }
-    // Count days in range that have any recorded pomodoros
     function daysWithData(startDaysAgo, endDaysAgo) {
       let n = 0;
       for (let i = endDaysAgo; i <= startDaysAgo; i++) {
@@ -860,52 +871,44 @@
     }
 
     // ── Today ──
-    const todayCount = days[todayKey()] || 0;
+    const todayMins = days[todayKey()] || 0;
     const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayKey = yesterdayDate.toISOString().slice(0, 10);
-    const yesterdayCount = days[yesterdayKey] || 0;
+    const yesterdayMins = days[yesterdayKey] || 0;
     const hasYesterday = yesterdayKey in days;
 
-    document.getElementById('stat-day-val').textContent = pomoToDisplay(todayCount);
+    document.getElementById('stat-day-val').textContent = minutesToDisplay(todayMins);
     const dayDeltaEl = document.getElementById('stat-day-delta');
     if (hasYesterday) {
-      const d = deltaStr(todayCount - yesterdayCount);
+      const d = deltaMinsStr(todayMins - yesterdayMins);
       dayDeltaEl.textContent = d.text + ' vs. gestern';
       dayDeltaEl.className = 'stat-delta ' + d.cls;
     } else {
       dayDeltaEl.textContent = '';
     }
 
-    // ── This week average ──
-    // "This week" = last 7 days including today
-    const thisWSum = sumRange(6, 0);
+    // ── This week average (last 7 days) ──
+    const thisWMins = sumRange(6, 0);
     const thisWDays = daysWithData(6, 0);
-
-    // Only show average if there are at least 2 days with data
     const weekValEl = document.getElementById('stat-week-val');
     const weekDeltaEl = document.getElementById('stat-week-delta');
 
-    if (thisWDays === 0 || thisWSum === 0) {
+    if (thisWDays === 0 || thisWMins === 0) {
       weekValEl.textContent = '—';
       weekDeltaEl.textContent = '';
     } else if (thisWDays === 1) {
-      // Only today — show raw value, no average yet
-      weekValEl.textContent = pomoToDisplay(thisWSum);
+      weekValEl.textContent = minutesToDisplay(thisWMins);
       weekDeltaEl.textContent = '(erst 1 Tag)';
       weekDeltaEl.className = 'stat-delta flat';
     } else {
-      const avg = Math.round((thisWSum / thisWDays) * 10) / 10;
-      weekValEl.textContent = pomoToDisplay(avg) + ' / Tag';
+      const avgMins = thisWMins / thisWDays;
+      weekValEl.textContent = minutesToDisplay(avgMins) + ' / Tag';
 
-      // Compare to previous 7 days only if they have data
-      const lastWSum = sumRange(13, 7);
+      const lastWMins = sumRange(13, 7);
       const lastWDays = daysWithData(13, 7);
       if (lastWDays > 0) {
-        const lastAvg = Math.round((lastWSum / lastWDays) * 10) / 10;
-        const diffRaw = Math.round((avg - lastAvg) * 10) / 10;
-        // Express delta in raw pomodoros for pomoToDisplay
-        const diffPomo = Math.round(thisWSum / thisWDays - lastWSum / lastWDays);
-        const d = deltaStr(diffPomo);
+        const lastAvgMins = lastWMins / lastWDays;
+        const d = deltaMinsStr(Math.round(avgMins - lastAvgMins));
         weekDeltaEl.textContent = d.text + ' vs. Vorwoche';
         weekDeltaEl.className = 'stat-delta ' + d.cls;
       } else {
@@ -985,11 +988,14 @@
   }
 
   function completePomo() {
-    const key=todayKey();
-    days[key]=(days[key]||0)+1; totalPomodoros++; save();
+    const key = todayKey();
+    const mins = getMin('work'); // Minuten dieses Pomodoros
+    days[key] = (days[key] || 0) + mins;
+    totalPomodoros++; save();
     launchConfetti();
     playSound('work');
-    toast('Pomodoro #'+totalPomodoros+' geschafft! '+days[key]+' heute');
+    const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
+    toast('Pomodoro #' + totalPomodoros + ' geschafft! ' + todayPomos + ' heute');
     renderTomatoes(); renderHeatmap();
     if (userPublic && userName) pushLeaderboard();
   }
@@ -1239,20 +1245,22 @@
       const key = document.getElementById('adj-date').value;
       const n = Math.max(0, parseInt(document.getElementById('adj-count').value) || 0);
       if (!key) return;
-      days[key] = n;
+      const mins = n * getMin('work');
       if (n === 0) delete days[key];
-      save(); renderTomatoes(); renderHeatmap();
-      showFeedback(key + ' → ' + n + ' Pomodoros gesetzt');
+      else days[key] = mins;
+      save(); renderTomatoes(); renderHeatmap(); renderStats();
+      showFeedback(key + ' → ' + minutesToDisplay(mins) + ' gesetzt');
     });
 
     document.getElementById('adj-add').addEventListener('click', () => {
       const key = document.getElementById('adj-date').value;
       const n = Math.max(0, parseInt(document.getElementById('adj-count').value) || 0);
       if (!key || n === 0) return;
-      days[key] = (days[key] || 0) + n;
+      const addMins = n * getMin('work');
+      days[key] = (days[key] || 0) + addMins;
       totalPomodoros += n;
-      save(); renderTomatoes(); renderHeatmap();
-      showFeedback('+' + n + ' zu ' + key + ' hinzugefügt → ' + days[key] + ' gesamt');
+      save(); renderTomatoes(); renderHeatmap(); renderStats();
+      showFeedback('+' + minutesToDisplay(addMins) + ' zu ' + key + ' → ' + minutesToDisplay(days[key]) + ' gesamt');
     });
   }
 
@@ -1330,10 +1338,9 @@
     return SUPABASE_URL !== 'DEINE_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'DEIN_ANON_PUBLIC_KEY';
   }
 
-  // Sendet nur den heutigen Tag (wird nach jedem Pomodoro aufgerufen)
   async function pushLeaderboard() {
     if (!userName || !userPublic || !supabaseReady()) return;
-    const count = days[todayKey()] || 0;
+    const minutes = days[todayKey()] || 0;
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
         method: 'POST',
@@ -1343,20 +1350,18 @@
           'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
           'Prefer': 'resolution=merge-duplicates,return=minimal',
         },
-        body: JSON.stringify({ name: userName, count, date: todayKey(), updated_at: new Date().toISOString() }),
+        body: JSON.stringify({ name: userName, minutes, date: todayKey(), updated_at: new Date().toISOString() }),
       });
       if (!res.ok) console.warn('Leaderboard push failed:', res.status, await res.text());
     } catch(e) { console.warn('Leaderboard push error', e); }
   }
 
-  // Beim ersten Opt-in: alle lokalen Tage auf einmal hochladen (Bulk-Upsert)
   async function syncAllHistory() {
     if (!userName || !userPublic || !supabaseReady()) return;
     const rows = Object.entries(days)
-      .filter(([, count]) => count > 0)
-      .map(([date, count]) => ({ name: userName, date, count, updated_at: new Date().toISOString() }));
+      .filter(([, minutes]) => minutes > 0)
+      .map(([date, minutes]) => ({ name: userName, date, minutes, updated_at: new Date().toISOString() }));
     if (!rows.length) return;
-    // Supabase erlaubt max ~500 Zeilen pro Request — bei 100 Tagen kein Problem
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
         method: 'POST',
@@ -1394,11 +1399,12 @@
     el.innerHTML = list.map((entry, i) => {
       const isMe = entry.name === userName;
       const medal = medals[i] ?? `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${i+1}</span>`;
-      const countDisplay = pomoToDisplay(entry.count);
+      const mins = entry.minutes ?? entry.count ?? 0; // fallback for old data
+      const display = minutesToDisplay(mins);
       return `<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
         <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
         <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}</span>
-        <span style="font-size:13px;color:var(--text-muted);">${countDisplay}</span>
+        <span style="font-size:13px;color:var(--text-muted);">${display}</span>
       </div>`;
     }).join('');
     document.getElementById('lb-status').textContent =
@@ -1421,7 +1427,7 @@
         // Single day — one row per user, no aggregation needed
         const url = `${SUPABASE_URL}/rest/v1/leaderboard`
           + `?date=eq.${todayKey()}`
-          + `&order=count.desc&limit=15&select=name,count`;
+          + `&order=minutes.desc&limit=15&select=name,minutes`;
         const res = await fetch(url, { headers: sbHeaders() });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         list = await res.json();
