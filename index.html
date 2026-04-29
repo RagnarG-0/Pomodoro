@@ -335,6 +335,22 @@
     </div>
 
     <div class="panel-divider"></div>
+    <div class="panel-section">Benachrichtigungston</div>
+    <div class="panel-row">
+      <label for="sound-select">Ton</label>
+      <div class="inp-wrap">
+        <select id="sound-select" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--border-strong);border-radius:6px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;cursor:pointer;">
+          <option value="bell">Glocke</option>
+          <option value="ding">Ding</option>
+          <option value="chime">Chime</option>
+          <option value="soft">Soft Pop</option>
+          <option value="none">Kein Ton</option>
+        </select>
+        <button id="sound-preview" style="padding:4px 10px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:6px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;">▶</button>
+      </div>
+    </div>
+
+    <div class="panel-divider"></div>
     <div class="panel-section">Pomodoros anpassen</div>
     <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Vergessene Pomodoros nachträglich eintragen oder korrigieren.</p>
     <div class="panel-row">
@@ -753,9 +769,8 @@
     const key=todayKey();
     days[key]=(days[key]||0)+1; totalPomodoros++; save();
     launchConfetti();
+    playSound('work');
     toast('Pomodoro #'+totalPomodoros+' geschafft! '+days[key]+' heute');
-    if ('Notification' in window && Notification.permission==='granted')
-      new Notification('Pomodoro abgeschlossen!',{body:'Zeit für eine Pause.'});
     renderTomatoes(); renderHeatmap();
   }
 
@@ -767,6 +782,7 @@
       const next=(totalPomodoros%getLongAfter()===0)?'long':'short';
       setTimeout(()=>switchTo(next, false),1400);
     } else {
+      playSound('break');
       toast('Pause vorbei – bereit für den nächsten Fokus!');
       setTimeout(()=>switchTo('work', false),1400);
     }
@@ -778,6 +794,113 @@
     remaining = Math.max(0, totalSec - elapsed);
     renderTimer();
     if (remaining <= 0) onTimerEnd();
+  }
+
+  /* ── Sound engine (Web Audio, no external files) ── */
+  let audioCtx = null;
+  let selectedSound = 'bell';
+
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  const SOUNDS = {
+    bell: ctx => {
+      // Church-bell-like: high sine with exponential decay
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, t);
+      osc.frequency.exponentialRampToValueAtTime(440, t + 1.2);
+      gain.gain.setValueAtTime(0.6, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 2.0);
+      osc.start(t); osc.stop(t + 2.0);
+      // second partial
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, t);
+      osc2.frequency.exponentialRampToValueAtTime(660, t + 0.8);
+      gain2.gain.setValueAtTime(0.25, t);
+      gain2.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+      osc2.start(t); osc2.stop(t + 1.2);
+    },
+    ding: ctx => {
+      // Short bright ding
+      const t = ctx.currentTime;
+      [1047, 1319, 1568].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        const start = t + i * 0.13;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.4, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.8);
+        osc.start(start); osc.stop(start + 0.8);
+      });
+    },
+    chime: ctx => {
+      // Gentle wind-chime cascade
+      const t = ctx.currentTime;
+      const freqs = [523, 659, 784, 1047, 880, 698];
+      freqs.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = t + i * 0.18;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.3, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 1.1);
+        osc.start(start); osc.stop(start + 1.1);
+      });
+    },
+    soft: ctx => {
+      // Soft low pop
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, t);
+      osc.frequency.exponentialRampToValueAtTime(220, t + 0.15);
+      gain.gain.setValueAtTime(0.5, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.start(t); osc.stop(t + 0.35);
+    },
+    none: () => {},
+  };
+
+  function playSound(/* 'work' | 'break' — same sound for now, easy to split later */) {
+    if (selectedSound === 'none') return;
+    try {
+      const ctx = getAudioCtx();
+      if (ctx.state === 'suspended') ctx.resume().then(() => SOUNDS[selectedSound](ctx));
+      else SOUNDS[selectedSound](ctx);
+    } catch(e) { console.warn('Audio error', e); }
+  }
+
+  function initSound() {
+    // Load persisted preference
+    const saved = localStorage.getItem('pomo_sound');
+    if (saved && SOUNDS[saved]) {
+      selectedSound = saved;
+      document.getElementById('sound-select').value = saved;
+    }
+    document.getElementById('sound-select').addEventListener('change', e => {
+      selectedSound = e.target.value;
+      localStorage.setItem('pomo_sound', selectedSound);
+    });
+    document.getElementById('sound-preview').addEventListener('click', () => {
+      playSound('work');
+    });
   }
 
   /* ── Service Worker ── */
@@ -907,6 +1030,7 @@
   initDragScroll();
   initTooltip();
   initAdjust();
+  initSound();
   load();
   syncWdBtns();
   render();
