@@ -1117,7 +1117,7 @@
       document.getElementById('welcome-overlay').style.display = 'none';
       if (userPublic) {
         document.getElementById('leaderboard-card').style.display = 'block';
-        pushLeaderboard().then(() => loadLeaderboard());
+        syncAllHistory().then(() => loadLeaderboard('today'));
       }
     }
 
@@ -1144,10 +1144,10 @@
     return SUPABASE_URL !== 'DEINE_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'DEIN_ANON_PUBLIC_KEY';
   }
 
+  // Sendet nur den heutigen Tag (wird nach jedem Pomodoro aufgerufen)
   async function pushLeaderboard() {
     if (!userName || !userPublic || !supabaseReady()) return;
     const count = days[todayKey()] || 0;
-    const date  = todayKey();
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
         method: 'POST',
@@ -1157,15 +1157,33 @@
           'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
           'Prefer': 'resolution=merge-duplicates,return=minimal',
         },
-        body: JSON.stringify({ name: userName, count, date, updated_at: new Date().toISOString() }),
+        body: JSON.stringify({ name: userName, count, date: todayKey(), updated_at: new Date().toISOString() }),
       });
-      if (!res.ok) {
-        const err = await res.text();
-        console.warn('Leaderboard push failed:', res.status, err);
-      }
-    } catch(e) {
-      console.warn('Leaderboard push error', e);
-    }
+      if (!res.ok) console.warn('Leaderboard push failed:', res.status, await res.text());
+    } catch(e) { console.warn('Leaderboard push error', e); }
+  }
+
+  // Beim ersten Opt-in: alle lokalen Tage auf einmal hochladen (Bulk-Upsert)
+  async function syncAllHistory() {
+    if (!userName || !userPublic || !supabaseReady()) return;
+    const rows = Object.entries(days)
+      .filter(([, count]) => count > 0)
+      .map(([date, count]) => ({ name: userName, date, count, updated_at: new Date().toISOString() }));
+    if (!rows.length) return;
+    // Supabase erlaubt max ~500 Zeilen pro Request — bei 100 Tagen kein Problem
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'Prefer': 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify(rows),
+      });
+      if (!res.ok) console.warn('Bulk sync failed:', res.status, await res.text());
+    } catch(e) { console.warn('Bulk sync error', e); }
   }
 
   let lbPeriod = 'today'; // current active tab
@@ -1265,7 +1283,7 @@
   function initLeaderboard() {
     if (userName && userPublic) {
       document.getElementById('leaderboard-card').style.display = 'block';
-      pushLeaderboard().then(() => loadLeaderboard('today'));
+      syncAllHistory().then(() => loadLeaderboard('today'));
     }
 
     // Period tabs
@@ -1301,7 +1319,7 @@
       if (makePublic && !userPublic) {
         userPublic = true; saveUser();
         document.getElementById('leaderboard-card').style.display = 'block';
-        await pushLeaderboard();
+        await syncAllHistory();
         loadLeaderboard('today');
         feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
       } else if (!makePublic && userPublic) {
