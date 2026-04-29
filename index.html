@@ -1101,84 +1101,93 @@
     input.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
   }
 
-  /* ── Leaderboard (shared storage) ── */
-  // Key format: lb_YYYY-MM-DD — value: JSON array of {name, count}
+  /* ── Leaderboard via Supabase ── */
+  // ↓↓↓ HIER deine Supabase-Zugangsdaten eintragen ↓↓↓
+  const SUPABASE_URL = 'DEINE_SUPABASE_URL';        // z.B. https://xyzxyz.supabase.co
+  const SUPABASE_ANON_KEY = 'DEIN_ANON_PUBLIC_KEY'; // langer JWT-String
+  // ↑↑↑ ─────────────────────────────────────────── ↑↑↑
+
+  function sbHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+      'Prefer': 'resolution=merge-duplicates',
+    };
+  }
+
+  function supabaseReady() {
+    return SUPABASE_URL !== 'DEINE_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'DEIN_ANON_PUBLIC_KEY';
+  }
+
   async function pushLeaderboard() {
-    if (!userName || !userPublic) return;
-    const key = 'lb_' + todayKey();
+    if (!userName || !userPublic || !supabaseReady()) return;
+    const count = days[todayKey()] || 0;
+    const date  = todayKey();
     try {
-      // Read current list
-      let list = [];
-      try {
-        const res = await window.storage.get(key, true);
-        if (res?.value) list = JSON.parse(res.value);
-      } catch(_) {}
-
-      // Upsert this user
-      const count = days[todayKey()] || 0;
-      const idx = list.findIndex(e => e.name === userName);
-      if (idx >= 0) list[idx].count = count;
-      else list.push({ name: userName, count });
-
-      // Sort descending
-      list.sort((a, b) => b.count - a.count);
-      // Keep top 50
-      list = list.slice(0, 50);
-
-      await window.storage.set(key, JSON.stringify(list), true);
-      renderLeaderboard(list);
+      // UPSERT: insert or update by primary key (name, date)
+      await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
+        method: 'POST',
+        headers: { ...sbHeaders(), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ name: userName, count, date }),
+      });
     } catch(e) {
       console.warn('Leaderboard push error', e);
     }
   }
 
   async function loadLeaderboard() {
-    const key = 'lb_' + todayKey();
+    if (!supabaseReady()) {
+      document.getElementById('lb-status').textContent = 'Supabase nicht konfiguriert.';
+      return;
+    }
     const status = document.getElementById('lb-status');
     status.textContent = 'Wird geladen …';
     try {
-      const res = await window.storage.get(key, true);
-      if (res?.value) {
-        const list = JSON.parse(res.value);
-        renderLeaderboard(list);
-        status.textContent = 'Zuletzt aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'});
-      } else {
-        document.getElementById('lb-list').innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">Noch keine Einträge für heute.</div>';
-        status.textContent = '';
-      }
+      // Fetch today's top 15, sorted descending
+      const url = `${SUPABASE_URL}/rest/v1/leaderboard`
+        + `?date=eq.${todayKey()}`
+        + `&order=count.desc`
+        + `&limit=15`
+        + `&select=name,count`;
+      const res = await fetch(url, { headers: sbHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const list = await res.json();
+      renderLeaderboard(list);
     } catch(e) {
-      status.textContent = 'Rangliste nicht verfügbar.';
+      status.textContent = 'Rangliste konnte nicht geladen werden.';
+      console.warn('Leaderboard load error', e);
     }
   }
 
   function renderLeaderboard(list) {
     const el = document.getElementById('lb-list');
-    if (!list.length) {
+    if (!list || !list.length) {
       el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">Noch keine Einträge für heute.</div>';
+      document.getElementById('lb-status').textContent = '';
       return;
     }
     const medals = ['🥇','🥈','🥉'];
-    el.innerHTML = list.slice(0, 15).map((entry, i) => {
+    el.innerHTML = list.map((entry, i) => {
       const isMe = entry.name === userName;
-      const medal = medals[i] || `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:center;">${i+1}</span>`;
+      const medal = medals[i] ?? `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${i+1}</span>`;
       return `<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
-        <span style="width:24px;text-align:center;flex-shrink:0;">${medal}</span>
-        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};font-weight:${isMe ? 'bold' : 'normal'};">${entry.name}${isMe ? ' (du)' : ''}</span>
+        <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
+        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}</span>
         <span style="font-size:13px;color:var(--text-muted);">${entry.count} 🍅</span>
       </div>`;
     }).join('');
     document.getElementById('lb-status').textContent =
-      'Zuletzt aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'});
+      'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   }
 
   function initLeaderboard() {
-    // Show leaderboard if user is already known and public
     if (userName && userPublic) {
       document.getElementById('leaderboard-card').style.display = 'block';
       loadLeaderboard();
     }
     document.getElementById('lb-refresh').addEventListener('click', loadLeaderboard);
-    // Auto-refresh every 60s while page is open
+    // Auto-refresh every 60s when tab is visible
     setInterval(() => {
       if (userPublic && userName && !document.hidden) loadLeaderboard();
     }, 60000);
