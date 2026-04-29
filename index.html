@@ -290,6 +290,16 @@
   }
   .notif-bar.show { opacity: 1; }
 
+  .lb-tab {
+    font-size: 11px; padding: 4px 10px; flex: 1;
+    border: 0.5px solid var(--border-strong); border-radius: 16px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; transition: all 0.12s; font-family: 'Georgia', serif;
+    letter-spacing: 0.03em; white-space: nowrap;
+  }
+  .lb-tab:hover { background: var(--surface2); color: var(--text); }
+  .lb-tab.active { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
 
   @media (max-width: 520px) {
@@ -379,6 +389,14 @@
       <button class="wd-btn" data-dow="6">Sa</button>
       <button class="wd-btn" data-dow="0">So</button>
     </div>
+
+    <div class="panel-divider"></div>
+    <div class="panel-section">Rangliste</div>
+    <div class="panel-row" style="align-items:flex-start;gap:10px;">
+      <label for="toggle-public" style="flex:1;line-height:1.6;cursor:pointer;">Fortschritt öffentlich in der Rangliste anzeigen</label>
+      <input type="checkbox" id="toggle-public" style="margin-top:3px;accent-color:var(--accent);cursor:pointer;width:15px;height:15px;">
+    </div>
+    <div id="privacy-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-top:4px;"></div>
 
     <button id="close-panel">Schließen</button>
   </div>
@@ -475,8 +493,15 @@
 <!-- Leaderboard card -->
 <div class="card" id="leaderboard-card" style="display:none;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-    <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Rangliste · Heute</div>
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Rangliste</div>
     <button id="lb-refresh" style="font-size:11px;padding:3px 10px;border:0.5px solid var(--border-strong);border-radius:12px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;" title="Aktualisieren">↻</button>
+  </div>
+  <!-- Period tabs -->
+  <div style="display:flex;gap:5px;margin-bottom:1rem;">
+    <button class="lb-tab active" data-period="today">Heute</button>
+    <button class="lb-tab" data-period="week">Letzte Woche</button>
+    <button class="lb-tab" data-period="month">Letzter Monat</button>
+    <button class="lb-tab" data-period="alltime">All Time</button>
   </div>
   <div id="lb-list" style="font-family:Georgia,serif;"></div>
   <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
@@ -1143,23 +1168,46 @@
     }
   }
 
-  async function loadLeaderboard() {
+  let lbPeriod = 'today'; // current active tab
+
+  async function loadLeaderboard(period) {
     if (!supabaseReady()) {
       document.getElementById('lb-status').textContent = 'Supabase nicht konfiguriert.';
       return;
     }
+    if (period) lbPeriod = period;
     const status = document.getElementById('lb-status');
     status.textContent = 'Wird geladen …';
+
     try {
-      // Fetch today's top 15, sorted descending
-      const url = `${SUPABASE_URL}/rest/v1/leaderboard`
-        + `?date=eq.${todayKey()}`
-        + `&order=count.desc`
-        + `&limit=15`
-        + `&select=name,count`;
-      const res = await fetch(url, { headers: sbHeaders() });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const list = await res.json();
+      let list;
+      if (lbPeriod === 'today') {
+        // Direct query for today
+        const url = `${SUPABASE_URL}/rest/v1/leaderboard`
+          + `?date=eq.${todayKey()}`
+          + `&order=count.desc&limit=15&select=name,count`;
+        const res = await fetch(url, { headers: sbHeaders() });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        list = await res.json();
+      } else {
+        // Use RPC for aggregated periods
+        let dateFrom = null;
+        if (lbPeriod === 'week') {
+          const d = new Date(); d.setDate(d.getDate() - 6);
+          dateFrom = d.toISOString().slice(0, 10);
+        } else if (lbPeriod === 'month') {
+          const d = new Date(); d.setDate(d.getDate() - 29);
+          dateFrom = d.toISOString().slice(0, 10);
+        }
+        // alltime → dateFrom stays null
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_aggregated`, {
+          method: 'POST',
+          headers: sbHeaders(),
+          body: JSON.stringify({ date_from: dateFrom }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        list = await res.json();
+      }
       renderLeaderboard(list);
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
@@ -1169,8 +1217,15 @@
 
   function renderLeaderboard(list) {
     const el = document.getElementById('lb-list');
+    const emptyMsg = {
+      today: 'Noch keine Einträge für heute.',
+      week: 'Noch keine Einträge der letzten Woche.',
+      month: 'Noch keine Einträge des letzten Monats.',
+      alltime: 'Noch keine Einträge vorhanden.',
+    }[lbPeriod] || 'Keine Einträge.';
+
     if (!list || !list.length) {
-      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">Noch keine Einträge für heute.</div>';
+      el.innerHTML = `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">${emptyMsg}</div>`;
       document.getElementById('lb-status').textContent = '';
       return;
     }
@@ -1188,15 +1243,66 @@
       'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   }
 
+  async function removeFromLeaderboard() {
+    if (!userName || !supabaseReady()) return;
+    try {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/leaderboard?name=eq.${encodeURIComponent(userName)}`,
+        { method: 'DELETE', headers: sbHeaders() }
+      );
+    } catch(e) { console.warn('Remove from leaderboard error', e); }
+  }
+
   function initLeaderboard() {
     if (userName && userPublic) {
       document.getElementById('leaderboard-card').style.display = 'block';
-      pushLeaderboard().then(() => loadLeaderboard());
+      pushLeaderboard().then(() => loadLeaderboard('today'));
     }
-    document.getElementById('lb-refresh').addEventListener('click', loadLeaderboard);
+
+    // Period tabs
+    document.querySelectorAll('.lb-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadLeaderboard(btn.dataset.period);
+      });
+    });
+
+    document.getElementById('lb-refresh').addEventListener('click', () => loadLeaderboard());
+
+    // Auto-refresh every 60s when tab is visible
     setInterval(() => {
       if (userPublic && userName && !document.hidden) loadLeaderboard();
     }, 60000);
+  }
+
+  function initPrivacyToggle() {
+    const toggle = document.getElementById('toggle-public');
+    // Sync checkbox state with current setting
+    const syncToggle = () => { toggle.checked = userPublic; };
+    syncToggle();
+
+    // Update when settings panel opens
+    document.getElementById('gear-btn').addEventListener('click', syncToggle);
+
+    toggle.addEventListener('change', async () => {
+      const makePublic = toggle.checked;
+      const feedback = document.getElementById('privacy-feedback');
+
+      if (makePublic && !userPublic) {
+        userPublic = true; saveUser();
+        document.getElementById('leaderboard-card').style.display = 'block';
+        await pushLeaderboard();
+        loadLeaderboard('today');
+        feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
+      } else if (!makePublic && userPublic) {
+        userPublic = false; saveUser();
+        await removeFromLeaderboard();
+        document.getElementById('leaderboard-card').style.display = 'none';
+        feedback.textContent = 'Du wurdest aus der Rangliste entfernt.';
+      }
+      setTimeout(() => { feedback.textContent = ''; }, 3000);
+    });
   }
 
   /* ── Init ── */
@@ -1208,10 +1314,10 @@
   initAdjust();
   initSound();
   initWelcome();
+  initPrivacyToggle();
   load();
   syncWdBtns();
   render();
-  // Show welcome on first visit, otherwise init leaderboard directly
   if (!loadUser()) {
     showWelcome();
   } else {
