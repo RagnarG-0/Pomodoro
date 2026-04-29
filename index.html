@@ -456,15 +456,46 @@
   </div>
 </div>
 
+<!-- Welcome Modal -->
+<div id="welcome-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;align-items:center;justify-content:center;">
+  <div id="welcome-panel" style="background:var(--surface);border:0.5px solid var(--border-strong);border-radius:16px;padding:2rem 1.75rem;width:320px;animation:slideIn 0.2s ease;font-family:Georgia,serif;">
+    <div style="font-size:1.5rem;text-align:center;margin-bottom:0.5rem;">🍅</div>
+    <h2 style="font-size:14px;font-weight:normal;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);text-align:center;margin-bottom:1.25rem;">Willkommen</h2>
+    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:1.25rem;">Wähle ein Pseudonym, unter dem dein Fortschritt angezeigt werden kann.</p>
+    <input type="text" id="welcome-name" maxlength="24" placeholder="Dein Pseudonym …"
+      style="width:100%;font-size:13px;padding:8px 12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;margin-bottom:1rem;">
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--text-muted);margin-bottom:1.5rem;cursor:pointer;line-height:1.6;">
+      <input type="checkbox" id="welcome-public" style="margin-top:2px;accent-color:var(--accent);cursor:pointer;">
+      Ich möchte meinen täglichen Fortschritt in der öffentlichen Rangliste anzeigen lassen.
+    </label>
+    <button id="welcome-confirm" style="width:100%;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;">Los geht's</button>
+  </div>
+</div>
+
+<!-- Leaderboard card -->
+<div class="card" id="leaderboard-card" style="display:none;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Rangliste · Heute</div>
+    <button id="lb-refresh" style="font-size:11px;padding:3px 10px;border:0.5px solid var(--border-strong);border-radius:12px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;" title="Aktualisieren">↻</button>
+  </div>
+  <div id="lb-list" style="font-family:Georgia,serif;"></div>
+  <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
+</div>
+
 <div class="notif-bar" id="notif"></div>
 <canvas id="confetti-canvas"></canvas>
 
 <script>
 (function () {
   const KEY = 'pomo_heatmap_v3';
+  const USER_KEY = 'pomo_user_v1';
   const CIRC = 2 * Math.PI * 68;
-  const ROWS = 7; // rows in heatmap
+  const ROWS = 7;
   const DAYS = 100;
+
+  // User profile
+  let userName = null;   // null = not set yet
+  let userPublic = false;
 
   let mode = 'work';
   let totalSec = 25 * 60;
@@ -772,6 +803,7 @@
     playSound('work');
     toast('Pomodoro #'+totalPomodoros+' geschafft! '+days[key]+' heute');
     renderTomatoes(); renderHeatmap();
+    if (userPublic && userName) pushLeaderboard();
   }
 
   function onTimerEnd() {
@@ -1023,6 +1055,135 @@
   document.getElementById('close-panel').addEventListener('click',()=>{ overlay.classList.remove('open'); gearBtn.classList.remove('open'); });
   overlay.addEventListener('click',e=>{ if(e.target===overlay){ overlay.classList.remove('open'); gearBtn.classList.remove('open'); } });
 
+  /* ── User profile & welcome modal ── */
+  function loadUser() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+      if (raw && raw.name) {
+        userName = raw.name;
+        userPublic = !!raw.public;
+        return true; // already set up
+      }
+    } catch(e) {}
+    return false;
+  }
+
+  function saveUser() {
+    localStorage.setItem(USER_KEY, JSON.stringify({ name: userName, public: userPublic }));
+  }
+
+  function showWelcome() {
+    const overlay = document.getElementById('welcome-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('welcome-name').focus();
+  }
+
+  function initWelcome() {
+    const btn = document.getElementById('welcome-confirm');
+    const input = document.getElementById('welcome-name');
+    const cb = document.getElementById('welcome-public');
+
+    function confirm() {
+      const name = input.value.trim();
+      if (!name) { input.style.borderColor = 'var(--accent)'; input.focus(); return; }
+      userName = name;
+      userPublic = cb.checked;
+      saveUser();
+      document.getElementById('welcome-overlay').style.display = 'none';
+      if (userPublic) {
+        document.getElementById('leaderboard-card').style.display = 'block';
+        pushLeaderboard();
+        loadLeaderboard();
+      }
+    }
+
+    btn.addEventListener('click', confirm);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
+  }
+
+  /* ── Leaderboard (shared storage) ── */
+  // Key format: lb_YYYY-MM-DD — value: JSON array of {name, count}
+  async function pushLeaderboard() {
+    if (!userName || !userPublic) return;
+    const key = 'lb_' + todayKey();
+    try {
+      // Read current list
+      let list = [];
+      try {
+        const res = await window.storage.get(key, true);
+        if (res?.value) list = JSON.parse(res.value);
+      } catch(_) {}
+
+      // Upsert this user
+      const count = days[todayKey()] || 0;
+      const idx = list.findIndex(e => e.name === userName);
+      if (idx >= 0) list[idx].count = count;
+      else list.push({ name: userName, count });
+
+      // Sort descending
+      list.sort((a, b) => b.count - a.count);
+      // Keep top 50
+      list = list.slice(0, 50);
+
+      await window.storage.set(key, JSON.stringify(list), true);
+      renderLeaderboard(list);
+    } catch(e) {
+      console.warn('Leaderboard push error', e);
+    }
+  }
+
+  async function loadLeaderboard() {
+    const key = 'lb_' + todayKey();
+    const status = document.getElementById('lb-status');
+    status.textContent = 'Wird geladen …';
+    try {
+      const res = await window.storage.get(key, true);
+      if (res?.value) {
+        const list = JSON.parse(res.value);
+        renderLeaderboard(list);
+        status.textContent = 'Zuletzt aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'});
+      } else {
+        document.getElementById('lb-list').innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">Noch keine Einträge für heute.</div>';
+        status.textContent = '';
+      }
+    } catch(e) {
+      status.textContent = 'Rangliste nicht verfügbar.';
+    }
+  }
+
+  function renderLeaderboard(list) {
+    const el = document.getElementById('lb-list');
+    if (!list.length) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">Noch keine Einträge für heute.</div>';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉'];
+    el.innerHTML = list.slice(0, 15).map((entry, i) => {
+      const isMe = entry.name === userName;
+      const medal = medals[i] || `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:center;">${i+1}</span>`;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
+        <span style="width:24px;text-align:center;flex-shrink:0;">${medal}</span>
+        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};font-weight:${isMe ? 'bold' : 'normal'};">${entry.name}${isMe ? ' (du)' : ''}</span>
+        <span style="font-size:13px;color:var(--text-muted);">${entry.count} 🍅</span>
+      </div>`;
+    }).join('');
+    document.getElementById('lb-status').textContent =
+      'Zuletzt aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'});
+  }
+
+  function initLeaderboard() {
+    // Show leaderboard if user is already known and public
+    if (userName && userPublic) {
+      document.getElementById('leaderboard-card').style.display = 'block';
+      loadLeaderboard();
+    }
+    document.getElementById('lb-refresh').addEventListener('click', loadLeaderboard);
+    // Auto-refresh every 60s while page is open
+    setInterval(() => {
+      if (userPublic && userName && !document.hidden) loadLeaderboard();
+    }, 60000);
+  }
+
   /* ── Init ── */
   registerSW();
   drawTicks();
@@ -1031,9 +1192,16 @@
   initTooltip();
   initAdjust();
   initSound();
+  initWelcome();
   load();
   syncWdBtns();
   render();
+  // Show welcome on first visit, otherwise init leaderboard directly
+  if (!loadUser()) {
+    showWelcome();
+  } else {
+    initLeaderboard();
+  }
 })();
 </script>
 </body>
