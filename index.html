@@ -290,6 +290,39 @@
   }
   .notif-bar.show { opacity: 1; }
 
+  .unit-btn {
+    font-size: 11px; padding: 5px 12px;
+    border: 0.5px solid var(--border-strong);
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; transition: all 0.12s; font-family: 'Georgia', serif;
+  }
+  .unit-btn.active { background: var(--surface2); color: var(--text); }
+  .unit-btn:hover { background: var(--surface2); }
+
+  .stats-row {
+    display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap;
+  }
+  .stat-box {
+    flex: 1; min-width: 120px;
+    background: var(--surface2); border-radius: 10px;
+    padding: 0.75rem 1rem;
+  }
+  .stat-label {
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 4px; font-family: 'Georgia', serif;
+  }
+  .stat-value {
+    font-size: 18px; color: var(--text); font-family: 'Georgia', serif;
+    letter-spacing: -0.5px;
+  }
+  .stat-delta {
+    font-size: 11px; font-family: 'Georgia', serif;
+    margin-top: 2px;
+  }
+  .stat-delta.up { color: var(--accent); }
+  .stat-delta.down { color: #E07070; }
+  .stat-delta.flat { color: var(--text-muted); }
+
   .lb-tab {
     font-size: 11px; padding: 4px 10px; flex: 1;
     border: 0.5px solid var(--border-strong); border-radius: 16px;
@@ -357,6 +390,16 @@
           <option value="none">Kein Ton</option>
         </select>
         <button id="sound-preview" style="padding:4px 10px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:6px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;">▶</button>
+      </div>
+    </div>
+
+    <div class="panel-divider"></div>
+    <div class="panel-section">Anzeigeeinheit</div>
+    <div class="panel-row">
+      <label>Einheit</label>
+      <div class="inp-wrap" style="gap:0;">
+        <button class="unit-btn active" data-unit="pomodoros" style="border-radius:6px 0 0 6px;">🍅 Pomodoros</button>
+        <button class="unit-btn" data-unit="time" style="border-radius:0 6px 6px 0;">⏱ Zeit</button>
       </div>
     </div>
 
@@ -474,6 +517,23 @@
   </div>
 </div>
 
+<!-- Stats card -->
+<div class="card">
+  <div class="hmap-label" style="margin-bottom:1rem;">Statistik</div>
+  <div class="stats-row">
+    <div class="stat-box">
+      <div class="stat-label">Heute</div>
+      <div class="stat-value" id="stat-day-val">—</div>
+      <div class="stat-delta" id="stat-day-delta"></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Ø Diese Woche / Tag</div>
+      <div class="stat-value" id="stat-week-val">—</div>
+      <div class="stat-delta" id="stat-week-delta"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Welcome Modal -->
 <div id="welcome-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;align-items:center;justify-content:center;">
   <div id="welcome-panel" style="background:var(--surface);border:0.5px solid var(--border-strong);border-radius:16px;padding:2rem 1.75rem;width:320px;animation:slideIn 0.2s ease;font-family:Georgia,serif;">
@@ -519,8 +579,9 @@
   const DAYS = 100;
 
   // User profile
-  let userName = null;   // null = not set yet
+  let userName = null;
   let userPublic = false;
+  let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
 
   let mode = 'work';
   let totalSec = 25 * 60;
@@ -749,7 +810,109 @@
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
   }
 
-  function render() { renderTimer(); renderTomatoes(); renderHeatmap(); }
+  function render() { renderTimer(); renderTomatoes(); renderHeatmap(); renderStats(); }
+
+  /* ── Display unit helpers ── */
+  function pomoToDisplay(count) {
+    const rounded = Math.round(count * 10) / 10; // e.g. 1.4, never 0.14285...
+    if (displayUnit === 'pomodoros') {
+      // Show as integer if whole number, one decimal otherwise
+      return (Number.isInteger(rounded) ? rounded : rounded) + ' 🍅';
+    }
+    const mins = Math.round(count * getMin('work'));
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}h ${m}min` : `${m}min`;
+  }
+
+  function deltaStr(diff) {
+    if (diff === 0) return { text: '± 0', cls: 'flat' };
+    const sign = diff > 0 ? '+' : '−';
+    const abs = Math.abs(diff);
+    const text = sign + ' ' + (displayUnit === 'pomodoros'
+      ? abs + ' 🍅'
+      : (() => { const h = Math.floor(abs * getMin('work') / 60); const m = (abs * getMin('work')) % 60; return h > 0 ? `${h}h ${m}min` : `${m}min`; })());
+    return { text, cls: diff > 0 ? 'up' : 'down' };
+  }
+
+  /* ── Stats ── */
+  function renderStats() {
+    // Sum pomodoros over a range of days ago (0 = today, 1 = yesterday, …)
+    function sumRange(startDaysAgo, endDaysAgo) {
+      let total = 0;
+      for (let i = endDaysAgo; i <= startDaysAgo; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        if (!offDays[key] && !offWeekdays.includes(d.getDay()))
+          total += days[key] || 0;
+      }
+      return total;
+    }
+    // Count days in range that have any recorded pomodoros
+    function daysWithData(startDaysAgo, endDaysAgo) {
+      let n = 0;
+      for (let i = endDaysAgo; i <= startDaysAgo; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        if (!offDays[key] && !offWeekdays.includes(d.getDay()) && (days[key] || 0) > 0) n++;
+      }
+      return n;
+    }
+
+    // ── Today ──
+    const todayCount = days[todayKey()] || 0;
+    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayKey = yesterdayDate.toISOString().slice(0, 10);
+    const yesterdayCount = days[yesterdayKey] || 0;
+    const hasYesterday = yesterdayKey in days;
+
+    document.getElementById('stat-day-val').textContent = pomoToDisplay(todayCount);
+    const dayDeltaEl = document.getElementById('stat-day-delta');
+    if (hasYesterday) {
+      const d = deltaStr(todayCount - yesterdayCount);
+      dayDeltaEl.textContent = d.text + ' vs. gestern';
+      dayDeltaEl.className = 'stat-delta ' + d.cls;
+    } else {
+      dayDeltaEl.textContent = '';
+    }
+
+    // ── This week average ──
+    // "This week" = last 7 days including today
+    const thisWSum = sumRange(6, 0);
+    const thisWDays = daysWithData(6, 0);
+
+    // Only show average if there are at least 2 days with data
+    const weekValEl = document.getElementById('stat-week-val');
+    const weekDeltaEl = document.getElementById('stat-week-delta');
+
+    if (thisWDays === 0 || thisWSum === 0) {
+      weekValEl.textContent = '—';
+      weekDeltaEl.textContent = '';
+    } else if (thisWDays === 1) {
+      // Only today — show raw value, no average yet
+      weekValEl.textContent = pomoToDisplay(thisWSum);
+      weekDeltaEl.textContent = '(erst 1 Tag)';
+      weekDeltaEl.className = 'stat-delta flat';
+    } else {
+      const avg = Math.round((thisWSum / thisWDays) * 10) / 10;
+      weekValEl.textContent = pomoToDisplay(avg) + ' / Tag';
+
+      // Compare to previous 7 days only if they have data
+      const lastWSum = sumRange(13, 7);
+      const lastWDays = daysWithData(13, 7);
+      if (lastWDays > 0) {
+        const lastAvg = Math.round((lastWSum / lastWDays) * 10) / 10;
+        const diffRaw = Math.round((avg - lastAvg) * 10) / 10;
+        // Express delta in raw pomodoros for pomoToDisplay
+        const diffPomo = Math.round(thisWSum / thisWDays - lastWSum / lastWDays);
+        const d = deltaStr(diffPomo);
+        weekDeltaEl.textContent = d.text + ' vs. Vorwoche';
+        weekDeltaEl.className = 'stat-delta ' + d.cls;
+      } else {
+        weekDeltaEl.textContent = '';
+      }
+    }
+  }
 
   /* ── Weekday buttons ── */
   function syncWdBtns() {
@@ -853,7 +1016,30 @@
     if (remaining <= 0) onTimerEnd();
   }
 
-  /* ── Sound engine (Web Audio, no external files) ── */
+  /* ── Display unit toggle ── */
+  function initDisplayUnit() {
+    const saved = localStorage.getItem('pomo_display_unit');
+    if (saved === 'time' || saved === 'pomodoros') {
+      displayUnit = saved;
+    }
+    // Sync button state
+    function syncBtns() {
+      document.querySelectorAll('.unit-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.unit === displayUnit));
+    }
+    syncBtns();
+    document.querySelectorAll('.unit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        displayUnit = btn.dataset.unit;
+        localStorage.setItem('pomo_display_unit', displayUnit);
+        syncBtns();
+        renderStats();
+        if (userPublic && userName) renderLeaderboard(lastLeaderboardData);
+      });
+    });
+  }
+
+  /* ── Sound engine ── */
   let audioCtx = null;
   let selectedSound = 'bell';
 
@@ -1186,7 +1372,38 @@
     } catch(e) { console.warn('Bulk sync error', e); }
   }
 
-  let lbPeriod = 'today'; // current active tab
+  let lbPeriod = 'today';
+  let lastLeaderboardData = [];
+
+  function renderLeaderboard(list) {
+    lastLeaderboardData = list || [];
+    const el = document.getElementById('lb-list');
+    const emptyMsg = {
+      today: 'Noch keine Einträge für heute.',
+      week: 'Noch keine Einträge der letzten Woche.',
+      month: 'Noch keine Einträge des letzten Monats.',
+      alltime: 'Noch keine Einträge vorhanden.',
+    }[lbPeriod] || 'Keine Einträge.';
+
+    if (!list || !list.length) {
+      el.innerHTML = `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">${emptyMsg}</div>`;
+      document.getElementById('lb-status').textContent = '';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉'];
+    el.innerHTML = list.map((entry, i) => {
+      const isMe = entry.name === userName;
+      const medal = medals[i] ?? `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${i+1}</span>`;
+      const countDisplay = pomoToDisplay(entry.count);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
+        <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
+        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}</span>
+        <span style="font-size:13px;color:var(--text-muted);">${countDisplay}</span>
+      </div>`;
+    }).join('');
+    document.getElementById('lb-status').textContent =
+      'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+  }
 
   async function loadLeaderboard(period) {
     if (!supabaseReady()) {
@@ -1236,34 +1453,6 @@
       status.textContent = 'Rangliste konnte nicht geladen werden.';
       console.warn('Leaderboard load error', e);
     }
-  }
-
-  function renderLeaderboard(list) {
-    const el = document.getElementById('lb-list');
-    const emptyMsg = {
-      today: 'Noch keine Einträge für heute.',
-      week: 'Noch keine Einträge der letzten Woche.',
-      month: 'Noch keine Einträge des letzten Monats.',
-      alltime: 'Noch keine Einträge vorhanden.',
-    }[lbPeriod] || 'Keine Einträge.';
-
-    if (!list || !list.length) {
-      el.innerHTML = `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:1rem 0;">${emptyMsg}</div>`;
-      document.getElementById('lb-status').textContent = '';
-      return;
-    }
-    const medals = ['🥇','🥈','🥉'];
-    el.innerHTML = list.map((entry, i) => {
-      const isMe = entry.name === userName;
-      const medal = medals[i] ?? `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${i+1}</span>`;
-      return `<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
-        <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
-        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}</span>
-        <span style="font-size:13px;color:var(--text-muted);">${entry.count} 🍅</span>
-      </div>`;
-    }).join('');
-    document.getElementById('lb-status').textContent =
-      'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   }
 
   async function removeFromLeaderboard() {
@@ -1339,6 +1528,7 @@
   initDragScroll();
   initTooltip();
   initAdjust();
+  initDisplayUnit();
   initSound();
   initWelcome();
   initPrivacyToggle();
