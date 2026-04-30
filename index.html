@@ -619,6 +619,29 @@
     try { localStorage.setItem(KEY, JSON.stringify({days, offDays, offWeekdays, totalPomodoros})); } catch(e) {}
   }
 
+  const SETTINGS_KEY = 'pomo_settings_v1';
+
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+      if (s.work)      document.getElementById('set-work').value      = s.work;
+      if (s.short)     document.getElementById('set-short').value     = s.short;
+      if (s.long)      document.getElementById('set-long').value      = s.long;
+      if (s.longafter) document.getElementById('set-longafter').value = s.longafter;
+    } catch(e) {}
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        work:      document.getElementById('set-work').value,
+        short:     document.getElementById('set-short').value,
+        long:      document.getElementById('set-long').value,
+        longafter: document.getElementById('set-longafter').value,
+      }));
+    } catch(e) {}
+  }
+
   /* ── Settings getters ── */
   function getMin(m) {
     return Math.max(1, parseInt(document.getElementById('set-' + m).value) || {work:25,short:5,long:15}[m]);
@@ -1353,7 +1376,7 @@
   document.getElementById('btn-reset').addEventListener('click', reset);
   document.getElementById('btn-skip').addEventListener('click', skip);
   ['work','short','long'].forEach(m=>{
-    document.getElementById('set-'+m).addEventListener('change',()=>{ if(mode===m) reset(); });
+    document.getElementById('set-'+m).addEventListener('change', () => { saveSettings(); if (mode===m) reset(); });
   });
 
   /* ── Manual adjustment ── */
@@ -1401,7 +1424,8 @@
   }
   gearBtn.addEventListener('click',e=>{ e.stopPropagation(); toggleOverlay(); });
   document.getElementById('close-panel').addEventListener('click',()=>{ overlay.classList.remove('open'); gearBtn.classList.remove('open'); });
-  overlay.addEventListener('click',e=>{ if(e.target===overlay){ overlay.classList.remove('open'); gearBtn.classList.remove('open'); } });
+  document.getElementById('overlay').addEventListener('click',e=>{ if(e.target===overlay){ overlay.classList.remove('open'); gearBtn.classList.remove('open'); } });
+  document.getElementById('set-longafter').addEventListener('change', saveSettings);
 
   /* ── User profile & welcome modal ── */
   function loadUser() {
@@ -1668,6 +1692,7 @@
   initWelcome();
   initPrivacyToggle();
   load();
+  loadSettings();
   syncWdBtns();
   render();
   if (!loadUser()) {
