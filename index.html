@@ -45,7 +45,7 @@
   }
 
   .header {
-    width: 100%; max-width: 480px;
+    width: 100%; max-width: 600px;
     display: flex; align-items: center; justify-content: center;
     position: relative; margin-bottom: 2rem;
   }
@@ -69,7 +69,7 @@
   .card {
     background: var(--surface); border: 0.5px solid var(--border);
     border-radius: 16px; padding: 2rem 1.5rem 1.5rem;
-    width: 100%; max-width: 480px; margin-bottom: 1.25rem;
+    width: 100%; max-width: 600px; margin-bottom: 1.25rem;
   }
 
   .mode-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 1.75rem; }
@@ -529,16 +529,13 @@
   <div class="stats-row">
     <div class="stat-box" id="level-box">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <div class="stat-label" id="level-name">Level —</div>
+        <div class="stat-label"><span id="level-number">Level —</span> <span id="level-label" style="color:var(--text);text-transform:none;letter-spacing:0;font-size:15px;"></span></div>
         <div style="font-size:18px;" id="level-icon"></div>
       </div>
       <div class="stat-value" id="stat-total-val">—</div>
+      <div style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;margin-top:5px;min-height:14px;" id="level-next-label"></div>
       <div style="margin-top:8px;">
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);font-family:Georgia,serif;margin-bottom:3px;">
-          <span id="level-progress-label"></span>
-          <span id="level-next-label"></span>
-        </div>
-        <div style="height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;">
+        <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
           <div id="level-bar" style="height:100%;background:var(--accent);border-radius:2px;width:0%;transition:width 0.6s ease;"></div>
         </div>
       </div>
@@ -934,22 +931,25 @@
     const totalMins = Object.values(days).reduce((a, b) => a + b, 0);
     const { current, next } = getCurrentLevel(totalMins);
 
-    document.getElementById('level-name').textContent = current.name + ': ' + current.label;
+    document.getElementById('level-number').textContent = current.name + ':';
+    document.getElementById('level-label').textContent = current.label;
     document.getElementById('level-icon').textContent = current.icon;
     document.getElementById('stat-total-val').textContent = minutesToDisplay(totalMins) + ' gesamt';
 
+    const nextEl = document.getElementById('level-next-label');
+    const barEl  = document.getElementById('level-bar');
+
     if (next) {
-      const fromMins = current.minMinutes;
-      const toMins   = next.minMinutes;
-      const pct      = Math.min(100, Math.round((totalMins - fromMins) / (toMins - fromMins) * 100));
-      document.getElementById('level-bar').style.width = pct + '%';
-      document.getElementById('level-progress-label').textContent = pct + '%';
-      document.getElementById('level-next-label').textContent =
-        '→ ' + next.label + ' ' + next.icon + ' (' + minutesToDisplay(toMins - totalMins) + ')';
+      const remaining = next.minMinutes - totalMins;
+      const h = Math.floor(remaining / 60);
+      const m = Math.round(remaining % 60);
+      const timeStr = h > 0 ? `${h}h ${m}min` : `${m}min`;
+      nextEl.textContent = `noch ${timeStr} bis ${next.label}`;
+      const pct = Math.min(100, Math.round((totalMins - current.minMinutes) / (next.minMinutes - current.minMinutes) * 100));
+      barEl.style.width = pct + '%';
     } else {
-      document.getElementById('level-bar').style.width = '100%';
-      document.getElementById('level-progress-label').textContent = 'Max. Level erreicht 👑';
-      document.getElementById('level-next-label').textContent = '';
+      nextEl.textContent = 'Maximales Level erreicht 👑';
+      barEl.style.width = '100%';
     }
   }
   function renderStats() {
@@ -1610,12 +1610,14 @@
     el.innerHTML = list.map((entry, i) => {
       const isMe = entry.name === userName;
       const medal = medals[i] ?? `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${i+1}</span>`;
-      const mins = entry.minutes ?? entry.count ?? 0; // fallback for old data
+      const mins = entry.minutes ?? entry.count ?? 0;
       const display = minutesToDisplay(mins);
+      const { current: entryLevel } = getCurrentLevel(mins);
+      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label})</span>`;
       return `<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
         <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
-        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}</span>
-        <span style="font-size:13px;color:var(--text-muted);">${display}</span>
+        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
+        <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${display}</span>
       </div>`;
     }).join('');
     document.getElementById('lb-status').textContent =
