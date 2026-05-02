@@ -527,10 +527,21 @@
 <div class="card">
   <div class="hmap-label" style="margin-bottom:1rem;">Statistik</div>
   <div class="stats-row">
-    <div class="stat-box">
-      <div class="stat-label">Heute</div>
-      <div class="stat-value" id="stat-day-val">—</div>
-      <div class="stat-delta" id="stat-day-delta"></div>
+    <div class="stat-box" id="level-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div class="stat-label" id="level-name">Level —</div>
+        <div style="font-size:18px;" id="level-icon"></div>
+      </div>
+      <div class="stat-value" id="stat-total-val">—</div>
+      <div style="margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);font-family:Georgia,serif;margin-bottom:3px;">
+          <span id="level-progress-label"></span>
+          <span id="level-next-label"></span>
+        </div>
+        <div style="height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;">
+          <div id="level-bar" style="height:100%;background:var(--accent);border-radius:2px;width:0%;transition:width 0.6s ease;"></div>
+        </div>
+      </div>
     </div>
     <div class="stat-box">
       <div class="stat-label">Ø Diese Woche / Tag</div>
@@ -877,8 +888,73 @@
     return { text, cls: diffMins > 0 ? 'up' : 'down' };
   }
 
-  /* ── Stats ── */
+  /* ── Level system ── */
+  const LEVELS = [
+    { name: 'Level 1',                    label: 'They/Them',                    icon: '🧊', minMinutes: 0      },
+    { name: 'Level 2',                    label: 'Soziologiestudent',             icon: '🧊', minMinutes: 300    },
+    { name: 'Level 3',                    label: 'Awareness-Seminarleiter',       icon: '🧊', minMinutes: 600    },
+    { name: 'Level 4',                    label: 'Bunter Nagellack',              icon: '🧊', minMinutes: 1200   },
+    { name: 'Level 5',                    label: 'FSR-Mitglied',                  icon: '🧊', minMinutes: 2100   },
+    { name: 'Level 6',                    label: 'Warmduscher',                   icon: '🛋️', minMinutes: 3000   },
+    { name: 'Level 7',                    label: 'Mensa-Frau',                    icon: '🛋️', minMinutes: 4500   },
+    { name: 'Level 8',                    label: 'Histo-Tutor',                   icon: '🛋️', minMinutes: 6000   },
+    { name: 'Level 9',                    label: 'Gym10-Duscher ohne Latschen',   icon: '🛋️', minMinutes: 8400   },
+    { name: 'Level 10',                   label: 'Skillslab-Schauspieler',        icon: '🛋️', minMinutes: 10800  },
+    { name: 'Level 11',                   label: 'Anki-Controller-Besitzer',      icon: '🔥', minMinutes: 13800  },
+    { name: 'Level 12',                   label: 'Transportdienst UKH',           icon: '🔥', minMinutes: 18000  },
+    { name: 'Level 13',                   label: 'Präp-Tutor',                    icon: '🔥', minMinutes: 22800  },
+    { name: 'Level 14',                   label: 'Doktorand',                     icon: '🔥', minMinutes: 28800  },
+    { name: 'Level 15',                   label: 'Peter Hippe',                   icon: '🔥', minMinutes: 36000  },
+    { name: 'Level 16',                   label: 'Löwe',                          icon: '🦁', minMinutes: 45000  },
+    { name: 'Level 17',                   label: 'Daniel Fister',                 icon: '🦁', minMinutes: 54000  },
+    { name: 'Level 18',                   label: 'Schwester Rabiata',             icon: '🦁', minMinutes: 66000  },
+    { name: 'Level 19',                   label: 'Oberarzt Hagel',                icon: '🦁', minMinutes: 81000  },
+    { name: 'Level 20',                   label: 'Penig-Bürgermeister',           icon: '🦁', minMinutes: 99000  },
+    { name: 'Level 21',                   label: 'Monster White - Abonnent',      icon: '👑', minMinutes: 120000 },
+    { name: 'Level 22',                   label: 'ST-Hebungsüberseher',           icon: '👑', minMinutes: 144000 },
+    { name: 'Level 23',                   label: 'Koffein-Tablette',              icon: '👑', minMinutes: 174000 },
+    { name: 'Level 24',                   label: 'Beta-GPC-Konsument',            icon: '👑', minMinutes: 210000 },
+    { name: 'Level 25',                   label: 'Pomodoro-Messi',                icon: '👑', minMinutes: 252000 },
+  ];
+
+  function getCurrentLevel(totalMins) {
+    let current = LEVELS[0];
+    let next = LEVELS[1] || null;
+    for (let i = LEVELS.length - 1; i >= 0; i--) {
+      if (totalMins >= LEVELS[i].minMinutes) {
+        current = LEVELS[i];
+        next = LEVELS[i + 1] || null;
+        break;
+      }
+    }
+    return { current, next };
+  }
+
+  function renderLevel() {
+    const totalMins = Object.values(days).reduce((a, b) => a + b, 0);
+    const { current, next } = getCurrentLevel(totalMins);
+
+    document.getElementById('level-name').textContent = current.name + ': ' + current.label;
+    document.getElementById('level-icon').textContent = current.icon;
+    document.getElementById('stat-total-val').textContent = minutesToDisplay(totalMins) + ' gesamt';
+
+    if (next) {
+      const fromMins = current.minMinutes;
+      const toMins   = next.minMinutes;
+      const pct      = Math.min(100, Math.round((totalMins - fromMins) / (toMins - fromMins) * 100));
+      document.getElementById('level-bar').style.width = pct + '%';
+      document.getElementById('level-progress-label').textContent = pct + '%';
+      document.getElementById('level-next-label').textContent =
+        '→ ' + next.label + ' ' + next.icon + ' (' + minutesToDisplay(toMins - totalMins) + ')';
+    } else {
+      document.getElementById('level-bar').style.width = '100%';
+      document.getElementById('level-progress-label').textContent = 'Max. Level erreicht 👑';
+      document.getElementById('level-next-label').textContent = '';
+    }
+  }
   function renderStats() {
+    renderLevel();
+
     function sumRange(startDaysAgo, endDaysAgo) {
       let total = 0;
       for (let i = endDaysAgo; i <= startDaysAgo; i++) {
@@ -887,7 +963,7 @@
         if (!offDays[key] && !offWeekdays.includes(d.getDay()))
           total += days[key] || 0;
       }
-      return total; // returns minutes
+      return total;
     }
     function daysWithData(startDaysAgo, endDaysAgo) {
       let n = 0;
@@ -897,23 +973,6 @@
         if (!offDays[key] && !offWeekdays.includes(d.getDay()) && (days[key] || 0) > 0) n++;
       }
       return n;
-    }
-
-    // ── Today ──
-    const todayMins = days[todayKey()] || 0;
-    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayKey = yesterdayDate.toISOString().slice(0, 10);
-    const yesterdayMins = days[yesterdayKey] || 0;
-    const hasYesterday = yesterdayKey in days;
-
-    document.getElementById('stat-day-val').textContent = minutesToDisplay(todayMins);
-    const dayDeltaEl = document.getElementById('stat-day-delta');
-    if (hasYesterday) {
-      const d = deltaMinsStr(todayMins - yesterdayMins);
-      dayDeltaEl.textContent = d.text + ' vs. gestern';
-      dayDeltaEl.className = 'stat-delta ' + d.cls;
-    } else {
-      dayDeltaEl.textContent = '';
     }
 
     // ── This week average (last 7 days) ──
@@ -932,7 +991,6 @@
     } else {
       const avgMins = thisWMins / thisWDays;
       weekValEl.textContent = minutesToDisplay(avgMins) + ' / Tag';
-
       const lastWMins = sumRange(13, 7);
       const lastWDays = daysWithData(13, 7);
       if (lastWDays > 0) {
