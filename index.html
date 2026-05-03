@@ -1846,18 +1846,24 @@
     const status = document.getElementById('lb-status');
     status.textContent = 'Wird geladen …';
 
+    // Use auth token if logged in, fall back to anon key
+    const session = getToken();
+    const token = session?.access_token || SUPABASE_ANON_KEY;
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + token,
+    };
+
     try {
       let list;
-
       if (lbPeriod === 'today') {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_today`, {
-          method: 'POST', headers: sbHeaders(), body: JSON.stringify({}),
+          method: 'POST', headers, body: JSON.stringify({}),
         });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + await res.text());
         list = await res.json();
-
       } else {
-        // Multi-day: use RPC with explicit non-null date or far-past date for alltime
         let dateFrom;
         if (lbPeriod === 'week') {
           const d = new Date(); d.setDate(d.getDate() - 6);
@@ -1866,18 +1872,15 @@
           const d = new Date(); d.setDate(d.getDate() - 29);
           dateFrom = d.toISOString().slice(0, 10);
         } else {
-          // alltime — use a date far in the past so filter matches everything
           dateFrom = '2000-01-01';
         }
         const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_aggregated`, {
-          method: 'POST',
-          headers: sbHeaders(),
+          method: 'POST', headers,
           body: JSON.stringify({ date_from: dateFrom }),
         });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + await res.text());
         list = await res.json();
       }
-
       renderLeaderboard(list);
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
@@ -2202,20 +2205,26 @@
     if (file.size > 2 * 1024 * 1024) { toast('Bild zu groß — max. 2 MB.'); return null; }
     const ext = file.name.split('.').pop().toLowerCase();
     const path = `${currentUser.id}/avatar.${ext}`;
-    // Use PUT with upsert to overwrite existing avatar
-    const res = await fetch(`${SB}/storage/v1/object/avatars/${path}`, {
-      method: 'PUT',
-      headers: {
-        'apikey': SB_KEY,
-        'Authorization': 'Bearer ' + token,
-        'Content-Type': file.type,
-        'x-upsert': 'true',
-      },
-      body: file,
-    });
-    if (!res.ok) { console.warn('Avatar upload failed', res.status, await res.text()); return null; }
-    // Cache-bust with timestamp
-    return `${SB}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
+    // Try PUT first (update), fall back to POST (create)
+    for (const method of ['PUT', 'POST']) {
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${path}`, {
+        method,
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': file.type,
+          'x-upsert': 'true',
+        },
+        body: file,
+      });
+      if (res.ok) {
+        return `${SUPABASE_URL}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
+      }
+      const errText = await res.text();
+      console.warn(`Avatar upload ${method} failed:`, res.status, errText);
+      if (method === 'POST') return null; // both failed
+    }
+    return null;
   }
 
   function initAvatarUpload() {
