@@ -1882,6 +1882,7 @@
         list = await res.json();
       }
       renderLeaderboard(list);
+      console.log('Leaderboard data:', list);
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
       console.warn('Leaderboard load error', e);
@@ -2115,11 +2116,13 @@
     // Load study days from server
     await loadStudyDays(token);
 
-    // Migration: check if local data should be merged
+    // Clear stale localStorage — Supabase is now source of truth
+    localStorage.removeItem(KEY);
+
+    // Migration banner only for brand new users who have local data
     const localRaw = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
     const localDays = localRaw.days || {};
     const hasLocal = Object.keys(localDays).length > 0;
-    const needsMigration = hasLocal && isNew;
 
     closeAuthModal();
     updateUserChip();
@@ -2129,10 +2132,8 @@
     if (userPublic) { document.getElementById('leaderboard-card').style.display = 'block'; }
     initLeaderboard();
 
-    if (needsMigration || (hasLocal && !isNew)) {
-      // Prompt migration for existing users too
-      const localCount = Object.keys(localDays).length;
-      if (localCount > 0) showMigrationPrompt(session, localDays);
+    if (isNew && hasLocal) {
+      showMigrationPrompt(session, localDays);
     }
   }
 
