@@ -2030,7 +2030,7 @@
   async function saveStudyDay(token, date, minutes, off) {
     const offVal = offDays[date] === true ? true : offDays[date] === false ? false : null;
     try {
-      const res = await fetch(`${SB}/rest/v1/study_days`, {
+      const res = await fetch(`${SB}/rest/v1/study_days?on_conflict=user_id,date`, {
         method: 'POST',
         headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify({ user_id: currentUser.id, date, minutes: minutes || 0, off: offVal }),
@@ -2046,7 +2046,7 @@
       off: offDays[date] === true ? true : offDays[date] === false ? false : null,
     }));
     if (!rows.length) return;
-    await fetch(`${SB}/rest/v1/study_days`, {
+    await fetch(`${SB}/rest/v1/study_days?on_conflict=user_id,date`, {
       method: 'POST',
       headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(rows),
