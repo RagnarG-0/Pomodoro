@@ -134,6 +134,8 @@
     flex: 1;
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
+    /* allow month labels to overflow without clipping */
+    clip-path: none;
   }
   .hmap-scroll-wrap:active { cursor: grabbing; }
   .hmap-scroll-wrap::-webkit-scrollbar { height: 4px; }
@@ -937,7 +939,7 @@
         const m = firstInCol.getMonth();
         if (m !== lastMonth) { label = MONTHS_DE[m]; lastMonth = m; }
       }
-      mlHtml += `<div style="width:${TILE}px;flex-shrink:0;font-size:9px;color:var(--text-muted);letter-spacing:0.05em;text-transform:uppercase;overflow:hidden;">${label}</div>`;
+      mlHtml += `<div style="width:${TILE}px;flex-shrink:0;font-size:9px;color:var(--text-muted);letter-spacing:0.05em;text-transform:uppercase;overflow:visible;white-space:nowrap;">${label}</div>`;
     }
     mlRow.innerHTML = mlHtml;
 
