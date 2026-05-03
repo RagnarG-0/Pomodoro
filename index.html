@@ -937,7 +937,8 @@
       let label = '';
       if (firstInCol) {
         const m = firstInCol.getMonth();
-        if (m !== lastMonth) { label = MONTHS_DE[m]; lastMonth = m; }
+        if (m !== lastMonth && m !== 0) { label = MONTHS_DE[m]; lastMonth = m; }
+        else if (m !== lastMonth) { lastMonth = m; }
       }
       mlHtml += `<div style="width:${TILE}px;flex-shrink:0;font-size:9px;color:var(--text-muted);letter-spacing:0.05em;text-transform:uppercase;overflow:visible;white-space:nowrap;">${label}</div>`;
     }
