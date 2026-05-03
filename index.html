@@ -521,7 +521,7 @@
           <button class="auth-btn" id="avatar-upload-btn" type="button" style="width:auto;margin-top:0;">Profilbild wählen</button>
           <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Optional · max. 2 MB</div>
         </div>
-        <input type="file" id="avatar-file" accept="image/*">
+        <input type="file" id="avatar-file-reg" accept="image/*" style="display:none;">
       </div>
       <input class="auth-field" type="text" id="reg-username" placeholder="Pseudonym (für die Rangliste)" maxlength="24">
       <input class="auth-field" type="email" id="reg-email" placeholder="E-Mail" autocomplete="email">
@@ -2196,63 +2196,81 @@
   async function uploadAvatar(file, token) {
     if (!file || !currentUser) return null;
     if (file.size > 2 * 1024 * 1024) { toast('Bild zu groß — max. 2 MB.'); return null; }
-    const ext = file.name.split('.').pop();
+    const ext = file.name.split('.').pop().toLowerCase();
     const path = `${currentUser.id}/avatar.${ext}`;
-    // Upload to Supabase Storage
+    // Use PUT with upsert to overwrite existing avatar
     const res = await fetch(`${SB}/storage/v1/object/avatars/${path}`, {
-      method: 'POST',
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': file.type, 'x-upsert': 'true' },
+      method: 'PUT',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': file.type,
+        'x-upsert': 'true',
+      },
       body: file,
     });
-    if (!res.ok) { console.warn('Avatar upload failed', await res.text()); return null; }
-    // Public URL
-    const url = `${SB}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
-    return url;
+    if (!res.ok) { console.warn('Avatar upload failed', res.status, await res.text()); return null; }
+    // Cache-bust with timestamp
+    return `${SB}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
   }
 
   function initAvatarUpload() {
-    // Handle both the register form and settings panel file inputs
-    // We use one hidden input for both
-    document.querySelectorAll('#avatar-upload-btn').forEach(btn => {
-      btn.addEventListener('click', () => document.getElementById('avatar-file').click());
-    });
-
-    document.getElementById('avatar-file').addEventListener('change', async e => {
-      const file = e.target.files[0];
+    // Shared handler for any file input triggering avatar upload
+    function handleFileChange(file, onPreview) {
       if (!file) return;
-      // Show local preview immediately
       const localUrl = URL.createObjectURL(file);
+      onPreview(localUrl);
       setAvatarPreview(localUrl);
-      // Also update reg form preview if it exists
-      const regPrev = document.querySelector('#auth-register #avatar-preview');
-      const regPh   = document.querySelector('#auth-register #avatar-preview-placeholder');
-      if (regPrev) { regPrev.src = localUrl; regPrev.style.display = 'block'; }
-      if (regPh)   regPh.style.display = 'none';
-
-      // If already logged in → upload immediately
+      // If logged in → upload immediately
       if (currentUser) {
         const session = getToken();
         if (!session) return;
         const feedback = document.getElementById('avatar-feedback');
         if (feedback) feedback.textContent = 'Wird hochgeladen…';
-        const url = await uploadAvatar(file, session.access_token);
-        if (url) {
-          avatarUrl = url;
-          await saveProfile(session.access_token, { avatar_url: url });
-          updateUserChip();
-          if (feedback) feedback.textContent = 'Profilbild gespeichert.';
-          setTimeout(() => { if (feedback) feedback.textContent = ''; }, 2500);
-        }
+        uploadAvatar(file, session.access_token).then(url => {
+          if (url) {
+            avatarUrl = url;
+            saveProfile(session.access_token, { avatar_url: url });
+            updateUserChip();
+            if (feedback) { feedback.textContent = 'Profilbild gespeichert.'; setTimeout(() => { feedback.textContent = ''; }, 2500); }
+          }
+        });
       }
-      // If not logged in → file is stored in the input, uploaded after register
-      e.target.value = ''; // reset so same file can be picked again
+    }
+
+    // Settings panel file input
+    const settingsFile = document.getElementById('avatar-file');
+    document.getElementById('avatar-upload-btn') && document.getElementById('avatar-upload-btn').addEventListener('click', () => settingsFile.click());
+    settingsFile.addEventListener('change', e => {
+      handleFileChange(e.target.files[0], url => setAvatarPreview(url));
+      e.target.value = '';
     });
 
-    // Click on avatar chip → open file picker
-    document.getElementById('user-avatar').addEventListener('click', () =>
-      document.getElementById('avatar-file').click());
-    document.getElementById('user-avatar-placeholder').addEventListener('click', () =>
-      document.getElementById('avatar-file').click());
+    // Register form file input
+    const regFile = document.getElementById('avatar-file-reg');
+    document.getElementById('avatar-upload-btn') && (() => {
+      // The reg form also has an upload btn — handled via id conflict, use querySelectorAll
+    })();
+    // Handle all avatar-upload-btn clicks
+    document.querySelectorAll('#avatar-upload-btn').forEach(btn => {
+      // Already attached above for settings; for reg form:
+      if (btn.closest('#auth-register')) {
+        btn.addEventListener('click', () => regFile.click());
+      }
+    });
+    regFile.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const localUrl = URL.createObjectURL(file);
+      const prev = document.getElementById('avatar-preview');
+      const ph   = document.getElementById('avatar-preview-placeholder');
+      if (prev) { prev.src = localUrl; prev.style.display = 'block'; }
+      if (ph)   ph.style.display = 'none';
+    });
+
+    // Click on avatar chip → open settings file picker
+    document.getElementById('user-avatar').addEventListener('click', () => settingsFile.click());
+    document.getElementById('user-avatar-placeholder').addEventListener('click', () => settingsFile.click());
   }
 
   async function initAuth() {
@@ -2306,7 +2324,7 @@
       if (data.access_token) {
         currentUser = data.user;
         // Upload avatar if one was selected
-        const avatarFile = document.getElementById('avatar-file').files[0];
+        const avatarFile = document.getElementById('avatar-file-reg').files[0];
         let uploadedAvatarUrl = null;
         if (avatarFile) {
           uploadedAvatarUrl = await uploadAvatar(avatarFile, data.access_token);
@@ -2337,19 +2355,21 @@
         });
       }
       setToken(null);
-      currentUser = null; userName = null; userPublic = false;
-      // Reload local data from localStorage so the app still works offline after logout
+      currentUser = null; userName = null; userPublic = false; avatarUrl = null;
       load(); loadSettings();
       totalSec = getMin(mode) * 60; remaining = totalSec;
       updateUserChip();
       document.getElementById('leaderboard-card').style.display = 'none';
       render();
-      // Reset forms
+      // Reset auth modal to clean login state
       document.getElementById('auth-login').style.display    = 'block';
       document.getElementById('auth-register').style.display = 'none';
       document.querySelector('.auth-tabs').style.display      = 'flex';
       document.getElementById('migrate-banner').style.display = 'none';
-      openAuthModal();
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('.auth-tab[data-tab="login"]').classList.add('active');
+      showAuthError('');
+      document.getElementById('auth-overlay').classList.add('open');
     });
 
     // Try restoring session from localStorage
