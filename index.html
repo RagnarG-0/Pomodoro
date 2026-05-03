@@ -515,8 +515,8 @@
     <!-- Register form -->
     <div id="auth-register" style="display:none;">
       <div id="avatar-upload-wrap">
-        <div id="avatar-preview-placeholder">👤</div>
-        <img id="avatar-preview" src="" alt="">
+        <div id="reg-avatar-preview-placeholder">👤</div>
+        <img id="reg-avatar-preview" src="" alt="">
         <div>
           <button class="auth-btn" id="avatar-upload-btn-reg" type="button" style="width:auto;margin-top:0;">Profilbild wählen</button>
           <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Optional · max. 2 MB</div>
@@ -2192,12 +2192,17 @@
 
   /* ── Avatar ── */
   function setAvatarPreview(url) {
-    // Settings panel preview
+    // Settings panel preview (not the register form)
     const prev = document.getElementById('avatar-preview');
     const prevPh = document.getElementById('avatar-preview-placeholder');
     if (prev && prevPh) {
-      if (url) { prev.src = url; prev.style.display = 'block'; prevPh.style.display = 'none'; }
-      else { prev.style.display = 'none'; prevPh.style.display = 'flex'; }
+      if (url) {
+        prev.src = url; prev.style.display = 'block';
+        prevPh.style.display = 'none';
+      } else {
+        prev.style.display = 'none';
+        prevPh.style.display = 'flex';
+      }
     }
   }
 
@@ -2219,7 +2224,8 @@
         body: file,
       });
       if (res.ok) {
-        return `${SUPABASE_URL}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
+        const cleanUrl = `${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`;
+        return cleanUrl + '?t=' + Date.now(); // cache-bust for immediate display
       }
       const errText = await res.text();
       console.warn(`Avatar upload ${method} failed:`, res.status, errText);
@@ -2260,7 +2266,8 @@
       const url = await uploadAvatar(file, session.access_token);
       if (url) {
         avatarUrl = url;
-        await saveProfile(session.access_token, { avatar_url: url });
+        const cleanUrl = url.split('?')[0]; // strip cache-buster before saving
+        await saveProfile(session.access_token, { avatar_url: cleanUrl });
         updateUserChip();
         if (feedback) {
           feedback.textContent = 'Profilbild gespeichert.';
@@ -2276,8 +2283,8 @@
       const file = e.target.files[0];
       if (!file) return;
       const localUrl = URL.createObjectURL(file);
-      const prev = document.getElementById('avatar-preview');
-      const ph   = document.getElementById('avatar-preview-placeholder');
+      const prev = document.getElementById('reg-avatar-preview');
+      const ph   = document.getElementById('reg-avatar-preview-placeholder');
       if (prev) { prev.src = localUrl; prev.style.display = 'block'; }
       if (ph)   ph.style.display = 'none';
     });
@@ -2337,7 +2344,8 @@
         const avatarFile = document.getElementById('avatar-file-reg').files[0];
         let uploadedAvatarUrl = null;
         if (avatarFile) {
-          uploadedAvatarUrl = await uploadAvatar(avatarFile, data.access_token);
+          const rawUrl = await uploadAvatar(avatarFile, data.access_token);
+          uploadedAvatarUrl = rawUrl ? rawUrl.split('?')[0] : null;
         }
         // Create profile
         await saveProfile(data.access_token, {
