@@ -2005,11 +2005,22 @@
   }
 
   async function saveProfile(token, data) {
-    await fetch(`${SB}/rest/v1/profiles`, {
-      method: 'POST',
-      headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ id: currentUser.id, ...data }),
+    // Use PATCH to update existing profile — avoids upsert conflict issues
+    const res = await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}`, {
+      method: 'PATCH',
+      headers: { ...authHeaders(token), 'Prefer': 'return=minimal' },
+      body: JSON.stringify(data),
     });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn('saveProfile PATCH failed:', res.status, err);
+      // Fall back to upsert if profile doesn't exist yet
+      await fetch(`${SB}/rest/v1/profiles?on_conflict=id`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ id: currentUser.id, ...data }),
+      });
+    }
   }
 
   // Load all study days from Supabase into local `days` object
