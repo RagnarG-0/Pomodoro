@@ -2029,11 +2029,14 @@
   // Upsert a single day
   async function saveStudyDay(token, date, minutes, off) {
     const offVal = offDays[date] === true ? true : offDays[date] === false ? false : null;
-    await fetch(`${SB}/rest/v1/study_days`, {
-      method: 'POST',
-      headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ user_id: currentUser.id, date, minutes: minutes || 0, off: offVal }),
-    });
+    try {
+      const res = await fetch(`${SB}/rest/v1/study_days`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ user_id: currentUser.id, date, minutes: minutes || 0, off: offVal }),
+      });
+      if (!res.ok) console.warn('saveStudyDay failed:', res.status, await res.text());
+    } catch(e) { console.warn('saveStudyDay error:', e); }
   }
 
   // Bulk upsert all local days (migration)
@@ -2409,12 +2412,11 @@
   const _origSave = save;
   function saveWithSync() {
     _origSave();
-    if (!currentUser) return;
+    if (!currentUser) { console.log('saveWithSync: no currentUser'); return; }
     const session = getToken();
-    if (!session) return;
-    const token = session.access_token;
+    if (!session?.access_token) { console.log('saveWithSync: no token'); return; }
     const today = todayKey();
-    saveStudyDay(token, today, days[today] || 0, offDays[today]);
+    saveStudyDay(session.access_token, today, days[today] || 0, offDays[today]);
   }
 
   // Override saveSettings to sync profile
