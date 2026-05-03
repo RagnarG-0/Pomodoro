@@ -327,6 +327,126 @@
   .stat-delta.down { color: #E07070; }
   .stat-delta.flat { color: var(--text-muted); }
 
+  /* ── Auth Modal ── */
+  #auth-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); z-index: 400;
+    align-items: center; justify-content: center;
+  }
+  #auth-overlay.open { display: flex; }
+  #auth-panel {
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 16px; padding: 2rem 1.75rem; width: 340px;
+    animation: slideIn 0.2s ease; font-family: Georgia, serif;
+  }
+  .auth-logo { font-size: 1.8rem; text-align: center; margin-bottom: 0.5rem; }
+  .auth-title {
+    font-size: 13px; font-weight: normal; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-muted);
+    text-align: center; margin-bottom: 1.5rem;
+  }
+  .auth-tabs {
+    display: flex; margin-bottom: 1.5rem;
+    border: 0.5px solid var(--border-strong); border-radius: 8px; overflow: hidden;
+  }
+  .auth-tab {
+    flex: 1; padding: 7px; font-size: 12px; text-align: center;
+    background: transparent; color: var(--text-muted);
+    border: none; cursor: pointer; font-family: Georgia, serif;
+    letter-spacing: 0.05em; transition: background 0.12s;
+  }
+  .auth-tab.active { background: var(--surface2); color: var(--text); }
+  .auth-field {
+    width: 100%; font-size: 13px; padding: 9px 12px;
+    border: 0.5px solid var(--border-strong); border-radius: 8px;
+    background: var(--surface2); color: var(--text);
+    font-family: Georgia, serif; outline: none; margin-bottom: 0.75rem;
+    display: block;
+  }
+  .auth-field:focus { border-color: var(--accent); }
+  .auth-btn {
+    width: 100%; padding: 10px; font-size: 13px;
+    border: none; border-radius: 8px; background: var(--accent);
+    color: #fff; cursor: pointer; font-family: Georgia, serif;
+    letter-spacing: 0.04em; transition: background 0.12s; margin-top: 0.25rem;
+  }
+  .auth-btn:hover { background: var(--accent-dark); }
+  .auth-error { font-size: 11px; color: #E07070; text-align: center; margin-top: 0.75rem; min-height: 14px; }
+  .auth-info { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 0.75rem; line-height: 1.5; }
+  #migrate-banner {
+    display: none; background: var(--surface2);
+    border: 0.5px solid var(--accent); border-radius: 12px;
+    padding: 1rem 1.25rem; margin-bottom: 1.25rem;
+    font-size: 12px; color: var(--text); line-height: 1.6;
+  }
+  .migrate-btns { display: flex; gap: 8px; margin-top: 0.75rem; }
+  .migrate-btn {
+    flex: 1; padding: 7px; font-size: 12px;
+    border: 0.5px solid var(--border-strong); border-radius: 7px;
+    background: transparent; color: var(--text); cursor: pointer;
+    font-family: Georgia, serif; transition: background 0.12s;
+  }
+  .migrate-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .migrate-btn.primary:hover { background: var(--accent-dark); }
+  #user-chip { position: absolute; right: 44px; display: flex; align-items: center; gap: 8px; }
+  #user-name-display { font-size: 11px; color: var(--text-muted); font-family: Georgia, serif; }
+  #user-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    object-fit: cover; border: 1.5px solid var(--border-strong);
+    cursor: pointer; transition: opacity 0.15s; flex-shrink: 0;
+  }
+  #user-avatar:hover { opacity: 0.8; }
+  #user-avatar-placeholder {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--surface2); border: 1.5px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; cursor: pointer; flex-shrink: 0; color: var(--text-muted);
+    transition: background 0.15s;
+  }
+  #user-avatar-placeholder:hover { background: var(--border); }
+  /* Avatar in leaderboard */
+  .lb-avatar {
+    width: 22px; height: 22px; border-radius: 50%;
+    object-fit: cover; border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .lb-avatar-placeholder {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--surface2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; flex-shrink: 0; color: var(--text-muted);
+  }
+  /* Avatar upload in settings */
+  #avatar-upload-wrap {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 0.75rem;
+  }
+  #avatar-preview {
+    width: 52px; height: 52px; border-radius: 50%;
+    object-fit: cover; border: 1.5px solid var(--border-strong);
+    display: none;
+  }
+  #avatar-preview-placeholder {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--surface2); border: 1.5px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  #avatar-upload-btn {
+    font-size: 12px; padding: 6px 14px;
+    border: 0.5px solid var(--border-strong); border-radius: 7px;
+    background: transparent; color: var(--text); cursor: pointer;
+    font-family: Georgia, serif; transition: background 0.12s;
+  }
+  #avatar-upload-btn:hover { background: var(--surface2); }
+  #avatar-file { display: none; }
+  #logout-btn {
+    font-size: 10px; padding: 3px 8px;
+    border: 0.5px solid var(--border-strong); border-radius: 10px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif; transition: background 0.12s;
+  }
+  #logout-btn:hover { background: var(--surface2); }
+
   .lb-tab {
     font-size: 11px; padding: 4px 10px; flex: 1;
     border: 0.5px solid var(--border-strong); border-radius: 16px;
@@ -350,12 +470,71 @@
 
 <div class="header">
   <h1>Pomodoro</h1>
+  <div id="user-chip" style="display:none;">
+    <div id="user-avatar-placeholder" title="Profilbild ändern">👤</div>
+    <img id="user-avatar" src="" alt="" title="Profilbild ändern" style="display:none;">
+    <span id="user-name-display"></span>
+    <button id="logout-btn">Abmelden</button>
+  </div>
   <button id="gear-btn" title="Einstellungen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="3"/>
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
     </svg>
   </button>
+</div>
+
+<!-- Auth Modal -->
+<div id="auth-overlay">
+  <div id="auth-panel">
+    <div class="auth-logo">🍅</div>
+    <div class="auth-title">Pomodoro</div>
+
+    <div id="migrate-banner">
+      <strong>Willkommen zurück!</strong><br>
+      Dein Pseudonym und deine Einstellungen werden in deinen neuen Account übernommen. Lerndaten werden im Rahmen des Fairness-Resets zurückgesetzt.
+      <div class="migrate-btns">
+        <button class="migrate-btn primary" id="migrate-yes">Verstanden</button>
+        <button class="migrate-btn" id="migrate-no">Abbrechen</button>
+      </div>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Anmelden</button>
+      <button class="auth-tab" data-tab="register">Registrieren</button>
+    </div>
+
+    <!-- Login form -->
+    <div id="auth-login">
+      <input class="auth-field" type="email" id="login-email" placeholder="E-Mail" autocomplete="email">
+      <input class="auth-field" type="password" id="login-password" placeholder="Passwort" autocomplete="current-password">
+      <button class="auth-btn" id="login-btn">Anmelden</button>
+      <div class="auth-info">Noch kein Konto? Wechsle zu „Registrieren".</div>
+    </div>
+
+    <!-- Register form -->
+    <div id="auth-register" style="display:none;">
+      <div id="avatar-upload-wrap">
+        <div id="avatar-preview-placeholder">👤</div>
+        <img id="avatar-preview" src="" alt="">
+        <div>
+          <button class="auth-btn" id="avatar-upload-btn" type="button" style="width:auto;margin-top:0;">Profilbild wählen</button>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Optional · max. 2 MB</div>
+        </div>
+        <input type="file" id="avatar-file" accept="image/*">
+      </div>
+      <input class="auth-field" type="text" id="reg-username" placeholder="Pseudonym (für die Rangliste)" maxlength="24">
+      <input class="auth-field" type="email" id="reg-email" placeholder="E-Mail" autocomplete="email">
+      <input class="auth-field" type="password" id="reg-password" placeholder="Passwort (min. 6 Zeichen)" autocomplete="new-password">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--text-muted);margin-bottom:0.75rem;cursor:pointer;line-height:1.6;">
+        <input type="checkbox" id="reg-public" style="margin-top:2px;accent-color:var(--accent);">
+        Fortschritt in der öffentlichen Rangliste anzeigen
+      </label>
+      <button class="auth-btn" id="register-btn">Konto erstellen</button>
+    </div>
+
+    <div class="auth-error" id="auth-error"></div>
+  </div>
 </div>
 
 <!-- Settings Overlay -->
@@ -438,6 +617,19 @@
       <button class="wd-btn" data-dow="6">Sa</button>
       <button class="wd-btn" data-dow="0">So</button>
     </div>
+
+    <div class="panel-divider"></div>
+    <div class="panel-section">Profilbild</div>
+    <div id="avatar-upload-wrap" style="margin-bottom:0.75rem;">
+      <div id="avatar-preview-placeholder" style="width:52px;height:52px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">👤</div>
+      <img id="avatar-preview" src="" alt="" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:1.5px solid var(--border-strong);display:none;flex-shrink:0;">
+      <div style="margin-left:12px;">
+        <button id="avatar-upload-btn" style="font-size:12px;padding:6px 14px;border:0.5px solid var(--border-strong);border-radius:7px;background:transparent;color:var(--text);cursor:pointer;font-family:Georgia,serif;">Bild ändern</button>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Optional · max. 2 MB</div>
+      </div>
+      <input type="file" id="avatar-file" accept="image/*" style="display:none;">
+    </div>
+    <div id="avatar-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-bottom:0.5rem;"></div>
 
     <div class="panel-divider"></div>
     <div class="panel-section">Rangliste</div>
@@ -554,21 +746,6 @@
   </div>
 </div>
 
-<!-- Welcome Modal -->
-<div id="welcome-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;align-items:center;justify-content:center;">
-  <div id="welcome-panel" style="background:var(--surface);border:0.5px solid var(--border-strong);border-radius:16px;padding:2rem 1.75rem;width:320px;animation:slideIn 0.2s ease;font-family:Georgia,serif;">
-    <div style="font-size:1.5rem;text-align:center;margin-bottom:0.5rem;">🍅</div>
-    <h2 style="font-size:14px;font-weight:normal;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);text-align:center;margin-bottom:1.25rem;">Willkommen</h2>
-    <p style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:1.25rem;">Wähle ein Pseudonym, unter dem dein Fortschritt angezeigt werden kann.</p>
-    <input type="text" id="welcome-name" maxlength="24" placeholder="Dein Pseudonym …"
-      style="width:100%;font-size:13px;padding:8px 12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;margin-bottom:1rem;">
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--text-muted);margin-bottom:1.5rem;cursor:pointer;line-height:1.6;">
-      <input type="checkbox" id="welcome-public" style="margin-top:2px;accent-color:var(--accent);cursor:pointer;">
-      Ich möchte meinen täglichen Fortschritt in der öffentlichen Rangliste anzeigen lassen.
-    </label>
-    <button id="welcome-confirm" style="width:100%;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;">Los geht's</button>
-  </div>
-</div>
 
 <!-- Leaderboard card -->
 <div class="card" id="leaderboard-card" style="display:none;">
@@ -805,6 +982,11 @@
           else offDays[k] = true;
         }
         save();
+        // Sync off-day to Supabase
+        if (currentUser) {
+          const session = getToken();
+          if (session) saveStudyDay(session.access_token, k, days[k] || 0, offDays[k]);
+        }
         renderHeatmap();
       });
     });
@@ -909,31 +1091,31 @@
 
   /* ── Level system ── */
   const LEVELS = [
-    { name: 'Level 1',                    label: 'They/Them',                    icon: '🧊', minMinutes: 0      },
-    { name: 'Level 2',                    label: 'Soziologiestudent',             icon: '🧊', minMinutes: 300    },
-    { name: 'Level 3',                    label: 'Awareness-Seminarleiter',       icon: '🧊', minMinutes: 600    },
-    { name: 'Level 4',                    label: 'Bunter Nagellack',              icon: '🧊', minMinutes: 1200   },
-    { name: 'Level 5',                    label: 'FSR-Mitglied',                  icon: '🧊', minMinutes: 2100   },
-    { name: 'Level 6',                    label: 'Warmduscher',                   icon: '🛋️', minMinutes: 3000   },
-    { name: 'Level 7',                    label: 'Mensa-Frau',                    icon: '🛋️', minMinutes: 4500   },
-    { name: 'Level 8',                    label: 'Histo-Tutor',                   icon: '🛋️', minMinutes: 6000   },
-    { name: 'Level 9',                    label: 'Gym10-Duscher ohne Latschen',   icon: '🛋️', minMinutes: 8400   },
-    { name: 'Level 10',                   label: 'Skillslab-Schauspieler',        icon: '🛋️', minMinutes: 10800  },
-    { name: 'Level 11',                   label: 'Anki-Controller-Besitzer',      icon: '🔥', minMinutes: 13800  },
-    { name: 'Level 12',                   label: 'Transportdienst UKH',           icon: '🔥', minMinutes: 18000  },
-    { name: 'Level 13',                   label: 'Präp-Tutor',                    icon: '🔥', minMinutes: 22800  },
-    { name: 'Level 14',                   label: 'Doktorand',                     icon: '🔥', minMinutes: 28800  },
-    { name: 'Level 15',                   label: 'Peter Hippe',                   icon: '🔥', minMinutes: 36000  },
-    { name: 'Level 16',                   label: 'Löwe',                          icon: '🦁', minMinutes: 45000  },
-    { name: 'Level 17',                   label: 'Daniel Fister',                 icon: '🦁', minMinutes: 54000  },
-    { name: 'Level 18',                   label: 'Schwester Rabiata',             icon: '🦁', minMinutes: 66000  },
-    { name: 'Level 19',                   label: 'Oberarzt Hagel',                icon: '🦁', minMinutes: 81000  },
-    { name: 'Level 20',                   label: 'Penig-Bürgermeister',           icon: '🦁', minMinutes: 99000  },
-    { name: 'Level 21',                   label: 'Monster White - Abonnent',      icon: '👑', minMinutes: 120000 },
-    { name: 'Level 22',                   label: 'ST-Hebungsüberseher',           icon: '👑', minMinutes: 144000 },
-    { name: 'Level 23',                   label: 'Koffein-Tablette',              icon: '👑', minMinutes: 174000 },
-    { name: 'Level 24',                   label: 'Beta-GPC-Konsument',            icon: '👑', minMinutes: 210000 },
-    { name: 'Level 25',                   label: 'Pomodoro-Messi',                icon: '👑', minMinutes: 252000 },
+    { name: 'Level 1',  label: 'They/Them',                  icon: '🧊', minMinutes: 0     },
+    { name: 'Level 2',  label: 'Soziologiestudent',           icon: '🧊', minMinutes: 300   },
+    { name: 'Level 3',  label: 'Awareness-Seminarleiter',     icon: '🧊', minMinutes: 600   },
+    { name: 'Level 4',  label: 'Bunter Nagellack',            icon: '🧊', minMinutes: 900   },
+    { name: 'Level 5',  label: 'FSR-Mitglied',                icon: '🧊', minMinutes: 1500  },
+    { name: 'Level 6',  label: 'Warmduscher',                 icon: '🛋️', minMinutes: 2100  },
+    { name: 'Level 7',  label: 'Mensa-Frau',                  icon: '🛋️', minMinutes: 3000  },
+    { name: 'Level 8',  label: 'Histo-Tutor',                 icon: '🛋️', minMinutes: 3900  },
+    { name: 'Level 9',  label: 'Gym10-Duscher ohne Latschen', icon: '🛋️', minMinutes: 4800  },
+    { name: 'Level 10', label: 'Skillslab-Schauspieler',      icon: '🛋️', minMinutes: 6000  },
+    { name: 'Level 11', label: 'Anki-Controller-Besitzer',    icon: '🔥', minMinutes: 7800  },
+    { name: 'Level 12', label: 'Transportdienst UKH',         icon: '🔥', minMinutes: 9600  },
+    { name: 'Level 13', label: 'Präp-Tutor',                  icon: '🔥', minMinutes: 12000 },
+    { name: 'Level 14', label: 'Doktorand',                   icon: '🔥', minMinutes: 14400 },
+    { name: 'Level 15', label: 'Peter Hippe',                 icon: '🔥', minMinutes: 17400 },
+    { name: 'Level 16', label: 'Löwe',                        icon: '🦁', minMinutes: 21000 },
+    { name: 'Level 17', label: 'Daniel Fister',               icon: '🦁', minMinutes: 25200 },
+    { name: 'Level 18', label: 'Schwester Rabiata',           icon: '🦁', minMinutes: 30000 },
+    { name: 'Level 19', label: 'Oberarzt Hagel',              icon: '🦁', minMinutes: 35400 },
+    { name: 'Level 20', label: 'Penig-Bürgermeister',         icon: '🦁', minMinutes: 41400 },
+    { name: 'Level 21', label: 'Monster White - Abonnent',    icon: '👑', minMinutes: 45000 },
+    { name: 'Level 22', label: 'ST-Hebungsüberseher',         icon: '👑', minMinutes: 49200 },
+    { name: 'Level 23', label: 'Koffein-Tablette',            icon: '👑', minMinutes: 54000 },
+    { name: 'Level 24', label: 'Beta-GPC-Konsument',          icon: '👑', minMinutes: 58800 },
+    { name: 'Level 25', label: 'Pomodoro-Messi',              icon: '👑', minMinutes: 63000 },
   ];
 
   function getCurrentLevel(totalMins) {
@@ -1040,7 +1222,7 @@
     const idx = offWeekdays.indexOf(dow);
     if (idx >= 0) offWeekdays.splice(idx, 1);
     else offWeekdays.push(dow);
-    save(); syncWdBtns(); renderHeatmap();
+    save(); saveSettingsWithSync(); syncWdBtns(); renderHeatmap();
   });
 
   /* ── Toast ── */
@@ -1098,9 +1280,9 @@
 
   function completePomo() {
     const key = todayKey();
-    const mins = getMin('work'); // Minuten dieses Pomodoros
+    const mins = getMin('work');
     days[key] = (days[key] || 0) + mins;
-    totalPomodoros++; save();
+    totalPomodoros++; saveWithSync();
     launchConfetti();
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
@@ -1148,6 +1330,7 @@
         displayUnit = btn.dataset.unit;
         localStorage.setItem('pomo_display_unit', displayUnit);
         syncBtns();
+        saveSettingsWithSync();
         renderStats();
         if (userPublic && userName) renderLeaderboard(lastLeaderboardData);
       });
@@ -1456,7 +1639,7 @@
   document.getElementById('btn-reset').addEventListener('click', reset);
   document.getElementById('btn-skip').addEventListener('click', skip);
   ['work','short','long'].forEach(m=>{
-    document.getElementById('set-'+m).addEventListener('change', () => { saveSettings(); if (mode===m) reset(); });
+    document.getElementById('set-'+m).addEventListener('change', () => { saveSettingsWithSync(); if (mode===m) reset(); });
   });
 
   /* ── Manual adjustment ── */
@@ -1509,7 +1692,7 @@
   gearBtn.addEventListener('click',e=>{ e.stopPropagation(); toggleOverlay(); });
   document.getElementById('close-panel').addEventListener('click',()=>{ overlay.classList.remove('open'); gearBtn.classList.remove('open'); });
   document.getElementById('overlay').addEventListener('click',e=>{ if(e.target===overlay){ overlay.classList.remove('open'); gearBtn.classList.remove('open'); } });
-  document.getElementById('set-longafter').addEventListener('change', saveSettings);
+  document.getElementById('set-longafter').addEventListener('change', saveSettingsWithSync);
 
   /* ── User profile & welcome modal ── */
   function loadUser() {
@@ -1640,8 +1823,12 @@
       const display = minutesToDisplay(mins);
       const { current: entryLevel } = getCurrentLevel(mins);
       const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label})</span>`;
-      return `<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
+      const avatarHtml = entry.avatar_url
+        ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
+        : `<div class="lb-avatar-placeholder">👤</div>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
         <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
+        ${avatarHtml}
         <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
         <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${display}</span>
       </div>`;
@@ -1663,11 +1850,9 @@
       let list;
 
       if (lbPeriod === 'today') {
-        // Single day — one row per user, no aggregation needed
-        const url = `${SUPABASE_URL}/rest/v1/leaderboard`
-          + `?date=eq.${todayKey()}`
-          + `&order=minutes.desc&limit=15&select=name,minutes`;
-        const res = await fetch(url, { headers: sbHeaders() });
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_today`, {
+          method: 'POST', headers: sbHeaders(), body: JSON.stringify({}),
+        });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         list = await res.json();
 
@@ -1766,6 +1951,448 @@
     });
   }
 
+  /* ── Supabase Auth ── */
+  const SB = SUPABASE_URL;
+  const SB_KEY = SUPABASE_ANON_KEY;
+
+  let currentUser = null; // Supabase user object
+  let avatarUrl = null;   // public URL of uploaded avatar
+
+  function authHeaders(token) {
+    return {
+      'Content-Type': 'application/json',
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + (token || SB_KEY),
+    };
+  }
+
+  async function sbAuth(path, body) {
+    const res = await fetch(`${SB}/auth/v1${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  }
+
+  function getToken() {
+    try {
+      const raw = localStorage.getItem('pomo_session');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+  function setToken(session) {
+    if (session) localStorage.setItem('pomo_session', JSON.stringify(session));
+    else localStorage.removeItem('pomo_session');
+  }
+
+  async function refreshSession(refreshToken) {
+    const data = await sbAuth('/token?grant_type=refresh_token', { refresh_token: refreshToken });
+    if (data.access_token) { setToken(data); return data; }
+    return null;
+  }
+
+  async function loadProfile(token) {
+    const res = await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}&select=*`, {
+      headers: authHeaders(token),
+    });
+    const rows = await res.json();
+    return rows[0] || null;
+  }
+
+  async function saveProfile(token, data) {
+    await fetch(`${SB}/rest/v1/profiles`, {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ id: currentUser.id, ...data }),
+    });
+  }
+
+  // Load all study days from Supabase into local `days` object
+  async function loadStudyDays(token) {
+    const res = await fetch(`${SB}/rest/v1/study_days?user_id=eq.${currentUser.id}&select=date,minutes,off`, {
+      headers: authHeaders(token),
+    });
+    const rows = await res.json();
+    days = {}; offDays = {};
+    for (const row of rows) {
+      if (row.minutes > 0) days[row.date] = row.minutes;
+      if (row.off === true)  offDays[row.date] = true;
+      if (row.off === false) offDays[row.date] = false;
+    }
+  }
+
+  // Upsert a single day
+  async function saveStudyDay(token, date, minutes, off) {
+    const offVal = offDays[date] === true ? true : offDays[date] === false ? false : null;
+    await fetch(`${SB}/rest/v1/study_days`, {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ user_id: currentUser.id, date, minutes: minutes || 0, off: offVal }),
+    });
+  }
+
+  // Bulk upsert all local days (migration)
+  async function migrateLocalData(token) {
+    const rows = Object.entries(days).map(([date, minutes]) => ({
+      user_id: currentUser.id, date, minutes,
+      off: offDays[date] === true ? true : offDays[date] === false ? false : null,
+    }));
+    if (!rows.length) return;
+    await fetch(`${SB}/rest/v1/study_days`, {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(rows),
+    });
+  }
+
+  function showAuthError(msg) {
+    document.getElementById('auth-error').textContent = msg;
+  }
+
+  function openAuthModal() {
+    document.getElementById('auth-overlay').classList.add('open');
+    const localData = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
+    const hasDays = Object.keys(localData.days || {}).length > 0;
+    document.getElementById('migrate-banner').style.display = hasDays ? 'block' : 'none';
+    // If old user exists, pre-fill pseudonym and suggest registration
+    try {
+      const oldUser = JSON.parse(localStorage.getItem('pomo_user_v1') || 'null');
+      if (oldUser?.name) {
+        document.getElementById('reg-username').value = oldUser.name;
+        if (oldUser.public) document.getElementById('reg-public').checked = true;
+        // Switch to register tab automatically
+        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector('.auth-tab[data-tab="register"]').classList.add('active');
+        document.getElementById('auth-login').style.display    = 'none';
+        document.getElementById('auth-register').style.display = 'block';
+      }
+    } catch(e) {}
+  }
+
+  function closeAuthModal() {
+    document.getElementById('auth-overlay').classList.remove('open');
+  }
+
+  async function onLoginSuccess(session, isNew) {
+    setToken(session);
+    currentUser = session.user;
+    const token = session.access_token;
+
+    // Load profile
+    let profile = await loadProfile(token);
+    if (!profile && isNew) {
+      // Profile created on register — fetch again
+      await new Promise(r => setTimeout(r, 500));
+      profile = await loadProfile(token);
+    }
+
+    if (profile) {
+      userName    = profile.username;
+      userPublic  = profile.public;
+      displayUnit = profile.display_unit || 'pomodoros';
+      offWeekdays = profile.off_weekdays || [];
+      avatarUrl   = profile.avatar_url || null;
+      // Apply settings from profile
+      if (profile.focus_min)  document.getElementById('set-work').value      = profile.focus_min;
+      if (profile.short_min)  document.getElementById('set-short').value     = profile.short_min;
+      if (profile.long_min)   document.getElementById('set-long').value      = profile.long_min;
+      if (profile.long_after) document.getElementById('set-longafter').value = profile.long_after;
+      if (profile.sound) {
+        const sel = document.getElementById('sound-select');
+        if (sel) sel.value = profile.sound;
+      }
+      totalSec = getMin(mode) * 60; remaining = totalSec;
+    }
+
+    // Load study days from server
+    await loadStudyDays(token);
+
+    // Migration: check if local data should be merged
+    const localRaw = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
+    const localDays = localRaw.days || {};
+    const hasLocal = Object.keys(localDays).length > 0;
+    const needsMigration = hasLocal && isNew;
+
+    closeAuthModal();
+    updateUserChip();
+    syncWdBtns();
+    syncDisplayUnitBtns();
+    render();
+    if (userPublic) { document.getElementById('leaderboard-card').style.display = 'block'; }
+    initLeaderboard();
+
+    if (needsMigration || (hasLocal && !isNew)) {
+      // Prompt migration for existing users too
+      const localCount = Object.keys(localDays).length;
+      if (localCount > 0) showMigrationPrompt(session, localDays);
+    }
+  }
+
+  function showMigrationPrompt(session, localDays) {
+    // Re-open auth modal just for migration
+    document.getElementById('auth-login').style.display = 'none';
+    document.getElementById('auth-register').style.display = 'none';
+    document.querySelector('.auth-tabs').style.display = 'none';
+    document.getElementById('migrate-banner').style.display = 'block';
+    document.getElementById('auth-overlay').classList.add('open');
+
+    document.getElementById('migrate-yes').onclick = async () => {
+      const token = session.access_token;
+      // Nur Profil-Daten übernehmen — keine Lerndaten
+      // (Profil wurde bereits beim Registrieren angelegt)
+      // Lokale Daten bereinigen
+      localStorage.removeItem(KEY);
+      days = {}; offDays = {};
+      closeAuthModal();
+      render();
+      toast('Pseudonym und Einstellungen übertragen. Lerndaten wurden zurückgesetzt.');
+    };
+
+    document.getElementById('migrate-no').onclick = () => {
+      // Nein danke — lokale Daten NICHT löschen, nur Modal schließen
+      closeAuthModal();
+    };
+  }
+
+  function updateUserChip() {
+    const chip = document.getElementById('user-chip');
+    const nameEl = document.getElementById('user-name-display');
+    const img = document.getElementById('user-avatar');
+    const placeholder = document.getElementById('user-avatar-placeholder');
+    if (currentUser && userName) {
+      chip.style.display = 'flex';
+      nameEl.textContent = userName;
+      if (avatarUrl) {
+        img.src = avatarUrl; img.style.display = 'block';
+        placeholder.style.display = 'none';
+      } else {
+        img.style.display = 'none';
+        placeholder.style.display = 'flex';
+      }
+      // Also update settings panel preview
+      setAvatarPreview(avatarUrl);
+    } else {
+      chip.style.display = 'none';
+    }
+  }
+
+  function syncDisplayUnitBtns() {
+    document.querySelectorAll('.unit-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.unit === displayUnit));
+  }
+
+  /* ── Avatar ── */
+  function setAvatarPreview(url) {
+    // Settings panel preview
+    const prev = document.getElementById('avatar-preview');
+    const prevPh = document.getElementById('avatar-preview-placeholder');
+    if (prev && prevPh) {
+      if (url) { prev.src = url; prev.style.display = 'block'; prevPh.style.display = 'none'; }
+      else { prev.style.display = 'none'; prevPh.style.display = 'flex'; }
+    }
+  }
+
+  async function uploadAvatar(file, token) {
+    if (!file || !currentUser) return null;
+    if (file.size > 2 * 1024 * 1024) { toast('Bild zu groß — max. 2 MB.'); return null; }
+    const ext = file.name.split('.').pop();
+    const path = `${currentUser.id}/avatar.${ext}`;
+    // Upload to Supabase Storage
+    const res = await fetch(`${SB}/storage/v1/object/avatars/${path}`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': file.type, 'x-upsert': 'true' },
+      body: file,
+    });
+    if (!res.ok) { console.warn('Avatar upload failed', await res.text()); return null; }
+    // Public URL
+    const url = `${SB}/storage/v1/object/public/avatars/${path}?t=${Date.now()}`;
+    return url;
+  }
+
+  function initAvatarUpload() {
+    // Handle both the register form and settings panel file inputs
+    // We use one hidden input for both
+    document.querySelectorAll('#avatar-upload-btn').forEach(btn => {
+      btn.addEventListener('click', () => document.getElementById('avatar-file').click());
+    });
+
+    document.getElementById('avatar-file').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      // Show local preview immediately
+      const localUrl = URL.createObjectURL(file);
+      setAvatarPreview(localUrl);
+      // Also update reg form preview if it exists
+      const regPrev = document.querySelector('#auth-register #avatar-preview');
+      const regPh   = document.querySelector('#auth-register #avatar-preview-placeholder');
+      if (regPrev) { regPrev.src = localUrl; regPrev.style.display = 'block'; }
+      if (regPh)   regPh.style.display = 'none';
+
+      // If already logged in → upload immediately
+      if (currentUser) {
+        const session = getToken();
+        if (!session) return;
+        const feedback = document.getElementById('avatar-feedback');
+        if (feedback) feedback.textContent = 'Wird hochgeladen…';
+        const url = await uploadAvatar(file, session.access_token);
+        if (url) {
+          avatarUrl = url;
+          await saveProfile(session.access_token, { avatar_url: url });
+          updateUserChip();
+          if (feedback) feedback.textContent = 'Profilbild gespeichert.';
+          setTimeout(() => { if (feedback) feedback.textContent = ''; }, 2500);
+        }
+      }
+      // If not logged in → file is stored in the input, uploaded after register
+      e.target.value = ''; // reset so same file can be picked again
+    });
+
+    // Click on avatar chip → open file picker
+    document.getElementById('user-avatar').addEventListener('click', () =>
+      document.getElementById('avatar-file').click());
+    document.getElementById('user-avatar-placeholder').addEventListener('click', () =>
+      document.getElementById('avatar-file').click());
+  }
+
+  async function initAuth() {
+    // Tab switching
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('auth-login').style.display    = tab.dataset.tab === 'login'    ? 'block' : 'none';
+        document.getElementById('auth-register').style.display = tab.dataset.tab === 'register' ? 'block' : 'none';
+        showAuthError('');
+        // Pre-fill old pseudonym if switching to register
+        if (tab.dataset.tab === 'register') {
+          try {
+            const oldUser = JSON.parse(localStorage.getItem('pomo_user_v1') || 'null');
+            if (oldUser?.name) {
+              const field = document.getElementById('reg-username');
+              if (!field.value) field.value = oldUser.name;
+            }
+          } catch(e) {}
+        }
+      });
+    });
+
+    // Login
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const email = document.getElementById('login-email').value.trim();
+      const pass  = document.getElementById('login-password').value;
+      if (!email || !pass) { showAuthError('Bitte alle Felder ausfüllen.'); return; }
+      document.getElementById('login-btn').textContent = '…';
+      const data = await sbAuth('/token?grant_type=password', { email, password: pass });
+      document.getElementById('login-btn').textContent = 'Anmelden';
+      if (data.access_token) {
+        await onLoginSuccess(data, false);
+      } else {
+        showAuthError(data.error_description || 'Anmeldung fehlgeschlagen.');
+      }
+    });
+
+    // Register
+    document.getElementById('register-btn').addEventListener('click', async () => {
+      const username = document.getElementById('reg-username').value.trim();
+      const email    = document.getElementById('reg-email').value.trim();
+      const pass     = document.getElementById('reg-password').value;
+      const pub      = document.getElementById('reg-public').checked;
+      if (!username || !email || !pass) { showAuthError('Bitte alle Felder ausfüllen.'); return; }
+      if (pass.length < 6) { showAuthError('Passwort muss mind. 6 Zeichen haben.'); return; }
+      document.getElementById('register-btn').textContent = '…';
+      const data = await sbAuth('/signup', { email, password: pass });
+      document.getElementById('register-btn').textContent = 'Konto erstellen';
+      if (data.access_token) {
+        currentUser = data.user;
+        // Upload avatar if one was selected
+        const avatarFile = document.getElementById('avatar-file').files[0];
+        let uploadedAvatarUrl = null;
+        if (avatarFile) {
+          uploadedAvatarUrl = await uploadAvatar(avatarFile, data.access_token);
+        }
+        // Create profile
+        await saveProfile(data.access_token, {
+          username, public: pub,
+          focus_min: getMin('work'), short_min: getMin('short'),
+          long_min: getMin('long'), long_after: getLongAfter(),
+          display_unit: displayUnit, off_weekdays: offWeekdays,
+          avatar_url: uploadedAvatarUrl,
+        });
+        userName = username; userPublic = pub;
+        avatarUrl = uploadedAvatarUrl;
+        await onLoginSuccess(data, true);
+      } else {
+        showAuthError(data.error_description || data.msg || 'Registrierung fehlgeschlagen.');
+      }
+    });
+
+    // Logout
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      const session = getToken();
+      if (session) {
+        await fetch(`${SB}/auth/v1/logout`, {
+          method: 'POST',
+          headers: authHeaders(session.access_token),
+        });
+      }
+      setToken(null);
+      currentUser = null; userName = null; userPublic = false;
+      // Reload local data from localStorage so the app still works offline after logout
+      load(); loadSettings();
+      totalSec = getMin(mode) * 60; remaining = totalSec;
+      updateUserChip();
+      document.getElementById('leaderboard-card').style.display = 'none';
+      render();
+      // Reset forms
+      document.getElementById('auth-login').style.display    = 'block';
+      document.getElementById('auth-register').style.display = 'none';
+      document.querySelector('.auth-tabs').style.display      = 'flex';
+      document.getElementById('migrate-banner').style.display = 'none';
+      openAuthModal();
+    });
+
+    // Try restoring session from localStorage
+    const session = getToken();
+    if (session?.refresh_token) {
+      try {
+        const refreshed = await refreshSession(session.refresh_token);
+        if (refreshed) {
+          await onLoginSuccess(refreshed, false);
+          return; // logged in — skip modal
+        }
+      } catch(e) { console.warn('Session refresh failed', e); }
+    }
+    // No valid session — show auth modal
+    openAuthModal();
+  }
+
+  // Override save() to also persist to Supabase when logged in
+  const _origSave = save;
+  function saveWithSync() {
+    _origSave();
+    if (!currentUser) return;
+    const session = getToken();
+    if (!session) return;
+    const token = session.access_token;
+    const today = todayKey();
+    saveStudyDay(token, today, days[today] || 0, offDays[today]);
+  }
+
+  // Override saveSettings to sync profile
+  async function saveSettingsWithSync() {
+    saveSettings();
+    if (!currentUser) return;
+    const session = getToken();
+    if (!session) return;
+    await saveProfile(session.access_token, {
+      focus_min: getMin('work'), short_min: getMin('short'),
+      long_min: getMin('long'), long_after: getLongAfter(),
+      display_unit: displayUnit, off_weekdays: offWeekdays,
+      sound: document.getElementById('sound-select')?.value,
+    });
+  }
+
   /* ── Init ── */
   registerSW();
   drawTicks();
@@ -1775,19 +2402,15 @@
   initAdjust();
   initDisplayUnit();
   initSound();
-  initWelcome();
   initPrivacyToggle();
+  initAvatarUpload();
   load();
   loadSettings();
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
   syncWdBtns();
   render();
-  if (!loadUser()) {
-    showWelcome();
-  } else {
-    initLeaderboard();
-  }
+  initAuth();
 })();
 </script>
 </body>
