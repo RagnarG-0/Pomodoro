@@ -518,7 +518,7 @@
         <div id="avatar-preview-placeholder">👤</div>
         <img id="avatar-preview" src="" alt="">
         <div>
-          <button class="auth-btn" id="avatar-upload-btn" type="button" style="width:auto;margin-top:0;">Profilbild wählen</button>
+          <button class="auth-btn" id="avatar-upload-btn-reg" type="button" style="width:auto;margin-top:0;">Profilbild wählen</button>
           <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Optional · max. 2 MB</div>
         </div>
         <input type="file" id="avatar-file-reg" accept="image/*" style="display:none;">
@@ -624,7 +624,7 @@
       <div id="avatar-preview-placeholder" style="width:52px;height:52px;border-radius:50%;background:var(--surface2);border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">👤</div>
       <img id="avatar-preview" src="" alt="" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:1.5px solid var(--border-strong);display:none;flex-shrink:0;">
       <div style="margin-left:12px;">
-        <button id="avatar-upload-btn" style="font-size:12px;padding:6px 14px;border:0.5px solid var(--border-strong);border-radius:7px;background:transparent;color:var(--text);cursor:pointer;font-family:Georgia,serif;">Bild ändern</button>
+        <button id="avatar-upload-btn-settings" style="font-size:12px;padding:6px 14px;border:0.5px solid var(--border-strong);border-radius:7px;background:transparent;color:var(--text);cursor:pointer;font-family:Georgia,serif;">Bild ändern</button>
         <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Optional · max. 2 MB</div>
       </div>
       <input type="file" id="avatar-file" accept="image/*" style="display:none;">
@@ -1287,7 +1287,7 @@
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
     toast('Pomodoro #' + totalPomodoros + ' geschafft! ' + todayPomos + ' heute');
-    renderTomatoes(); renderHeatmap();
+    renderTomatoes(); renderHeatmap(); renderStats();
     if (userPublic && userName) pushLeaderboard();
   }
 
@@ -2052,22 +2052,26 @@
 
   function openAuthModal() {
     document.getElementById('auth-overlay').classList.add('open');
-    const localData = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
-    const hasDays = Object.keys(localData.days || {}).length > 0;
-    document.getElementById('migrate-banner').style.display = hasDays ? 'block' : 'none';
-    // If old user exists, pre-fill pseudonym and suggest registration
-    try {
-      const oldUser = JSON.parse(localStorage.getItem('pomo_user_v1') || 'null');
-      if (oldUser?.name) {
-        document.getElementById('reg-username').value = oldUser.name;
-        if (oldUser.public) document.getElementById('reg-public').checked = true;
-        // Switch to register tab automatically
-        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector('.auth-tab[data-tab="register"]').classList.add('active');
-        document.getElementById('auth-login').style.display    = 'none';
-        document.getElementById('auth-register').style.display = 'block';
-      }
-    } catch(e) {}
+    // Only show migration/old-user prompts if not already logged in
+    const hasSession = !!getToken()?.refresh_token;
+    if (!hasSession) {
+      const localData = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
+      const hasDays = Object.keys(localData.days || {}).length > 0;
+      document.getElementById('migrate-banner').style.display = hasDays ? 'block' : 'none';
+      try {
+        const oldUser = JSON.parse(localStorage.getItem('pomo_user_v1') || 'null');
+        if (oldUser?.name) {
+          document.getElementById('reg-username').value = oldUser.name;
+          if (oldUser.public) document.getElementById('reg-public').checked = true;
+          document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+          document.querySelector('.auth-tab[data-tab="register"]').classList.add('active');
+          document.getElementById('auth-login').style.display    = 'none';
+          document.getElementById('auth-register').style.display = 'block';
+        }
+      } catch(e) {}
+    } else {
+      document.getElementById('migrate-banner').style.display = 'none';
+    }
   }
 
   function closeAuthModal() {
@@ -2139,11 +2143,11 @@
 
     document.getElementById('migrate-yes').onclick = async () => {
       const token = session.access_token;
-      // Nur Profil-Daten übernehmen — keine Lerndaten
-      // (Profil wurde bereits beim Registrieren angelegt)
-      // Lokale Daten bereinigen
+      // Clear local data — server data stays intact
       localStorage.removeItem(KEY);
       days = {}; offDays = {};
+      // Reload from Supabase so UI reflects server state
+      await loadStudyDays(token);
       closeAuthModal();
       render();
       toast('Pseudonym und Einstellungen übertragen. Lerndaten wurden zurückgesetzt.');
@@ -2215,49 +2219,49 @@
   }
 
   function initAvatarUpload() {
-    // Shared handler for any file input triggering avatar upload
-    function handleFileChange(file, onPreview) {
-      if (!file) return;
-      const localUrl = URL.createObjectURL(file);
-      onPreview(localUrl);
-      setAvatarPreview(localUrl);
-      // If logged in → upload immediately
-      if (currentUser) {
-        const session = getToken();
-        if (!session) return;
-        const feedback = document.getElementById('avatar-feedback');
-        if (feedback) feedback.textContent = 'Wird hochgeladen…';
-        uploadAvatar(file, session.access_token).then(url => {
-          if (url) {
-            avatarUrl = url;
-            saveProfile(session.access_token, { avatar_url: url });
-            updateUserChip();
-            if (feedback) { feedback.textContent = 'Profilbild gespeichert.'; setTimeout(() => { feedback.textContent = ''; }, 2500); }
-          }
-        });
-      }
-    }
-
-    // Settings panel file input
     const settingsFile = document.getElementById('avatar-file');
-    document.getElementById('avatar-upload-btn') && document.getElementById('avatar-upload-btn').addEventListener('click', () => settingsFile.click());
-    settingsFile.addEventListener('change', e => {
-      handleFileChange(e.target.files[0], url => setAvatarPreview(url));
-      e.target.value = '';
-    });
+    const regFile      = document.getElementById('avatar-file-reg');
 
-    // Register form file input
-    const regFile = document.getElementById('avatar-file-reg');
-    document.getElementById('avatar-upload-btn') && (() => {
-      // The reg form also has an upload btn — handled via id conflict, use querySelectorAll
-    })();
-    // Handle all avatar-upload-btn clicks
-    document.querySelectorAll('#avatar-upload-btn').forEach(btn => {
-      // Already attached above for settings; for reg form:
-      if (btn.closest('#auth-register')) {
-        btn.addEventListener('click', () => regFile.click());
+    // Settings panel button → open file picker
+    document.getElementById('avatar-upload-btn-settings')
+      .addEventListener('click', () => settingsFile.click());
+
+    // Register form button → open reg file picker
+    document.getElementById('avatar-upload-btn-reg')
+      .addEventListener('click', () => regFile.click());
+
+    // Click on avatar chip in header → open settings file picker
+    document.getElementById('user-avatar')
+      .addEventListener('click', () => settingsFile.click());
+    document.getElementById('user-avatar-placeholder')
+      .addEventListener('click', () => settingsFile.click());
+
+    // Settings panel: upload immediately when logged in
+    settingsFile.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      e.target.value = '';
+      setAvatarPreview(URL.createObjectURL(file));
+      if (!currentUser) return;
+      const session = getToken();
+      if (!session) return;
+      const feedback = document.getElementById('avatar-feedback');
+      if (feedback) feedback.textContent = 'Wird hochgeladen…';
+      const url = await uploadAvatar(file, session.access_token);
+      if (url) {
+        avatarUrl = url;
+        await saveProfile(session.access_token, { avatar_url: url });
+        updateUserChip();
+        if (feedback) {
+          feedback.textContent = 'Profilbild gespeichert.';
+          setTimeout(() => { feedback.textContent = ''; }, 2500);
+        }
+      } else {
+        if (feedback) { feedback.textContent = 'Upload fehlgeschlagen.'; setTimeout(() => { feedback.textContent = ''; }, 3000); }
       }
     });
+
+    // Register form: just show preview, upload happens after account creation
     regFile.addEventListener('change', e => {
       const file = e.target.files[0];
       if (!file) return;
@@ -2267,10 +2271,6 @@
       if (prev) { prev.src = localUrl; prev.style.display = 'block'; }
       if (ph)   ph.style.display = 'none';
     });
-
-    // Click on avatar chip → open settings file picker
-    document.getElementById('user-avatar').addEventListener('click', () => settingsFile.click());
-    document.getElementById('user-avatar-placeholder').addEventListener('click', () => settingsFile.click());
   }
 
   async function initAuth() {
