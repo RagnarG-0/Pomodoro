@@ -1679,12 +1679,10 @@
     const open = overlay.classList.toggle('open');
     gearBtn.classList.toggle('open', open);
     if (open) {
-      document.getElementById('adj-date').value = todayKey();
-      document.getElementById('toggle-public').checked = userPublic;
-      // Pre-fill current username
       const unField = document.getElementById('change-username');
       if (unField && userName) unField.value = userName;
-      document.getElementById('username-feedback').textContent = '';
+      const uf = document.getElementById('username-feedback');
+      if (uf) uf.textContent = '';
     }
   }
   gearBtn.addEventListener('click',e=>{ e.stopPropagation(); toggleOverlay(); });
@@ -1954,32 +1952,29 @@
 
   function initPrivacyToggle() {
     const toggle = document.getElementById('toggle-public');
-    const syncToggle = () => { toggle.checked = userPublic; };
-    syncToggle();
-
-    toggle.addEventListener('change', async () => {
-      const makePublic = toggle.checked;
-      const feedback = document.getElementById('privacy-feedback');
-
-      if (makePublic && !userPublic) {
-        userPublic = true; saveUser();
-        document.getElementById('leaderboard-card').style.display = 'block';
-        await syncAllHistory();
-        loadLeaderboard('today');
-        feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
-      } else if (!makePublic && userPublic) {
-        userPublic = false; saveUser();
-        await removeFromLeaderboard();
-        document.getElementById('leaderboard-card').style.display = 'none';
-        feedback.textContent = 'Du wurdest aus der Rangliste entfernt.';
-      }
-      // Sync to Supabase
-      if (currentUser) {
-        const session = getToken();
-        if (session) await saveProfile(session.access_token, { public: userPublic });
-      }
-      setTimeout(() => { feedback.textContent = ''; }, 3000);
-    });
+    if (toggle) {
+      toggle.addEventListener('change', async () => {
+        const makePublic = toggle.checked;
+        const feedback = document.getElementById('privacy-feedback');
+        if (makePublic && !userPublic) {
+          userPublic = true; saveUser();
+          document.getElementById('leaderboard-card').style.display = 'block';
+          await syncAllHistory();
+          loadLeaderboard('today');
+          if (feedback) feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
+        } else if (!makePublic && userPublic) {
+          userPublic = false; saveUser();
+          await removeFromLeaderboard();
+          document.getElementById('leaderboard-card').style.display = 'none';
+          if (feedback) feedback.textContent = 'Du wurdest aus der Rangliste entfernt.';
+        }
+        if (currentUser) {
+          const session = getToken();
+          if (session) await saveProfile(session.access_token, { public: userPublic });
+        }
+        setTimeout(() => { if (feedback) feedback.textContent = ''; }, 3000);
+      });
+    }
 
     // Username change
     document.getElementById('change-username-btn').addEventListener('click', async () => {
