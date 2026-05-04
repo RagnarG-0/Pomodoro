@@ -88,6 +88,7 @@
     font-size: 80px; font-weight: normal; letter-spacing: -3px;
     color: var(--text); line-height: 1; text-align: center; margin-bottom: 0.4rem;
     font-variant-numeric: tabular-nums; font-family: 'Georgia', serif;
+    transition: opacity 0.2s;
   }
   #mode-label {
     text-align: center; font-size: 12px; letter-spacing: 0.1em;
@@ -2228,6 +2229,9 @@
     updateUserChip();
     syncWdBtns();
     syncDisplayUnitBtns();
+    // Reveal timer now that correct settings are applied
+    document.getElementById('time-display').style.opacity = '1';
+    document.getElementById('watch-svg').style.opacity = '1';
     render();
     if (userPublic) { document.getElementById('leaderboard-card').style.display = 'block'; }
     initLeaderboard();
@@ -2502,6 +2506,8 @@
       } catch(e) { console.warn('Session refresh failed', e); }
     }
     // No valid session — show auth modal
+    document.getElementById('time-display').style.opacity = '1';
+    document.getElementById('watch-svg').style.opacity = '1';
     openAuthModal();
   }
 
@@ -2545,6 +2551,9 @@
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
   syncWdBtns();
+  // Hide timer until session is restored to avoid flash of default value
+  document.getElementById('time-display').style.opacity = '0';
+  document.getElementById('watch-svg').style.opacity = '0';
   render();
   initAuth();
 })();
