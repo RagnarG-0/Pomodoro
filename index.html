@@ -2189,7 +2189,9 @@
       chip.style.display = 'flex';
       nameEl.textContent = userName;
       if (avatarUrl) {
-        img.src = avatarUrl; img.style.display = 'block';
+        // Add cache-buster to force fresh load
+        img.src = avatarUrl + (avatarUrl.includes('?') ? '&' : '?') + 'cb=' + Date.now();
+        img.style.display = 'block';
         placeholder.style.display = 'none';
       } else {
         img.style.display = 'none';
