@@ -650,6 +650,8 @@
     </div>
     <div id="privacy-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-top:4px;"></div>
 
+    <button id="save-settings-btn" style="width:100%;margin-top:0.5rem;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;transition:background 0.12s;">Einstellungen speichern</button>
+    <div id="settings-save-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:6px;"></div>
     <button id="close-panel">Schließen</button>
   </div>
 </div>
@@ -1234,7 +1236,7 @@
     const idx = offWeekdays.indexOf(dow);
     if (idx >= 0) offWeekdays.splice(idx, 1);
     else offWeekdays.push(dow);
-    save(); saveSettingsWithSync(); syncWdBtns(); renderHeatmap();
+    save(); syncWdBtns(); renderHeatmap();
   });
 
   /* ── Toast ── */
@@ -1342,7 +1344,6 @@
         displayUnit = btn.dataset.unit;
         localStorage.setItem('pomo_display_unit', displayUnit);
         syncBtns();
-        saveSettingsWithSync();
         renderStats();
         if (userPublic && userName) renderLeaderboard(lastLeaderboardData);
       });
@@ -1566,7 +1567,6 @@
     document.getElementById('sound-select').addEventListener('change', e => {
       selectedSound = e.target.value;
       localStorage.setItem('pomo_sound', selectedSound);
-      saveSettingsWithSync();
     });
     document.getElementById('sound-preview').addEventListener('click', () => {
       playSound('work');
@@ -1652,7 +1652,7 @@
   document.getElementById('btn-reset').addEventListener('click', reset);
   document.getElementById('btn-skip').addEventListener('click', skip);
   ['work','short','long'].forEach(m=>{
-    document.getElementById('set-'+m).addEventListener('change', () => { saveSettingsWithSync(); if (mode===m) reset(); });
+    document.getElementById('set-'+m).addEventListener('change', () => { if (mode===m) reset(); });
   });
 
   /* ── Manual adjustment ── */
@@ -1707,8 +1707,36 @@
     }
   }
   gearBtn.addEventListener('click',e=>{ e.stopPropagation(); toggleOverlay(); });
-  document.getElementById('close-panel').addEventListener('click',()=>{ overlay.classList.remove('open'); gearBtn.classList.remove('open'); });
-  document.getElementById('overlay').addEventListener('click',e=>{ if(e.target===overlay){ overlay.classList.remove('open'); gearBtn.classList.remove('open'); } });
+  document.getElementById('save-settings-btn').addEventListener('click', async () => {
+    const feedback = document.getElementById('settings-save-feedback');
+    feedback.textContent = 'Wird gespeichert…';
+    saveSettings(); // save to localStorage
+    if (currentUser) {
+      const session = getToken();
+      if (session) {
+        await saveProfile(session.access_token, {
+          focus_min:    getMin('work'),
+          short_min:    getMin('short'),
+          long_min:     getMin('long'),
+          long_after:   getLongAfter(),
+          display_unit: displayUnit,
+          off_weekdays: offWeekdays,
+          sound:        document.getElementById('sound-select')?.value,
+        });
+      }
+    }
+    // Apply new timer duration if not running
+    if (!running) { totalSec = getMin(mode) * 60; remaining = totalSec; renderTimer(); }
+    feedback.textContent = '✓ Gespeichert';
+    setTimeout(() => { feedback.textContent = ''; }, 2500);
+  });
+
+  document.getElementById('close-panel').addEventListener('click', () => {
+    overlay.classList.remove('open'); gearBtn.classList.remove('open');
+  });
+  document.getElementById('overlay').addEventListener('click', e => {
+    if (e.target === overlay) { overlay.classList.remove('open'); gearBtn.classList.remove('open'); }
+  });
   document.getElementById('set-longafter').addEventListener('change', saveSettingsWithSync);
 
   /* ── User profile & welcome modal ── */
@@ -2045,15 +2073,28 @@
   }
 
   async function saveProfile(token, data) {
-    // For new profiles (INSERT) or updates (PATCH), use upsert via POST with on_conflict
-    const res = await fetch(`${SB}/rest/v1/profiles?on_conflict=id`, {
-      method: 'POST',
-      headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ id: currentUser.id, ...data }),
+    // Check if profile exists — use PATCH for updates, POST for initial creation
+    const checkRes = await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}&select=id`, {
+      headers: authHeaders(token),
     });
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn('saveProfile failed:', res.status, err);
+    const existing = await checkRes.json();
+
+    if (existing && existing.length > 0) {
+      // Profile exists — use PATCH to update only the provided fields
+      const res = await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Prefer': 'return=minimal' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) console.warn('saveProfile PATCH failed:', res.status, await res.text());
+    } else {
+      // No profile yet — POST with all required fields
+      const res = await fetch(`${SB}/rest/v1/profiles`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ id: currentUser.id, username: userName || currentUser.email?.split('@')[0] || 'Nutzer', public: true, ...data }),
+      });
+      if (!res.ok) console.warn('saveProfile POST failed:', res.status, await res.text());
     }
   }
 
