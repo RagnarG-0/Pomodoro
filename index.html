@@ -529,7 +529,7 @@
       <input class="auth-field" type="email" id="reg-email" placeholder="E-Mail" autocomplete="email">
       <input class="auth-field" type="password" id="reg-password" placeholder="Passwort (min. 6 Zeichen)" autocomplete="new-password">
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--text-muted);margin-bottom:0.75rem;cursor:pointer;line-height:1.6;">
-        <input type="checkbox" id="reg-public" style="margin-top:2px;accent-color:var(--accent);">
+        <input type="checkbox" id="reg-public" checked style="margin-top:2px;accent-color:var(--accent);">
         Fortschritt in der öffentlichen Rangliste anzeigen
       </label>
       <button class="auth-btn" id="register-btn">Konto erstellen</button>
@@ -2107,7 +2107,7 @@
     // Auto-create profile if still missing (e.g. registration failed previously)
     if (!profile) {
       const fallbackUsername = currentUser.email?.split('@')[0] || 'Nutzer';
-      await saveProfile(token, { username: fallbackUsername, public: false });
+      await saveProfile(token, { username: fallbackUsername, public: true });
       profile = await loadProfile(token);
     }
 
