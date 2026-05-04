@@ -1566,6 +1566,7 @@
     document.getElementById('sound-select').addEventListener('change', e => {
       selectedSound = e.target.value;
       localStorage.setItem('pomo_sound', selectedSound);
+      saveSettingsWithSync();
     });
     document.getElementById('sound-preview').addEventListener('click', () => {
       playSound('work');
@@ -2153,6 +2154,10 @@
       displayUnit = profile.display_unit || 'pomodoros';
       offWeekdays = profile.off_weekdays || [];
       avatarUrl   = profile.avatar_url || null;
+      displayUnit = profile.display_unit || 'pomodoros';
+      // Sync display unit buttons
+      document.querySelectorAll('.unit-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.unit === displayUnit));
       // Apply settings from profile
       if (profile.focus_min)  document.getElementById('set-work').value      = profile.focus_min;
       if (profile.short_min)  document.getElementById('set-short').value     = profile.short_min;
@@ -2162,7 +2167,9 @@
         const sel = document.getElementById('sound-select');
         if (sel) sel.value = profile.sound;
       }
-      totalSec = getMin(mode) * 60; remaining = totalSec;
+      // Recalculate timer with loaded settings
+      totalSec = getMin(mode) * 60;
+      remaining = totalSec;
     }
 
     // Load study days from server
@@ -2494,7 +2501,6 @@
   initPrivacyToggle();
   initAvatarUpload();
   load();
-  loadSettings();
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
   syncWdBtns();
