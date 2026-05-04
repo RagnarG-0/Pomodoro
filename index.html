@@ -592,23 +592,6 @@
     </div>
 
     <div class="panel-divider"></div>
-    <div class="panel-section">Pomodoros anpassen</div>
-    <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Vergessene Pomodoros nachträglich eintragen oder korrigieren.</p>
-    <div class="panel-row">
-      <label for="adj-date">Datum</label>
-      <div class="inp-wrap"><input type="date" id="adj-date" style="width:130px;font-size:12px;padding:4px 6px;border:0.5px solid var(--border-strong);border-radius:6px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;"></div>
-    </div>
-    <div class="panel-row">
-      <label for="adj-count">Anzahl</label>
-      <div class="inp-wrap"><input type="number" id="adj-count" value="1" min="0" max="99" style="width:54px;"> Pomodoros</div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:0.75rem;">
-      <button id="adj-set" style="flex:1;padding:7px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:7px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;">Setzen</button>
-      <button id="adj-add" style="flex:1;padding:7px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:7px;background:transparent;color:var(--text);cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;">+ Hinzufügen</button>
-    </div>
-    <div id="adj-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;"></div>
-
-    <div class="panel-divider"></div>
     <div class="panel-section">Freie Wochentage</div>
     <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Diese Wochentage werden in der Heatmap automatisch durchgestrichen.</p>
     <div class="weekday-grid" id="weekday-grid">
@@ -1067,6 +1050,12 @@
       btn.classList.remove('paused');
       icon.innerHTML = '<polygon points="5,3 19,12 5,21"/>';
     }
+    // Skip button: only active during breaks
+    const skipBtn = document.getElementById('btn-skip');
+    const isBreak = mode === 'short' || mode === 'long';
+    skipBtn.style.opacity = isBreak ? '1' : '0.3';
+    skipBtn.style.cursor  = isBreak ? 'pointer' : 'not-allowed';
+    skipBtn.disabled = !isBreak;
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
   }
 
@@ -1628,17 +1617,12 @@
   }
 
   function skip() {
+    if (mode === 'work') return; // disabled during focus
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_SKIP' });
-    if (mode === 'work') {
-      completePomo();
-      const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
-      setTimeout(() => switchTo(next, false), 1400);
-    } else {
-      playSound('break');
-      toast('Pause vorbei – bereit für den nächsten Fokus!');
-      setTimeout(() => switchTo('work', false), 1400);
-    }
+    playSound('break');
+    toast('Pause vorbei – bereit für den nächsten Fokus!');
+    setTimeout(() => switchTo('work', false), 1400);
   }
 
   // Page Visibility API: re-anchor when tab comes back into foreground
@@ -2542,7 +2526,6 @@
   buildDowCol();
   initDragScroll();
   initTooltip();
-  initAdjust();
   initDisplayUnit();
   initSound();
   initPrivacyToggle();
