@@ -635,6 +635,15 @@
 
     <div class="panel-divider"></div>
     <div class="panel-section">Rangliste</div>
+    <div class="panel-row">
+      <label for="change-username">Pseudonym</label>
+      <div class="inp-wrap" style="gap:6px;">
+        <input type="text" id="change-username" maxlength="24"
+          style="width:130px;font-size:12px;padding:4px 8px;border:0.5px solid var(--border-strong);border-radius:6px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;">
+        <button id="change-username-btn" style="font-size:12px;padding:4px 10px;border:0.5px solid var(--border-strong);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;font-family:Georgia,serif;">Ändern</button>
+      </div>
+    </div>
+    <div id="username-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-bottom:0.5rem;"></div>
     <div class="panel-row" style="align-items:flex-start;gap:10px;">
       <label for="toggle-public" style="flex:1;line-height:1.6;cursor:pointer;">Fortschritt öffentlich in der Rangliste anzeigen</label>
       <input type="checkbox" id="toggle-public" style="margin-top:3px;accent-color:var(--accent);cursor:pointer;width:15px;height:15px;">
@@ -1690,6 +1699,10 @@
     if (open) {
       document.getElementById('adj-date').value = todayKey();
       document.getElementById('toggle-public').checked = userPublic;
+      // Pre-fill current username
+      const unField = document.getElementById('change-username');
+      if (unField && userName) unField.value = userName;
+      document.getElementById('username-feedback').textContent = '';
     }
   }
   gearBtn.addEventListener('click',e=>{ e.stopPropagation(); toggleOverlay(); });
@@ -1931,11 +1944,7 @@
 
   function initPrivacyToggle() {
     const toggle = document.getElementById('toggle-public');
-    // Sync checkbox state with current setting
     const syncToggle = () => { toggle.checked = userPublic; };
-    syncToggle();
-
-    // Sync checkbox when panel opens (handled by main gear-btn listener)
     syncToggle();
 
     toggle.addEventListener('change', async () => {
@@ -1954,7 +1963,34 @@
         document.getElementById('leaderboard-card').style.display = 'none';
         feedback.textContent = 'Du wurdest aus der Rangliste entfernt.';
       }
+      // Sync to Supabase
+      if (currentUser) {
+        const session = getToken();
+        if (session) await saveProfile(session.access_token, { public: userPublic });
+      }
       setTimeout(() => { feedback.textContent = ''; }, 3000);
+    });
+
+    // Username change
+    document.getElementById('change-username-btn').addEventListener('click', async () => {
+      const newName = document.getElementById('change-username').value.trim();
+      const feedback = document.getElementById('username-feedback');
+      if (!newName) { feedback.textContent = 'Bitte einen Namen eingeben.'; return; }
+      if (newName === userName) { feedback.textContent = 'Das ist bereits dein Pseudonym.'; return; }
+      if (!currentUser) { feedback.textContent = 'Nicht angemeldet.'; return; }
+      const session = getToken();
+      if (!session) return;
+      feedback.textContent = 'Wird gespeichert…';
+      await saveProfile(session.access_token, { username: newName });
+      userName = newName;
+      document.getElementById('user-name-display').textContent = newName;
+      feedback.textContent = 'Pseudonym gespeichert.';
+      setTimeout(() => { feedback.textContent = ''; }, 2500);
+    });
+
+    // Allow Enter key in username field
+    document.getElementById('change-username').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('change-username-btn').click();
     });
   }
 
