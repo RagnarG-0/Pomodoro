@@ -2008,21 +2008,15 @@
   }
 
   async function saveProfile(token, data) {
-    // Use PATCH to update existing profile — avoids upsert conflict issues
-    const res = await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}`, {
-      method: 'PATCH',
-      headers: { ...authHeaders(token), 'Prefer': 'return=minimal' },
-      body: JSON.stringify(data),
+    // For new profiles (INSERT) or updates (PATCH), use upsert via POST with on_conflict
+    const res = await fetch(`${SB}/rest/v1/profiles?on_conflict=id`, {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ id: currentUser.id, ...data }),
     });
     if (!res.ok) {
       const err = await res.text();
-      console.warn('saveProfile PATCH failed:', res.status, err);
-      // Fall back to upsert if profile doesn't exist yet
-      await fetch(`${SB}/rest/v1/profiles?on_conflict=id`, {
-        method: 'POST',
-        headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ id: currentUser.id, ...data }),
-      });
+      console.warn('saveProfile failed:', res.status, err);
     }
   }
 
