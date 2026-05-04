@@ -459,6 +459,10 @@
   }
   .lb-tab:hover { background: var(--surface2); color: var(--text); }
   .lb-tab.active { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+  .lb-tab-alltime {
+    font-size: 12px; font-weight: bold; letter-spacing: 0.06em;
+  }
+  .lb-tab-alltime.active { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
 
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
 
@@ -748,10 +752,10 @@
   </div>
   <!-- Period tabs -->
   <div style="display:flex;gap:5px;margin-bottom:1rem;">
-    <button class="lb-tab active" data-period="today">Heute</button>
+    <button class="lb-tab" data-period="today">Heute</button>
     <button class="lb-tab" data-period="week">Letzte Woche</button>
     <button class="lb-tab" data-period="month">Letzter Monat</button>
-    <button class="lb-tab" data-period="alltime">All Time</button>
+    <button class="lb-tab lb-tab-alltime active" data-period="alltime">All Time</button>
   </div>
   <div id="lb-list" style="font-family:Georgia,serif;"></div>
   <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
@@ -1821,7 +1825,7 @@
     } catch(e) { console.warn('Bulk sync error', e); }
   }
 
-  let lbPeriod = 'today';
+  let lbPeriod = 'alltime';
   let lastLeaderboardData = [];
 
   function renderLeaderboard(list) {
@@ -1870,9 +1874,8 @@
     const status = document.getElementById('lb-status');
     status.textContent = 'Wird geladen …';
 
-    // Use auth token if logged in, fall back to anon key
-    const session = getToken();
-    const token = session?.access_token || SUPABASE_ANON_KEY;
+    // Use valid (auto-refreshed) token
+    const token = await getValidToken() || SUPABASE_ANON_KEY;
     const headers = {
       'Content-Type': 'application/json',
       'apikey': SUPABASE_ANON_KEY,
@@ -2034,10 +2037,31 @@
     else localStorage.removeItem('pomo_session');
   }
 
+  // Returns a valid (non-expired) token, refreshing if needed
+  async function getValidToken() {
+    const session = getToken();
+    if (!session) return null;
+    // Refresh if token expires within the next 5 minutes
+    const expiresAt = session.expires_at * 1000; // convert to ms
+    if (Date.now() > expiresAt - 5 * 60 * 1000) {
+      const refreshed = await refreshSession(session.refresh_token);
+      return refreshed?.access_token || null;
+    }
+    return session.access_token;
+  }
+
   async function refreshSession(refreshToken) {
     const data = await sbAuth('/token?grant_type=refresh_token', { refresh_token: refreshToken });
     if (data.access_token) { setToken(data); return data; }
     return null;
+  }
+
+  // Proactive refresh: check every 4 minutes while logged in
+  function startTokenRefreshTimer() {
+    setInterval(async () => {
+      if (!currentUser) return;
+      await getValidToken(); // refreshes if needed
+    }, 4 * 60 * 1000);
   }
 
   async function loadProfile(token) {
@@ -2204,6 +2228,7 @@
     updateUserChip();
     syncWdBtns();
     syncDisplayUnitBtns();
+    startTokenRefreshTimer();
     // Reveal timer now that correct settings are applied
     document.getElementById('time-display').style.opacity = '1';
     document.getElementById('watch-svg').style.opacity = '1';
@@ -2490,20 +2515,20 @@
   const _origSave = save;
   function saveWithSync() {
     _origSave();
-    if (!currentUser) { console.log('saveWithSync: no currentUser'); return; }
-    const session = getToken();
-    if (!session?.access_token) { console.log('saveWithSync: no token'); return; }
+    if (!currentUser) return;
     const today = todayKey();
-    saveStudyDay(session.access_token, today, days[today] || 0, offDays[today]);
+    getValidToken().then(token => {
+      if (!token) return;
+      saveStudyDay(token, today, days[today] || 0, offDays[today]);
+    });
   }
 
-  // Override saveSettings to sync profile
   async function saveSettingsWithSync() {
     saveSettings();
     if (!currentUser) return;
-    const session = getToken();
-    if (!session) return;
-    await saveProfile(session.access_token, {
+    const token = await getValidToken();
+    if (!token) return;
+    await saveProfile(token, {
       focus_min: getMin('work'), short_min: getMin('short'),
       long_min: getMin('long'), long_after: getLongAfter(),
       display_unit: displayUnit, off_weekdays: offWeekdays,
