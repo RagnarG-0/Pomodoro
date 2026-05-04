@@ -2101,8 +2101,13 @@
     // Load profile
     let profile = await loadProfile(token);
     if (!profile && isNew) {
-      // Profile created on register — fetch again
       await new Promise(r => setTimeout(r, 500));
+      profile = await loadProfile(token);
+    }
+    // Auto-create profile if still missing (e.g. registration failed previously)
+    if (!profile) {
+      const fallbackUsername = currentUser.email?.split('@')[0] || 'Nutzer';
+      await saveProfile(token, { username: fallbackUsername, public: false });
       profile = await loadProfile(token);
     }
 
@@ -2179,11 +2184,10 @@
     const nameEl = document.getElementById('user-name-display');
     const img = document.getElementById('user-avatar');
     const placeholder = document.getElementById('user-avatar-placeholder');
-    if (currentUser && userName) {
+    if (currentUser) {
       chip.style.display = 'flex';
-      nameEl.textContent = userName;
+      nameEl.textContent = userName || currentUser.email?.split('@')[0] || '';
       if (avatarUrl) {
-        // Add cache-buster to force fresh load
         img.src = avatarUrl + (avatarUrl.includes('?') ? '&' : '?') + 'cb=' + Date.now();
         img.style.display = 'block';
         placeholder.style.display = 'none';
@@ -2191,7 +2195,6 @@
         img.style.display = 'none';
         placeholder.style.display = 'flex';
       }
-      // Also update settings panel preview
       setAvatarPreview(avatarUrl);
     } else {
       chip.style.display = 'none';
