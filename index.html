@@ -1643,13 +1643,12 @@
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
   document.getElementById('btn-reset').addEventListener('click', reset);
   document.getElementById('btn-skip').addEventListener('click', skip);
-  document.getElementById('btn-add5').addEventListener('click', () => {
+  document.getElementById('btn-add5').addEventListener('mousedown', e => {
+    e.preventDefault();
     if (mode !== 'work') return;
-    const add = 5 * 60; // 5 minutes in seconds
-    totalSec  += add;   // extend total so saved minutes include the extra time
-    remaining += add;   // extend remaining display
-    // Recalculate startedAt from scratch based on current remaining and totalSec
-    // startedAt = Date.now() - (totalSec - remaining) * 1000
+    const add = 5 * 60;
+    totalSec  += add;
+    remaining += add;
     if (startedAt !== null) {
       startedAt = Date.now() - (totalSec - remaining) * 1000;
     }
