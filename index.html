@@ -1648,13 +1648,11 @@
     const add = 5 * 60; // 5 minutes in seconds
     totalSec  += add;   // extend total so saved minutes include the extra time
     remaining += add;   // extend remaining display
-    // Re-anchor startedAt so tick() computes the correct remaining time:
-    // tick() calculates: remaining = totalSec - elapsed, where elapsed = (Date.now() - startedAt)/1000
-    // We want elapsed to stay the same, so we move startedAt forward by add seconds
-    if (startedAt) {
-      startedAt += add * 1000;
+    // Recalculate startedAt from scratch based on current remaining and totalSec
+    // startedAt = Date.now() - (totalSec - remaining) * 1000
+    if (startedAt !== null) {
+      startedAt = Date.now() - (totalSec - remaining) * 1000;
     }
-    // Notify SW of new end time
     swSend({ type: 'TIMER_START', endAt: Date.now() + remaining * 1000, mode });
     renderTimer();
     toast('+5 Minuten hinzugefügt');
