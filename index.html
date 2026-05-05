@@ -1304,7 +1304,8 @@
 
   function onTimerEnd() {
     clearInterval(tid); running=false; startedAt=null;
-    swSend({ type: 'TIMER_RESET' }); // SW hat schon gefeuert oder wir canceln vorsorglich
+    swSend({ type: 'TIMER_RESET' });
+    clearTimerState();
     if (mode==='work') {
       completePomo();
       const next=(totalPomodoros%getLongAfter()===0)?'long':'short';
@@ -1602,16 +1603,97 @@
     swReg.active.postMessage(msg);
   }
 
+  /* ── Timer State Persistence ── */
+  async function saveTimerState(state) {
+    if (!currentUser) return;
+    const token = await getValidToken();
+    if (!token) return;
+    try {
+      await fetch(`${SB}/rest/v1/timer_state?on_conflict=user_id`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ user_id: currentUser.id, updated_at: new Date().toISOString(), ...state }),
+      });
+    } catch(e) { console.warn('saveTimerState error', e); }
+  }
+
+  async function clearTimerState() {
+    if (!currentUser) return;
+    const token = await getValidToken();
+    if (!token) return;
+    try {
+      await fetch(`${SB}/rest/v1/timer_state?user_id=eq.${currentUser.id}`, {
+        method: 'DELETE', headers: authHeaders(token),
+      });
+    } catch(e) { console.warn('clearTimerState error', e); }
+  }
+
+  async function loadTimerState() {
+    if (!currentUser) return null;
+    const token = await getValidToken();
+    if (!token) return null;
+    try {
+      const res = await fetch(`${SB}/rest/v1/timer_state?user_id=eq.${currentUser.id}&select=*`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      return rows[0] || null;
+    } catch(e) { return null; }
+  }
+
+  async function restoreTimerState() {
+    const state = await loadTimerState();
+    if (!state) return;
+
+    if (state.end_at) {
+      // Timer was running — check if still in the future
+      const endAt = new Date(state.end_at).getTime();
+      const nowMs = Date.now();
+      if (endAt > nowMs) {
+        // Still running — restore and continue
+        const modeToRestore = state.mode || 'work';
+        mode = modeToRestore;
+        syncModeBtns();
+        totalSec  = state.total_sec;
+        remaining = Math.round((endAt - nowMs) / 1000);
+        startedAt = nowMs - (totalSec - remaining) * 1000;
+        running = true;
+        tid = setInterval(tick, 250);
+        swSend({ type: 'TIMER_START', endAt, mode });
+        renderTimer();
+        toast('Timer wird fortgesetzt…');
+      } else {
+        // Timer expired while away — complete the pomo/break
+        mode = state.mode || 'work';
+        totalSec = state.total_sec;
+        remaining = 0;
+        syncModeBtns();
+        onTimerEnd();
+        await clearTimerState();
+      }
+    } else if (state.paused_remaining) {
+      // Timer was paused — restore paused state
+      mode = state.mode || 'work';
+      totalSec  = state.total_sec;
+      remaining = state.paused_remaining;
+      syncModeBtns();
+      renderTimer();
+    }
+  }
+
   /* ── Controls ── */
   function start() {
     if (running) {
       clearInterval(tid); running=false; startedAt=null;
       swSend({ type: 'TIMER_PAUSE' });
+      saveTimerState({ end_at: null, total_sec: totalSec, mode, paused_remaining: remaining });
     } else {
       startedAt = Date.now() - (totalSec - remaining) * 1000;
       running=true; tid=setInterval(tick, 250);
       if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
-      swSend({ type: 'TIMER_START', endAt: startedAt + totalSec * 1000, mode });
+      const endAt = startedAt + totalSec * 1000;
+      swSend({ type: 'TIMER_START', endAt, mode });
+      saveTimerState({ end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null });
     }
     renderTimer();
   }
@@ -1620,13 +1702,15 @@
     clearInterval(tid); running=false; startedAt=null;
     totalSec=getMin(mode)*60; remaining=totalSec;
     swSend({ type: 'TIMER_RESET' });
+    clearTimerState();
     render();
   }
 
   function skip() {
-    if (mode === 'work') return; // disabled during focus
+    if (mode === 'work') return;
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_SKIP' });
+    clearTimerState();
     playSound('break');
     toast('Pause vorbei – bereit für den nächsten Fokus!');
     setTimeout(() => switchTo('work', false), 1400);
@@ -1652,7 +1736,9 @@
     if (startedAt !== null) {
       startedAt = Date.now() - (totalSec - remaining) * 1000;
     }
-    swSend({ type: 'TIMER_START', endAt: Date.now() + remaining * 1000, mode });
+    const endAt = Date.now() + remaining * 1000;
+    swSend({ type: 'TIMER_START', endAt, mode });
+    if (running) saveTimerState({ end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null });
     renderTimer();
     toast('+5 Minuten hinzugefügt');
   });
@@ -2273,12 +2359,13 @@
     syncWdBtns();
     syncDisplayUnitBtns();
     startTokenRefreshTimer();
-    // Reveal timer now that correct settings are applied
     document.getElementById('time-display').style.opacity = '1';
     document.getElementById('watch-svg').style.opacity = '1';
     render();
     if (userPublic) { document.getElementById('leaderboard-card').style.display = 'block'; }
     initLeaderboard();
+    // Restore timer if it was running before page reload
+    await restoreTimerState();
 
     if (isNew && hasLocal) {
       showMigrationPrompt(session, localDays);
