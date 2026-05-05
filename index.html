@@ -677,6 +677,7 @@
     <button class="ctrl-btn" id="btn-skip" title="Fertig">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
     </button>
+    <button class="ctrl-btn" id="btn-add5" title="+5 Minuten" style="font-size:12px;font-family:Georgia,serif;letter-spacing:0.02em;">+5 min</button>
   </div>
 
   <div class="today-row">
@@ -1050,11 +1051,13 @@
       btn.classList.remove('paused');
       icon.innerHTML = '<polygon points="5,3 19,12 5,21"/>';
     }
-    // Skip button: only active during breaks
+    // Show +5min during focus, skip (✓) during breaks
     const skipBtn = document.getElementById('btn-skip');
+    const add5Btn = document.getElementById('btn-add5');
     const isBreak = mode === 'short' || mode === 'long';
-    skipBtn.style.opacity = isBreak ? '1' : '0.3';
-    skipBtn.style.cursor  = isBreak ? 'pointer' : 'not-allowed';
+    skipBtn.style.display = isBreak ? 'inline-flex' : 'none';
+    add5Btn.style.display = isBreak ? 'none' : 'inline-flex';
+    // Skip still disabled if somehow shown during focus
     skipBtn.disabled = !isBreak;
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
   }
@@ -1284,7 +1287,7 @@
 
   function completePomo() {
     const key = todayKey();
-    const mins = getMin('work');
+    const mins = Math.round(totalSec / 60); // actual minutes incl. any +5min additions
     days[key] = (days[key] || 0) + mins;
     totalPomodoros++; saveWithSync();
     launchConfetti();
@@ -1636,6 +1639,22 @@
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
   document.getElementById('btn-reset').addEventListener('click', reset);
   document.getElementById('btn-skip').addEventListener('click', skip);
+  document.getElementById('btn-add5').addEventListener('click', () => {
+    if (mode !== 'work') return;
+    const add = 5 * 60; // 5 minutes in seconds
+    remaining += add;
+    totalSec  += add; // extend total so saved minutes include the extra time
+    // Re-anchor wall clock so tick() stays accurate
+    if (running && startedAt) {
+      startedAt -= add * 1000;
+    }
+    // Notify SW of new end time
+    if (running && startedAt) {
+      swSend({ type: 'TIMER_START', endAt: startedAt + totalSec * 1000, mode });
+    }
+    renderTimer();
+    toast('+5 Minuten hinzugefügt');
+  });
   ['work','short','long'].forEach(m=>{
     document.getElementById('set-'+m).addEventListener('change', () => { if (mode===m) reset(); });
   });
@@ -1843,11 +1862,21 @@
       document.getElementById('lb-status').textContent = '';
       return;
     }
+
+    // Assign dense ranks: same minutes = same rank, next rank skips
     const medals = ['🥇','🥈','🥉'];
-    el.innerHTML = list.map((entry, i) => {
+    let rank = 1;
+    const ranked = list.map((entry, i) => {
+      if (i > 0 && entry.minutes !== list[i-1].minutes) rank = i + 1;
+      return { ...entry, rank };
+    });
+
+    el.innerHTML = ranked.map((entry) => {
       const isMe = entry.name === userName;
-      const medal = medals[i] ?? `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${i+1}</span>`;
-      const mins = entry.minutes ?? entry.count ?? 0;
+      const medal = entry.rank <= 3
+        ? medals[entry.rank - 1]
+        : `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${entry.rank}</span>`;
+      const mins = entry.minutes ?? 0;
       const display = minutesToDisplay(mins);
       const { current: entryLevel } = getCurrentLevel(mins);
       const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label})</span>`;
@@ -2115,12 +2144,22 @@
   // Upsert a single day
   async function saveStudyDay(token, date, minutes, off) {
     const offVal = offDays[date] === true ? true : offDays[date] === false ? false : null;
+    const body = JSON.stringify({ user_id: currentUser.id, date, minutes: minutes || 0, off: offVal });
+    const doRequest = async (t) => fetch(`${SB}/rest/v1/study_days?on_conflict=user_id,date`, {
+      method: 'POST',
+      headers: { ...authHeaders(t), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body,
+    });
     try {
-      const res = await fetch(`${SB}/rest/v1/study_days?on_conflict=user_id,date`, {
-        method: 'POST',
-        headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ user_id: currentUser.id, date, minutes: minutes || 0, off: offVal }),
-      });
+      let res = await doRequest(token);
+      if (res.status === 401) {
+        // Token expired — refresh and retry once
+        const session = getToken();
+        if (session?.refresh_token) {
+          const refreshed = await refreshSession(session.refresh_token);
+          if (refreshed?.access_token) res = await doRequest(refreshed.access_token);
+        }
+      }
       if (!res.ok) console.warn('saveStudyDay failed:', res.status, await res.text());
     } catch(e) { console.warn('saveStudyDay error:', e); }
   }
