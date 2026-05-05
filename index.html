@@ -1884,7 +1884,7 @@
       const alltimeMins = entry.alltime_minutes ?? mins;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
       const diamondStr = (entry.diamonds > 0) ? ` ${entry.diamonds} 💎` : '';
-      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label}${diamondStr})</span>`;
+      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label})${diamondStr}</span>`;
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
