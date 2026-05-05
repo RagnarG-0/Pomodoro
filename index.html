@@ -1759,7 +1759,7 @@
       document.getElementById('welcome-overlay').style.display = 'none';
       if (userPublic) {
         document.getElementById('leaderboard-card').style.display = 'block';
-        syncAllHistory().then(() => loadLeaderboard('today'));
+        syncAllHistory().then(() => loadLeaderboard(lbPeriod));
       }
     }
 
@@ -1933,7 +1933,7 @@
   function initLeaderboard() {
     if (userName && userPublic) {
       document.getElementById('leaderboard-card').style.display = 'block';
-      syncAllHistory().then(() => loadLeaderboard('today'));
+      syncAllHistory().then(() => loadLeaderboard(lbPeriod));
     }
 
     // Period tabs
@@ -1963,7 +1963,7 @@
           userPublic = true; saveUser();
           document.getElementById('leaderboard-card').style.display = 'block';
           await syncAllHistory();
-          loadLeaderboard('today');
+          loadLeaderboard(lbPeriod);
           if (feedback) feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
         } else if (!makePublic && userPublic) {
           userPublic = false; saveUser();
