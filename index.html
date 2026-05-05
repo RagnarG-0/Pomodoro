@@ -776,6 +776,7 @@
   // User profile
   let userName = null;
   let userPublic = false;
+  let userDiamonds = 0;
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
 
   let mode = 'work';
@@ -1145,7 +1146,10 @@
     document.getElementById('level-number').textContent = current.name + ':';
     document.getElementById('level-label').textContent = current.label;
     document.getElementById('level-icon').textContent = current.icon;
-    document.getElementById('stat-total-val').textContent = minutesToDisplay(totalMins) + ' gesamt';
+
+    // Diamonds display
+    const diamondStr = userDiamonds > 0 ? '  ' + userDiamonds + ' 💎' : '';
+    document.getElementById('stat-total-val').textContent = minutesToDisplay(totalMins) + ' gesamt' + diamondStr;
 
     const nextEl = document.getElementById('level-next-label');
     const barEl  = document.getElementById('level-bar');
@@ -1642,16 +1646,16 @@
   document.getElementById('btn-add5').addEventListener('click', () => {
     if (mode !== 'work') return;
     const add = 5 * 60; // 5 minutes in seconds
-    remaining += add;
-    totalSec  += add; // extend total so saved minutes include the extra time
-    // Re-anchor wall clock so tick() stays accurate
-    if (running && startedAt) {
-      startedAt -= add * 1000;
+    totalSec  += add;   // extend total so saved minutes include the extra time
+    remaining += add;   // extend remaining display
+    // Re-anchor startedAt so tick() computes the correct remaining time:
+    // tick() calculates: remaining = totalSec - elapsed, where elapsed = (Date.now() - startedAt)/1000
+    // We want elapsed to stay the same, so we move startedAt forward by add seconds
+    if (startedAt) {
+      startedAt += add * 1000;
     }
     // Notify SW of new end time
-    if (running && startedAt) {
-      swSend({ type: 'TIMER_START', endAt: startedAt + totalSec * 1000, mode });
-    }
+    swSend({ type: 'TIMER_START', endAt: Date.now() + remaining * 1000, mode });
     renderTimer();
     toast('+5 Minuten hinzugefügt');
   });
@@ -1878,8 +1882,11 @@
         : `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${entry.rank}</span>`;
       const mins = entry.minutes ?? 0;
       const display = minutesToDisplay(mins);
-      const { current: entryLevel } = getCurrentLevel(mins);
-      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label})</span>`;
+      // Always use alltime_minutes for level calculation
+      const alltimeMins = entry.alltime_minutes ?? mins;
+      const { current: entryLevel } = getCurrentLevel(alltimeMins);
+      const diamondStr = (entry.diamonds > 0) ? ` ${entry.diamonds} 💎` : '';
+      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label}${diamondStr})</span>`;
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
@@ -2232,8 +2239,9 @@
       userName    = profile.username;
       userPublic  = profile.public;
       displayUnit = profile.display_unit || 'pomodoros';
-      offWeekdays = profile.off_weekdays || [];
-      avatarUrl   = profile.avatar_url || null;
+      offWeekdays   = profile.off_weekdays || [];
+      avatarUrl     = profile.avatar_url || null;
+      userDiamonds  = profile.diamonds || 0;
       displayUnit = profile.display_unit || 'pomodoros';
       // Sync display unit buttons
       document.querySelectorAll('.unit-btn').forEach(b =>
