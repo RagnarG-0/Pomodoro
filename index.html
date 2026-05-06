@@ -1665,13 +1665,13 @@
         renderTimer();
         toast('Timer wird fortgesetzt…');
       } else {
-        // Timer expired while away — complete the pomo/break
+        // Timer expired while away — clear state FIRST to prevent double-counting on reload
+        await clearTimerState();
         mode = state.mode || 'work';
         totalSec = state.total_sec;
         remaining = 0;
         syncModeBtns();
         onTimerEnd();
-        await clearTimerState();
       }
     } else if (state.paused_remaining) {
       // Timer was paused — restore paused state
