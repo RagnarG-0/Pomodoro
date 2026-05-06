@@ -46,9 +46,8 @@
 
   .header {
     width: 100%; max-width: 600px;
-    display: flex; align-items: center; justify-content: center;
-    position: relative; margin-bottom: 2rem;
-    margin-top: 1.5rem;
+    display: flex; align-items: center; justify-content: flex-end;
+    position: relative; margin-bottom: 1.5rem;
   }
   h1 {
     font-size: 1.1rem; font-weight: normal;
@@ -56,12 +55,12 @@
     color: var(--text-muted);
   }
   #gear-btn {
-    position: absolute; right: 0;
     width: 36px; height: 36px;
     border: 0.5px solid var(--border-strong); border-radius: 50%;
     background: var(--surface); color: var(--text-muted);
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     transition: background 0.15s, color 0.15s, transform 0.3s; padding: 0;
+    flex-shrink: 0;
   }
   #gear-btn:hover { background: var(--surface2); color: var(--text); }
   #gear-btn.open { transform: rotate(60deg); color: var(--accent); }
@@ -392,7 +391,7 @@
   }
   .migrate-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .migrate-btn.primary:hover { background: var(--accent-dark); }
-  #user-chip { position: absolute; right: 44px; display: flex; align-items: center; gap: 8px; }
+  #user-chip { display: flex; align-items: center; gap: 8px; margin-right: auto; }
   #user-name-display { font-size: 11px; color: var(--text-muted); font-family: Georgia, serif; }
   #user-avatar {
     width: 38px; height: 38px; border-radius: 50%;
@@ -476,8 +475,10 @@
 </head>
 <body>
 
-<div class="header">
+<div style="width:100%;max-width:600px;text-align:center;padding-top:1.5rem;">
   <h1>Pomodoro</h1>
+</div>
+<div class="header">
   <div id="user-chip" style="display:none;">
     <div id="user-avatar-placeholder" title="Profilbild ändern">👤</div>
     <img id="user-avatar" src="" alt="" title="Profilbild ändern" style="display:none;">
