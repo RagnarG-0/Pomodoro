@@ -2018,6 +2018,17 @@
     document.getElementById('change-username').addEventListener('keydown', e => {
       if (e.key === 'Enter') document.getElementById('change-username-btn').click();
     });
+
+  // Spacebar: start/pause timer, prevent page scroll
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space') return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    // Don't trigger when settings overlay is open
+    if (document.getElementById('overlay')?.classList.contains('open')) return;
+    e.preventDefault();
+    start();
+  });
   }
 
   /* ── Supabase Auth ── */
