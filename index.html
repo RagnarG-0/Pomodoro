@@ -45,7 +45,7 @@
   }
 
   .header {
-    width: 100%; max-width: 600px;
+    width: 100%; max-width: 680px;
     display: flex; align-items: center; justify-content: flex-end;
     position: relative; margin-bottom: 1.5rem;
   }
@@ -69,7 +69,7 @@
   .card {
     background: var(--surface); border: 0.5px solid var(--border);
     border-radius: 16px; padding: 2rem 1.5rem 1.5rem;
-    width: 100%; max-width: 600px; margin-bottom: 1.25rem;
+    width: 100%; max-width: 680px; margin-bottom: 1.25rem;
   }
 
   .mode-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 1.75rem; }
@@ -475,7 +475,7 @@
 </head>
 <body>
 
-<div style="width:100%;max-width:600px;text-align:center;padding-top:1.5rem;">
+<div style="width:100%;max-width:680px;text-align:center;padding-top:1.5rem;">
   <h1>Pomodoro</h1>
 </div>
 <div class="header">
@@ -777,7 +777,7 @@
   // User profile
   let userName = null;
   let userPublic = false;
-  let userDiamonds = 0;
+  let userAwards = { first: 0, second: 0, third: 0, last: 0 };
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
 
   let mode = 'work';
@@ -1143,6 +1143,15 @@
     return { current, next };
   }
 
+  function awardsStr(awards) {
+    const parts = [];
+    if (awards.first)  parts.push(awards.first  + ' 👑');
+    if (awards.second) parts.push(awards.second + ' 💎');
+    if (awards.third)  parts.push(awards.third  + ' 🏵️');
+    if (awards.last)   parts.push(awards.last   + ' 🧻');
+    return parts.length ? '  ' + parts.join('  ') : '';
+  }
+
   function renderLevel() {
     const totalMins = Object.values(days).reduce((a, b) => a + b, 0);
     const { current, next } = getCurrentLevel(totalMins);
@@ -1151,9 +1160,8 @@
     document.getElementById('level-label').textContent = current.label;
     document.getElementById('level-icon').textContent = current.icon;
 
-    // Diamonds display
-    const diamondStr = userDiamonds > 0 ? '  ' + userDiamonds + ' 💎' : '';
-    document.getElementById('stat-total-val').textContent = minutesToDisplay(totalMins) + ' gesamt' + diamondStr;
+    document.getElementById('stat-total-val').textContent =
+      minutesToDisplay(totalMins) + ' gesamt' + awardsStr(userAwards);
 
     const nextEl = document.getElementById('level-next-label');
     const barEl  = document.getElementById('level-bar');
@@ -1162,8 +1170,7 @@
       const remaining = next.minMinutes - totalMins;
       const h = Math.floor(remaining / 60);
       const m = Math.round(remaining % 60);
-      const timeStr = h > 0 ? `${h}h ${m}min` : `${m}min`;
-      nextEl.textContent = `noch ${timeStr} bis ${next.label}`;
+      nextEl.textContent = `noch ${h > 0 ? h + 'h ' : ''}${m}min bis ${next.label}`;
       const pct = Math.min(100, Math.round((totalMins - current.minMinutes) / (next.minMinutes - current.minMinutes) * 100));
       barEl.style.width = pct + '%';
     } else {
@@ -1869,15 +1876,16 @@
       // Always use alltime_minutes for level calculation
       const alltimeMins = entry.alltime_minutes ?? mins;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
-      const diamondStr = (entry.diamonds > 0) ? ` ${entry.diamonds} 💎` : '';
-      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">(${entryLevel.label})${diamondStr}</span>`;
+      const entryAwards = { first: entry.awards_1st||0, second: entry.awards_2nd||0, third: entry.awards_3rd||0, last: entry.awards_last||0 };
+      const aStr = awardsStr(entryAwards);
+      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})${aStr}</span>`;
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
         <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
         ${avatarHtml}
-        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
+        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
         <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${display}</span>
       </div>`;
     }).join('');
@@ -2209,7 +2217,12 @@
       displayUnit = profile.display_unit || 'pomodoros';
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
-      userDiamonds  = profile.diamonds || 0;
+      userAwards = {
+        first:  profile.awards_1st  || 0,
+        second: profile.awards_2nd  || 0,
+        third:  profile.awards_3rd  || 0,
+        last:   profile.awards_last || 0,
+      };
       displayUnit = profile.display_unit || 'pomodoros';
       // Sync display unit buttons
       document.querySelectorAll('.unit-btn').forEach(b =>
