@@ -770,7 +770,6 @@
 <script>
 (function () {
   const KEY = 'pomo_heatmap_v3';
-  const USER_KEY = 'pomo_user_v1';
   const CIRC = 2 * Math.PI * 68;
   const ROWS = 7;
   const DAYS = 100;
@@ -795,7 +794,10 @@
   let totalPomodoros = 0; // session counter for toast messages
 
   /* ── Storage ── */
-  function todayKey() { return new Date().toISOString().slice(0,10); }
+  function todayKey() {
+    // Use German timezone to match Supabase queries (Europe/Berlin)
+    return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  }
 
   function load() {
     try {
@@ -1301,7 +1303,6 @@
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
     toast('Pomodoro #' + totalPomodoros + ' geschafft! ' + todayPomos + ' heute');
     renderTomatoes(); renderHeatmap(); renderStats();
-    if (userPublic && userName) pushLeaderboard();
   }
 
   function onTimerEnd() {
@@ -1581,15 +1582,16 @@
     try {
       swReg = await navigator.serviceWorker.register('./sw.js');
       // Nachrichten vom SW empfangen (TIMER_DONE wenn Tab eingefroren war)
-      navigator.serviceWorker.addEventListener('message', e => {
+      navigator.serviceWorker.addEventListener('message', async e => {
         if (e.data?.type === 'TIMER_DONE' && running) {
-          // Tab war eingefroren; SW hat den Ablauf erkannt → hier aufräumen
           clearInterval(tid); running = false; startedAt = null;
+          await clearTimerState(); // clear BEFORE completing to prevent double-count
           if (e.data.mode === 'work') {
             completePomo();
             const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
             setTimeout(() => switchTo(next, false), 1400);
           } else {
+            playSound('break');
             toast('Pause vorbei – bereit für den nächsten Fokus!');
             setTimeout(() => switchTo('work', false), 1400);
           }
@@ -1748,42 +1750,6 @@
     document.getElementById('set-'+m).addEventListener('change', () => { if (mode===m) reset(); });
   });
 
-  /* ── Manual adjustment ── */
-  function initAdjust() {
-    // Default date to today whenever panel opens
-    document.getElementById('gear-btn').addEventListener('click', () => {
-      document.getElementById('adj-date').value = todayKey();
-    });
-
-    function showFeedback(msg) {
-      const el = document.getElementById('adj-feedback');
-      el.textContent = msg;
-      setTimeout(() => el.textContent = '', 2500);
-    }
-
-    document.getElementById('adj-set').addEventListener('click', () => {
-      const key = document.getElementById('adj-date').value;
-      const n = Math.max(0, parseInt(document.getElementById('adj-count').value) || 0);
-      if (!key) return;
-      const mins = n * getMin('work');
-      if (n === 0) delete days[key];
-      else days[key] = mins;
-      save(); renderTomatoes(); renderHeatmap(); renderStats();
-      showFeedback(key + ' → ' + minutesToDisplay(mins) + ' gesetzt');
-    });
-
-    document.getElementById('adj-add').addEventListener('click', () => {
-      const key = document.getElementById('adj-date').value;
-      const n = Math.max(0, parseInt(document.getElementById('adj-count').value) || 0);
-      if (!key || n === 0) return;
-      const addMins = n * getMin('work');
-      days[key] = (days[key] || 0) + addMins;
-      totalPomodoros += n;
-      save(); renderTomatoes(); renderHeatmap(); renderStats();
-      showFeedback('+' + minutesToDisplay(addMins) + ' zu ' + key + ' → ' + minutesToDisplay(days[key]) + ' gesamt');
-    });
-  }
-
   /* ── Settings overlay ── */
   const overlay=document.getElementById('overlay');
   const gearBtn=document.getElementById('gear-btn');
@@ -1830,51 +1796,6 @@
   });
   document.getElementById('set-longafter').addEventListener('change', saveSettingsWithSync);
 
-  /* ── User profile & welcome modal ── */
-  function loadUser() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
-      if (raw && raw.name) {
-        userName = raw.name;
-        userPublic = !!raw.public;
-        return true; // already set up
-      }
-    } catch(e) {}
-    return false;
-  }
-
-  function saveUser() {
-    localStorage.setItem(USER_KEY, JSON.stringify({ name: userName, public: userPublic }));
-  }
-
-  function showWelcome() {
-    const overlay = document.getElementById('welcome-overlay');
-    overlay.style.display = 'flex';
-    document.getElementById('welcome-name').focus();
-  }
-
-  function initWelcome() {
-    const btn = document.getElementById('welcome-confirm');
-    const input = document.getElementById('welcome-name');
-    const cb = document.getElementById('welcome-public');
-
-    function confirm() {
-      const name = input.value.trim();
-      if (!name) { input.style.borderColor = 'var(--accent)'; input.focus(); return; }
-      userName = name;
-      userPublic = cb.checked;
-      saveUser();
-      document.getElementById('welcome-overlay').style.display = 'none';
-      if (userPublic) {
-        document.getElementById('leaderboard-card').style.display = 'block';
-        syncAllHistory().then(() => loadLeaderboard(lbPeriod));
-      }
-    }
-
-    btn.addEventListener('click', confirm);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
-  }
-
   /* ── Leaderboard via Supabase ── */
   // ↓↓↓ HIER deine Supabase-Zugangsdaten eintragen ↓↓↓
   const SUPABASE_URL = 'https://cmbyzzfjzrhdxylopqkt.supabase.co';
@@ -1892,45 +1813,6 @@
 
   function supabaseReady() {
     return SUPABASE_URL !== 'DEINE_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'DEIN_ANON_PUBLIC_KEY';
-  }
-
-  async function pushLeaderboard() {
-    if (!userName || !userPublic || !supabaseReady()) return;
-    const minutes = days[todayKey()] || 0;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
-          'Prefer': 'resolution=merge-duplicates,return=minimal',
-        },
-        body: JSON.stringify({ name: userName, minutes, date: todayKey(), updated_at: new Date().toISOString() }),
-      });
-      if (!res.ok) console.warn('Leaderboard push failed:', res.status, await res.text());
-    } catch(e) { console.warn('Leaderboard push error', e); }
-  }
-
-  async function syncAllHistory() {
-    if (!userName || !userPublic || !supabaseReady()) return;
-    const rows = Object.entries(days)
-      .filter(([, minutes]) => minutes > 0)
-      .map(([date, minutes]) => ({ name: userName, date, minutes, updated_at: new Date().toISOString() }));
-    if (!rows.length) return;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
-          'Prefer': 'resolution=merge-duplicates,return=minimal',
-        },
-        body: JSON.stringify(rows),
-      });
-      if (!res.ok) console.warn('Bulk sync failed:', res.status, await res.text());
-    } catch(e) { console.warn('Bulk sync error', e); }
   }
 
   let lbPeriod = 'alltime';
@@ -2037,24 +1919,10 @@
     }
   }
 
-  async function removeFromLeaderboard() {
-    if (!userName || !supabaseReady()) return;
-    try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/leaderboard?name=eq.${encodeURIComponent(userName)}`,
-        { method: 'DELETE', headers: sbHeaders() }
-      );
-      if (!res.ok) {
-        const err = await res.text();
-        console.warn('Remove from leaderboard failed:', res.status, err);
-      }
-    } catch(e) { console.warn('Remove from leaderboard error', e); }
-  }
-
   function initLeaderboard() {
     if (userName && userPublic) {
       document.getElementById('leaderboard-card').style.display = 'block';
-      syncAllHistory().then(() => loadLeaderboard(lbPeriod));
+      loadLeaderboard(lbPeriod);
     }
 
     // Period tabs
@@ -2081,14 +1949,12 @@
         const makePublic = toggle.checked;
         const feedback = document.getElementById('privacy-feedback');
         if (makePublic && !userPublic) {
-          userPublic = true; saveUser();
+          userPublic = true;
           document.getElementById('leaderboard-card').style.display = 'block';
-          await syncAllHistory();
           loadLeaderboard(lbPeriod);
           if (feedback) feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
         } else if (!makePublic && userPublic) {
-          userPublic = false; saveUser();
-          await removeFromLeaderboard();
+          userPublic = false;
           document.getElementById('leaderboard-card').style.display = 'none';
           if (feedback) feedback.textContent = 'Du wurdest aus der Rangliste entfernt.';
         }
