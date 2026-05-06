@@ -1297,12 +1297,29 @@
     const key = todayKey();
     const mins = Math.round(totalSec / 60); // actual minutes incl. any +5min additions
     days[key] = (days[key] || 0) + mins;
-    totalPomodoros++; saveWithSync();
+    totalPomodoros++;
+    save(); // save locally
+    // Send delta to server — server adds atomically, deduplicates within 2 seconds
+    if (currentUser) addStudyMinutes(key, mins);
     launchConfetti();
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
     toast('Pomodoro #' + totalPomodoros + ' geschafft! ' + todayPomos + ' heute');
     renderTomatoes(); renderHeatmap(); renderStats();
+  }
+
+  async function addStudyMinutes(date, delta) {
+    if (!currentUser) return;
+    const token = await getValidToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${SB}/rest/v1/rpc/add_study_minutes`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_date: date, p_minutes: delta }),
+      });
+      if (!res.ok) console.warn('addStudyMinutes failed:', res.status, await res.text());
+    } catch(e) { console.warn('addStudyMinutes error:', e); }
   }
 
   function onTimerEnd() {
@@ -2512,15 +2529,7 @@
 
   // Override save() to also persist to Supabase when logged in
   const _origSave = save;
-  function saveWithSync() {
-    _origSave();
-    if (!currentUser) return;
-    const today = todayKey();
-    getValidToken().then(token => {
-      if (!token) return;
-      saveStudyDay(token, today, days[today] || 0, offDays[today]);
-    });
-  }
+  function saveWithSync() { _origSave(); } // minutes synced via addStudyMinutes delta RPC
 
   async function saveSettingsWithSync() {
     saveSettings();
