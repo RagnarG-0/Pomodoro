@@ -763,10 +763,7 @@
   <div id="lb-list" style="font-family:Georgia,serif;"></div>
   <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid var(--border);">
-    <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">👑 1. Platz</span>
-    <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 2. Platz</span>
-    <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">🏵️ 3. Platz</span>
-    <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">🧻 Letzter Platz</span>
+    <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 Tagessiege: 1. Platz = 3, 2. Platz = 2, 3. Platz = 1</span>
   </div>
 </div>
 
@@ -783,7 +780,7 @@
   // User profile
   let userName = null;
   let userPublic = false;
-  let userAwards = { first: 0, second: 0, third: 0, last: 0 };
+  let userDiamonds = 0;
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
 
   let mode = 'work';
@@ -1149,33 +1146,22 @@
     return { current, next };
   }
 
-  function awardsStr(awards) {
-    const parts = [];
-    if (awards.first)  parts.push(awards.first  + ' 👑');
-    if (awards.second) parts.push(awards.second + ' 💎');
-    if (awards.third)  parts.push(awards.third  + ' 🏵️');
-    if (awards.last)   parts.push(awards.last   + ' 🧻');
-    return parts.length ? '  ' + parts.join('  ') : '';
+  function diamondsStr(n) {
+    return n > 0 ? '  ' + n + ' 💎' : '';
   }
 
   function renderLevel() {
     const totalMins = Object.values(days).reduce((a, b) => a + b, 0);
     const { current, next } = getCurrentLevel(totalMins);
-
     document.getElementById('level-number').textContent = current.name + ':';
     document.getElementById('level-label').textContent = current.label;
     document.getElementById('level-icon').textContent = current.icon;
-
-    document.getElementById('stat-total-val').textContent =
-      minutesToDisplay(totalMins) + ' gesamt';
-
+    document.getElementById('stat-total-val').textContent = minutesToDisplay(totalMins) + ' gesamt';
     const nextEl = document.getElementById('level-next-label');
     const barEl  = document.getElementById('level-bar');
-
     if (next) {
-      const remaining = next.minMinutes - totalMins;
-      const h = Math.floor(remaining / 60);
-      const m = Math.round(remaining % 60);
+      const rem = next.minMinutes - totalMins;
+      const h = Math.floor(rem / 60), m = Math.round(rem % 60);
       nextEl.textContent = `noch ${h > 0 ? h + 'h ' : ''}${m}min bis ${next.label}`;
       const pct = Math.min(100, Math.round((totalMins - current.minMinutes) / (next.minMinutes - current.minMinutes) * 100));
       barEl.style.width = pct + '%';
@@ -1882,9 +1868,8 @@
       // Always use alltime_minutes for level calculation
       const alltimeMins = entry.alltime_minutes ?? mins;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
-      const entryAwards = { first: entry.awards_1st||0, second: entry.awards_2nd||0, third: entry.awards_3rd||0, last: entry.awards_last||0 };
-      const aStr = awardsStr(entryAwards);
-      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})${aStr}</span>`;
+      const dStr = diamondsStr(entry.diamonds || 0);
+      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})${dStr}</span>`;
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
@@ -2234,12 +2219,7 @@
       displayUnit = profile.display_unit || 'pomodoros';
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
-      userAwards = {
-        first:  profile.awards_1st  || 0,
-        second: profile.awards_2nd  || 0,
-        third:  profile.awards_3rd  || 0,
-        last:   profile.awards_last || 0,
-      };
+      userDiamonds  = profile.diamonds || 0;
       displayUnit = profile.display_unit || 'pomodoros';
       // Sync display unit buttons
       document.querySelectorAll('.unit-btn').forEach(b =>
