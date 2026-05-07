@@ -764,6 +764,7 @@
   <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid var(--border);">
     <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 Tagessiege: 1. Platz = 3, 2. Platz = 2, 3. Platz = 1</span>
+    <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">🧻 Letzter Platz</span>
   </div>
 </div>
 
@@ -781,6 +782,7 @@
   let userName = null;
   let userPublic = false;
   let userDiamonds = 0;
+  let userAwardsLast = 0;
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
 
   let mode = 'work';
@@ -1146,8 +1148,11 @@
     return { current, next };
   }
 
-  function diamondsStr(n) {
-    return n > 0 ? '  ' + n + ' 💎' : '';
+  function diamondsStr(diamonds, last) {
+    const parts = [];
+    if (diamonds > 0) parts.push(diamonds + ' 💎');
+    if (last > 0)     parts.push(last + ' 🧻');
+    return parts.length ? '  ' + parts.join('  ') : '';
   }
 
   function renderLevel() {
@@ -1868,7 +1873,7 @@
       // Always use alltime_minutes for level calculation
       const alltimeMins = entry.alltime_minutes ?? mins;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
-      const dStr = diamondsStr(entry.diamonds || 0);
+      const dStr = diamondsStr(entry.diamonds || 0, entry.awards_last || 0);
       const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})${dStr}</span>`;
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
@@ -2225,6 +2230,7 @@
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
       userDiamonds  = profile.diamonds || 0;
+      userAwardsLast = profile.awards_last || 0;
       displayUnit = profile.display_unit || 'pomodoros';
       // Sync display unit buttons
       document.querySelectorAll('.unit-btn').forEach(b =>
