@@ -804,7 +804,11 @@
     // New day starts at 4:00 AM Berlin time
     const berlinNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
     if (berlinNow.getHours() < 4) berlinNow.setDate(berlinNow.getDate() - 1);
-    return berlinNow.toISOString().slice(0, 10);
+    // Format as YYYY-MM-DD using local date parts (not toISOString which returns UTC)
+    const y = berlinNow.getFullYear();
+    const m = String(berlinNow.getMonth() + 1).padStart(2, '0');
+    const d = String(berlinNow.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   function load() {
