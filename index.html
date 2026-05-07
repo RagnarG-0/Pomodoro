@@ -800,8 +800,10 @@
 
   /* ── Storage ── */
   function todayKey() {
-    // Use German timezone to match Supabase queries (Europe/Berlin)
-    return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    // New day starts at 4:00 AM Berlin time
+    const berlinNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+    if (berlinNow.getHours() < 4) berlinNow.setDate(berlinNow.getDate() - 1);
+    return berlinNow.toISOString().slice(0, 10);
   }
 
   function load() {
@@ -2350,27 +2352,42 @@
   async function uploadAvatar(file, token) {
     if (!file || !currentUser) return null;
     if (file.size > 2 * 1024 * 1024) { toast('Bild zu groß — max. 2 MB.'); return null; }
-    const ext = file.name.split('.').pop().toLowerCase();
-    const path = `${currentUser.id}/avatar.${ext}`;
-    // Try PUT first (update), fall back to POST (create)
+
+    // Resize to max 200x200px and convert to WebP to minimize storage & egress
+    const resized = await new Promise(resolve => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        const size = 200;
+        const scale = Math.min(size / img.width, size / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(objectUrl);
+        canvas.toBlob(resolve, 'image/webp', 0.85);
+      };
+      img.src = objectUrl;
+    });
+
+    const path = `${currentUser.id}/avatar.webp`;
     for (const method of ['PUT', 'POST']) {
       const res = await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${path}`, {
         method,
         headers: {
           'apikey': SUPABASE_ANON_KEY,
           'Authorization': 'Bearer ' + token,
-          'Content-Type': file.type,
+          'Content-Type': 'image/webp',
           'x-upsert': 'true',
         },
-        body: file,
+        body: resized,
       });
       if (res.ok) {
         const cleanUrl = `${SUPABASE_URL}/storage/v1/object/public/avatars/${path}`;
-        return cleanUrl + '?t=' + Date.now(); // cache-bust for immediate display
+        return cleanUrl + '?t=' + Date.now();
       }
-      const errText = await res.text();
-      console.warn(`Avatar upload ${method} failed:`, res.status, errText);
-      if (method === 'POST') return null; // both failed
+      console.warn(`Avatar upload ${method} failed:`, res.status, await res.text());
+      if (method === 'POST') return null;
     }
     return null;
   }
