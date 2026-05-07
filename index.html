@@ -791,6 +791,7 @@
   let running = false;
   let tid = null;
   let startedAt = null; // wall-clock ms when current run started (adjusted for elapsed)
+  let pomoDay = null;   // todayKey() captured at timer start — ensures pomo is credited to correct day
 
   // Persisted data
   let days = {};          // { 'YYYY-MM-DD': minutes } — fokussierte Minuten pro Tag
@@ -1300,12 +1301,12 @@
   }
 
   function completePomo() {
-    const key = todayKey();
-    const mins = Math.round(totalSec / 60); // actual minutes incl. any +5min additions
+    const key = pomoDay || todayKey(); // use day when timer started, not when it ended
+    pomoDay = null; // reset for next pomo
+    const mins = Math.round(totalSec / 60);
     days[key] = (days[key] || 0) + mins;
     totalPomodoros++;
-    save(); // save locally
-    // Send delta to server — server adds atomically, deduplicates within 2 seconds
+    save();
     if (currentUser) addStudyMinutes(key, mins);
     launchConfetti();
     playSound('work');
@@ -1684,6 +1685,7 @@
         totalSec  = state.total_sec;
         remaining = Math.round((endAt - nowMs) / 1000);
         startedAt = nowMs - (totalSec - remaining) * 1000;
+        if (mode === 'work') pomoDay = state.pomoDay || todayKey();
         running = true;
         tid = setInterval(tick, 250);
         swSend({ type: 'TIMER_START', endAt, mode });
@@ -1717,10 +1719,12 @@
     } else {
       startedAt = Date.now() - (totalSec - remaining) * 1000;
       running=true; tid=setInterval(tick, 250);
+      // Capture the day at start so completePomo credits the right day even after midnight
+      if (mode === 'work') pomoDay = todayKey();
       if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
       const endAt = startedAt + totalSec * 1000;
       swSend({ type: 'TIMER_START', endAt, mode });
-      saveTimerState({ end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null });
+      saveTimerState({ end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null, pomoday: mode === 'work' ? pomoDay : null });
     }
     renderTimer();
   }
