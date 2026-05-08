@@ -912,14 +912,14 @@
 
   /* ── Heatmap ── */
   function tileColor(mins) {
-    // Thresholds based on minutes (default 25min interval):
-    // 1–24min, 25–49min, 50–99min, 100–149min, 150+min
+    // Spread: darkest color reached at 480 min (8h)
+    // 1–59min, 60–149min, 150–279min, 280–479min, 480+min
     if (!mins || mins <= 0) return null;
-    if (mins < 25)  return '#9FE1CB';
-    if (mins < 50)  return '#5DCAA5';
-    if (mins < 100) return '#1D9E75';
-    if (mins < 150) return '#0F6E56';
-    return '#085041';
+    if (mins < 60)  return '#9FE1CB'; // ~1h
+    if (mins < 150) return '#5DCAA5'; // ~2.5h
+    if (mins < 280) return '#1D9E75'; // ~4.5h
+    if (mins < 480) return '#0F6E56'; // ~8h
+    return '#085041';                  // 8h+
   }
 
   const MONTHS_DE = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
