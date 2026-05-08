@@ -518,7 +518,25 @@
       <input class="auth-field" type="email" id="login-email" placeholder="E-Mail" autocomplete="email">
       <input class="auth-field" type="password" id="login-password" placeholder="Passwort" autocomplete="current-password">
       <button class="auth-btn" id="login-btn">Anmelden</button>
-      <div class="auth-info">Noch kein Konto? Wechsle zu „Registrieren".</div>
+      <div class="auth-info">Noch kein Konto? Wechsle zu „Registrieren".<br>
+        <span id="forgot-link" style="cursor:pointer;color:var(--accent);text-decoration:underline;">Passwort vergessen?</span>
+      </div>
+    </div>
+
+    <!-- Forgot password form -->
+    <div id="auth-forgot" style="display:none;">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:0.75rem;line-height:1.6;">Gib deine E-Mail-Adresse ein. Du erhältst einen Link zum Zurücksetzen deines Passworts.</p>
+      <input class="auth-field" type="email" id="forgot-email" placeholder="E-Mail" autocomplete="email">
+      <button class="auth-btn" id="forgot-btn">Link senden</button>
+      <div class="auth-info" style="cursor:pointer;color:var(--accent);text-decoration:underline;" id="back-to-login">Zurück zur Anmeldung</div>
+    </div>
+
+    <!-- Password reset form (shown when recovery token in URL) -->
+    <div id="auth-reset" style="display:none;">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:0.75rem;line-height:1.6;">Wähle ein neues Passwort.</p>
+      <input class="auth-field" type="password" id="reset-password" placeholder="Neues Passwort (min. 6 Zeichen)" autocomplete="new-password">
+      <input class="auth-field" type="password" id="reset-password2" placeholder="Passwort wiederholen" autocomplete="new-password">
+      <button class="auth-btn" id="reset-btn">Passwort speichern</button>
     </div>
 
     <!-- Register form -->
@@ -2457,7 +2475,85 @@
   }
 
   async function initAuth() {
-    // Tab switching
+    // Check if this is a password recovery redirect from Supabase email link
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery') && hash.includes('access_token=')) {
+      const params = new URLSearchParams(hash.replace('#', '?'));
+      const accessToken  = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (accessToken) {
+        setToken({ access_token: accessToken, refresh_token: refreshToken, expires_at: Date.now()/1000 + 3600 });
+        // Show reset form
+        document.getElementById('auth-overlay').classList.add('open');
+        document.getElementById('auth-login').style.display    = 'none';
+        document.getElementById('auth-register').style.display = 'none';
+        document.getElementById('auth-reset').style.display    = 'block';
+        document.querySelector('.auth-tabs').style.display      = 'none';
+        document.getElementById('migrate-banner').style.display = 'none';
+        document.getElementById('time-display').style.opacity  = '1';
+        document.getElementById('watch-svg').style.opacity     = '1';
+        return; // stop here — user must set password first
+      }
+    }
+    // Forgot password
+    document.getElementById('forgot-link').addEventListener('click', () => {
+      document.getElementById('auth-login').style.display   = 'none';
+      document.getElementById('auth-forgot').style.display  = 'block';
+      document.querySelector('.auth-tabs').style.display     = 'none';
+      showAuthError('');
+    });
+
+    document.getElementById('back-to-login').addEventListener('click', () => {
+      document.getElementById('auth-forgot').style.display  = 'none';
+      document.getElementById('auth-login').style.display   = 'block';
+      document.querySelector('.auth-tabs').style.display     = 'flex';
+      showAuthError('');
+    });
+
+    document.getElementById('forgot-btn').addEventListener('click', async () => {
+      const email = document.getElementById('forgot-email').value.trim();
+      if (!email) { showAuthError('Bitte E-Mail eingeben.'); return; }
+      document.getElementById('forgot-btn').textContent = '…';
+      const res = await fetch(`${SB}/auth/v1/recover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+        body: JSON.stringify({ email }),
+      });
+      document.getElementById('forgot-btn').textContent = 'Link senden';
+      if (res.ok) {
+        showAuthError('');
+        document.getElementById('auth-forgot').innerHTML =
+          '<p style="font-size:13px;color:var(--text);text-align:center;line-height:1.7;">E-Mail gesendet! Prüfe deinen Posteingang und klicke auf den Link.</p>';
+      } else {
+        showAuthError('Fehler beim Senden. Bitte versuche es erneut.');
+      }
+    });
+
+    // Password reset (recovery token in URL)
+    document.getElementById('reset-btn').addEventListener('click', async () => {
+      const pw  = document.getElementById('reset-password').value;
+      const pw2 = document.getElementById('reset-password2').value;
+      if (pw.length < 6)  { showAuthError('Passwort muss mind. 6 Zeichen haben.'); return; }
+      if (pw !== pw2)     { showAuthError('Passwörter stimmen nicht überein.'); return; }
+      const session = getToken();
+      if (!session?.access_token) { showAuthError('Token abgelaufen. Bitte erneut auf den Link klicken.'); return; }
+      document.getElementById('reset-btn').textContent = '…';
+      const res = await fetch(`${SB}/auth/v1/user`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({ password: pw }),
+      });
+      document.getElementById('reset-btn').textContent = 'Passwort speichern';
+      if (res.ok) {
+        showAuthError('');
+        document.getElementById('auth-reset').innerHTML =
+          '<p style="font-size:13px;color:var(--text);text-align:center;line-height:1.7;">Passwort gespeichert! Du kannst dich jetzt anmelden.</p>';
+        // Clean URL
+        history.replaceState(null, '', window.location.pathname);
+      } else {
+        showAuthError('Fehler beim Speichern. Bitte erneut versuchen.');
+      }
+    });
     document.querySelectorAll('.auth-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
