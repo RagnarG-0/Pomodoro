@@ -2490,6 +2490,32 @@
   }
 
   async function initAuth() {
+    // Password reset handler — must be registered before any early return
+    document.getElementById('reset-btn').addEventListener('click', async () => {
+      const pw  = document.getElementById('reset-password').value;
+      const pw2 = document.getElementById('reset-password2').value;
+      if (pw.length < 6)  { showAuthError('Passwort muss mind. 6 Zeichen haben.'); return; }
+      if (pw !== pw2)     { showAuthError('Passwörter stimmen nicht überein.'); return; }
+      const session = getToken();
+      if (!session?.access_token) { showAuthError('Token abgelaufen. Bitte erneut auf den Link klicken.'); return; }
+      document.getElementById('reset-btn').textContent = '…';
+      const res = await fetch(`${SB}/auth/v1/user`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({ password: pw }),
+      });
+      document.getElementById('reset-btn').textContent = 'Passwort speichern';
+      if (res.ok) {
+        showAuthError('');
+        document.getElementById('auth-reset').innerHTML =
+          '<p style="font-size:13px;color:var(--text);text-align:center;line-height:1.7;">Passwort gespeichert! Du kannst dich jetzt anmelden.</p>';
+        history.replaceState(null, '', window.location.pathname);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showAuthError(errData.message || 'Fehler beim Speichern. Bitte erneut versuchen.');
+      }
+    });
+
     // Check if this is a password recovery redirect from Supabase email link
     const hash = window.location.hash;
     if (hash.includes('type=recovery') && hash.includes('access_token=')) {
@@ -2544,31 +2570,6 @@
       }
     });
 
-    // Password reset (recovery token in URL)
-    document.getElementById('reset-btn').addEventListener('click', async () => {
-      const pw  = document.getElementById('reset-password').value;
-      const pw2 = document.getElementById('reset-password2').value;
-      if (pw.length < 6)  { showAuthError('Passwort muss mind. 6 Zeichen haben.'); return; }
-      if (pw !== pw2)     { showAuthError('Passwörter stimmen nicht überein.'); return; }
-      const session = getToken();
-      if (!session?.access_token) { showAuthError('Token abgelaufen. Bitte erneut auf den Link klicken.'); return; }
-      document.getElementById('reset-btn').textContent = '…';
-      const res = await fetch(`${SB}/auth/v1/user`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + session.access_token },
-        body: JSON.stringify({ password: pw }),
-      });
-      document.getElementById('reset-btn').textContent = 'Passwort speichern';
-      if (res.ok) {
-        showAuthError('');
-        document.getElementById('auth-reset').innerHTML =
-          '<p style="font-size:13px;color:var(--text);text-align:center;line-height:1.7;">Passwort gespeichert! Du kannst dich jetzt anmelden.</p>';
-        // Clean URL
-        history.replaceState(null, '', window.location.pathname);
-      } else {
-        showAuthError('Fehler beim Speichern. Bitte erneut versuchen.');
-      }
-    });
     document.querySelectorAll('.auth-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
