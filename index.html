@@ -1866,6 +1866,7 @@
 
   let lbPeriod = 'alltime';
   let lastLeaderboardData = [];
+  let yesterdayWinner = null;
 
   function renderLeaderboard(list) {
     lastLeaderboardData = list || [];
@@ -1906,14 +1907,18 @@
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
-      const activeTimer = entry.timer_active && entry.mode !== 'short' && entry.mode !== 'long';
+      const isYesterdayWinner = entry.name === yesterdayWinner;
+      const borderStyle = isYesterdayWinner ? 'border: 1.5px solid #c9a227;' : '';
+      const winnerLabel = isYesterdayWinner
+        ? `<span style="font-size:10px;color:#c9a227;margin-left:4px;white-space:nowrap;">Letzter Tagessieger</span>`
+        : '';
       const timerDot = entry.timer_active
         ? `<span title="Fokus läuft" style="width:8px;height:8px;border-radius:50%;background:#4caf50;flex-shrink:0;display:inline-block;box-shadow:0 0 4px #4caf5088;"></span>`
         : `<span style="width:8px;flex-shrink:0;display:inline-block;"></span>`;
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}${borderStyle}">
         <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
         ${avatarHtml}
-        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
+        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}${winnerLabel}</span>
         ${timerDot}
         <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${display}</span>
       </div>`;
@@ -1967,6 +1972,16 @@
       }
       renderLeaderboard(list);
       console.log('Leaderboard data:', list);
+      // Fetch yesterday's winner for gold border highlight
+      try {
+        const ywRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_yesterday_winner`, {
+          method: 'POST', headers, body: JSON.stringify({}),
+        });
+        if (ywRes.ok) {
+          yesterdayWinner = await ywRes.json();
+          renderLeaderboard(list); // re-render with winner info
+        }
+      } catch(e) { /* non-critical */ }
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
       console.warn('Leaderboard load error', e);
