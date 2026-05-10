@@ -3013,7 +3013,7 @@
         `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&label=eq.${encodeURIComponent(oldLabel)}`,
         {
           method: 'PATCH',
-          headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+          headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
           body: JSON.stringify({ label: newLabel }),
         }
       );
