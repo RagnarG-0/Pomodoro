@@ -471,6 +471,83 @@
     .card { padding: 1.5rem 1rem 1rem; }
     #settings-panel { width: calc(100vw - 2rem); }
   }
+
+  /* ── Session Label ── */
+  .label-row {
+    position: relative;
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 1.5rem; padding: 0 0.25rem;
+  }
+  #session-label {
+    flex: 1; font-size: 12px; padding: 6px 10px;
+    border: 0.5px solid var(--border-strong); border-radius: 8px;
+    background: var(--surface2); color: var(--text);
+    font-family: 'Georgia', serif; outline: none;
+    letter-spacing: 0.02em;
+  }
+  #session-label:focus { border-color: var(--accent); }
+  #session-label::placeholder { color: var(--text-muted); font-style: italic; }
+  #label-save-btn {
+    padding: 5px 12px; font-size: 11px;
+    border: 0.5px solid var(--border-strong); border-radius: 8px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: 'Georgia', serif;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    white-space: nowrap; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  #label-save-btn:hover { background: var(--surface2); color: var(--text); }
+  #label-save-btn.saved { color: var(--accent); border-color: var(--accent); }
+  .label-dropdown {
+    position: absolute; top: calc(100% + 2px); left: 0.25rem;
+    right: 90px;
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 8px; z-index: 50; box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    max-height: 180px; overflow-y: auto;
+    display: none;
+  }
+  .label-dropdown.open { display: block; }
+  .label-option {
+    padding: 7px 12px; font-size: 12px; cursor: pointer;
+    font-family: 'Georgia', serif; color: var(--text);
+    transition: background 0.1s;
+  }
+  .label-option:hover { background: var(--surface2); }
+
+  /* ── Stats Detail Overlay ── */
+  #stats-more-btn {
+    font-size: 11px; padding: 3px 10px;
+    border: 0.5px solid var(--border-strong); border-radius: 12px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif;
+    transition: background 0.12s;
+  }
+  #stats-more-btn:hover { background: var(--surface2); color: var(--text); }
+  #stats-detail-panel {
+    display: none; position: absolute; inset: 0;
+    background: var(--surface); border-radius: 16px;
+    padding: 2rem 1.5rem 1.5rem; z-index: 10;
+    overflow-y: auto;
+  }
+  #stats-detail-panel.open { display: block; }
+  #stats-detail-back {
+    font-size: 11px; padding: 3px 10px;
+    border: 0.5px solid var(--border-strong); border-radius: 12px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif;
+    transition: background 0.12s;
+  }
+  #stats-detail-back:hover { background: var(--surface2); }
+  .detail-label-row {
+    display: grid;
+    grid-template-columns: 1fr 68px 68px 72px;
+    gap: 8px; align-items: center;
+    padding: 7px 0; border-bottom: 0.5px solid var(--border);
+    font-family: 'Georgia', serif;
+  }
+  .detail-label-row:last-child { border-bottom: none; }
+  @media (max-width: 400px) {
+    .detail-label-row { grid-template-columns: 1fr 58px 58px 62px; gap: 4px; }
+  }
 </style>
 </head>
 <body>
@@ -687,6 +764,13 @@
   <div id="time-display">25:00</div>
   <div id="mode-label">Fokus</div>
 
+  <!-- Session Label -->
+  <div class="label-row" id="label-row">
+    <input type="text" id="session-label" placeholder="Session benennen… (optional)" autocomplete="off" maxlength="60">
+    <button id="label-save-btn">Speichern</button>
+    <div class="label-dropdown" id="label-dropdown"></div>
+  </div>
+
   <div class="ctrl-row">
     <button class="ctrl-btn" id="btn-reset" title="Zurücksetzen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
@@ -740,8 +824,11 @@
 </div>
 
 <!-- Stats card -->
-<div class="card">
-  <div class="hmap-label" style="margin-bottom:1rem;">Statistik</div>
+<div class="card" style="position:relative;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div class="hmap-label">Statistik</div>
+    <button id="stats-more-btn">mehr Infos</button>
+  </div>
   <div class="stats-row">
     <div class="stat-box" id="level-box">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
@@ -760,6 +847,17 @@
       <div class="stat-label">Ø Diese Woche / Tag</div>
       <div class="stat-value" id="stat-week-val">—</div>
       <div class="stat-delta" id="stat-week-delta"></div>
+    </div>
+  </div>
+
+  <!-- Label Stats Detail Overlay -->
+  <div id="stats-detail-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+      <div class="hmap-label">Lernzeit nach Label</div>
+      <button id="stats-detail-back">zurück</button>
+    </div>
+    <div id="stats-detail-content">
+      <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>
     </div>
   </div>
 </div>
@@ -792,6 +890,7 @@
 <script>
 (function () {
   const KEY = 'pomo_heatmap_v3';
+  const LABELS_KEY = 'pomo_labels_v1';
   const CIRC = 2 * Math.PI * 68;
   const ROWS = 7;
   const DAYS = 100;
@@ -802,6 +901,8 @@
   let userDiamonds = 0;
   let userAwardsLast = 0;
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
+
+  let currentLabel = '';
 
   let mode = 'work';
   let totalSec = 25 * 60;
@@ -1329,7 +1430,12 @@
     days[key] = (days[key] || 0) + mins;
     totalPomodoros++;
     save();
-    if (currentUser) addStudyMinutes(key, mins);
+    const label = currentLabel.trim() || 'not specified';
+    if (currentLabel.trim()) storeLabel(currentLabel.trim());
+    if (currentUser) {
+      addStudyMinutes(key, mins);
+      savePomoSession(key, mins, label);
+    }
     launchConfetti();
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
@@ -2685,6 +2791,145 @@
     openAuthModal();
   }
 
+  /* ── Session Labels ── */
+  function getStoredLabels() {
+    try { return JSON.parse(localStorage.getItem(LABELS_KEY) || '[]'); } catch { return []; }
+  }
+
+  function storeLabel(label) {
+    if (!label) return;
+    let labels = getStoredLabels();
+    labels = [label, ...labels.filter(l => l !== label)].slice(0, 40);
+    localStorage.setItem(LABELS_KEY, JSON.stringify(labels));
+  }
+
+  function initLabelInput() {
+    const input = document.getElementById('session-label');
+    const dropdown = document.getElementById('label-dropdown');
+    const saveBtn = document.getElementById('label-save-btn');
+
+    function showDropdown(filter) {
+      const all = getStoredLabels();
+      const items = filter
+        ? all.filter(l => l.toLowerCase().includes(filter.toLowerCase()))
+        : all;
+      if (!items.length) { dropdown.classList.remove('open'); return; }
+      dropdown.innerHTML = items.map(l =>
+        `<div class="label-option">${l.replace(/</g, '&lt;')}</div>`
+      ).join('');
+      dropdown.classList.add('open');
+      dropdown.querySelectorAll('.label-option').forEach(opt => {
+        opt.addEventListener('mousedown', e => {
+          e.preventDefault(); // prevent blur before click
+          input.value = opt.textContent;
+          currentLabel = opt.textContent;
+          dropdown.classList.remove('open');
+          saveBtn.classList.add('saved');
+          setTimeout(() => saveBtn.classList.remove('saved'), 1500);
+        });
+      });
+    }
+
+    input.addEventListener('focus', () => showDropdown(input.value));
+    input.addEventListener('input', () => showDropdown(input.value));
+    input.addEventListener('blur', () => setTimeout(() => dropdown.classList.remove('open'), 150));
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+      if (e.key === 'Escape') dropdown.classList.remove('open');
+    });
+
+    saveBtn.addEventListener('click', () => {
+      const val = input.value.trim();
+      currentLabel = val;
+      if (val) storeLabel(val);
+      saveBtn.classList.add('saved');
+      setTimeout(() => saveBtn.classList.remove('saved'), 1500);
+      dropdown.classList.remove('open');
+    });
+  }
+
+  /* ── Supabase: save pomodoro session with label ── */
+  async function savePomoSession(date, durationMinutes, label) {
+    if (!currentUser) return;
+    const token = await getValidToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${SB}/rest/v1/pomodoro_sessions`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          user_id: currentUser.id,
+          date,
+          label: label || 'not specified',
+          duration_minutes: durationMinutes,
+        }),
+      });
+      if (!res.ok) console.warn('savePomoSession failed:', res.status, await res.text());
+    } catch(e) { console.warn('savePomoSession error:', e); }
+  }
+
+  /* ── Label Statistics ── */
+  async function loadLabelStats() {
+    const content = document.getElementById('stats-detail-content');
+    if (!currentUser) {
+      content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Bitte anmelden, um Label-Statistiken zu sehen.</div>';
+      return;
+    }
+    content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Wird geladen…</div>';
+    const token = await getValidToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${SB}/rest/v1/rpc/get_label_stats`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_user_id: currentUser.id }),
+      });
+      if (!res.ok) throw new Error(res.status + ' ' + await res.text());
+      const stats = await res.json();
+      renderLabelStats(stats);
+    } catch(e) {
+      content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Konnte nicht geladen werden.</div>';
+      console.warn('loadLabelStats error:', e);
+    }
+  }
+
+  function renderLabelStats(stats) {
+    const content = document.getElementById('stats-detail-content');
+    if (!stats || !stats.length) {
+      content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Noch keine Label-Daten vorhanden.<br><span style="font-size:11px;">Benenne deine nächste Session und starte den Timer!</span></div>';
+      return;
+    }
+    const header = `<div class="detail-label-row" style="border-bottom:0.5px solid var(--border-strong);padding-bottom:6px;margin-bottom:2px;">
+      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Label</div>
+      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Heute</div>
+      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Woche</div>
+      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Gesamt</div>
+    </div>`;
+    const rows = stats.map(s => {
+      const todayStr  = s.today_minutes  > 0 ? minutesToDisplay(+s.today_minutes)   : '—';
+      const weekStr   = s.week_minutes   > 0 ? minutesToDisplay(+s.week_minutes)    : '—';
+      const totalStr  =                        minutesToDisplay(+s.alltime_minutes);
+      return `<div class="detail-label-row">
+        <div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.label.replace(/"/g,'&quot;')}">${s.label.replace(/</g,'&lt;')}</div>
+        <div style="font-size:12px;color:var(--text-muted);text-align:right;">${todayStr}</div>
+        <div style="font-size:12px;color:var(--text-muted);text-align:right;">${weekStr}</div>
+        <div style="font-size:12px;color:var(--accent);text-align:right;font-weight:normal;">${totalStr}</div>
+      </div>`;
+    }).join('');
+    content.innerHTML = header + rows;
+  }
+
+  function initStatsDetail() {
+    document.getElementById('stats-more-btn').addEventListener('click', () => {
+      document.getElementById('stats-detail-panel').classList.add('open');
+      loadLabelStats();
+    });
+    document.getElementById('stats-detail-back').addEventListener('click', () => {
+      document.getElementById('stats-detail-panel').classList.remove('open');
+    });
+  }
+
   // Override save() to also persist to Supabase when logged in
   const _origSave = save;
   function saveWithSync() { _origSave(); } // minutes synced via addStudyMinutes delta RPC
@@ -2712,6 +2957,8 @@
   initSound();
   initPrivacyToggle();
   initAvatarUpload();
+  initLabelInput();
+  initStatsDetail();
   load();
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
