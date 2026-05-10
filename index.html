@@ -548,6 +548,71 @@
   @media (max-width: 400px) {
     .detail-label-row { grid-template-columns: 1fr 58px 58px 62px; gap: 4px; }
   }
+
+  /* ── Label edit in stats ── */
+  .label-name-cell {
+    display: flex; align-items: center; gap: 4px; overflow: hidden;
+  }
+  .label-name-text {
+    font-size: 12px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+  }
+  .label-edit-btn {
+    flex-shrink: 0; width: 20px; height: 20px;
+    border: none; background: transparent; color: var(--text-muted);
+    cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; opacity: 0; transition: opacity 0.15s, color 0.15s;
+  }
+  .detail-label-row:hover .label-edit-btn { opacity: 1; }
+  .label-edit-btn:hover { color: var(--text); }
+  .label-edit-btn svg { width: 12px; height: 12px; }
+  .label-edit-inline {
+    display: flex; align-items: center; gap: 4px; width: 100%;
+  }
+  .label-edit-input {
+    flex: 1; font-size: 12px; padding: 2px 6px;
+    border: 0.5px solid var(--accent); border-radius: 4px;
+    background: var(--surface2); color: var(--text);
+    font-family: 'Georgia', serif; outline: none; min-width: 0;
+  }
+  .label-edit-ok, .label-edit-cancel {
+    flex-shrink: 0; font-size: 11px; padding: 2px 7px;
+    border: 0.5px solid var(--border-strong); border-radius: 4px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .label-edit-ok:hover { border-color: var(--accent); color: var(--accent); }
+  .label-edit-cancel:hover { background: var(--surface2); }
+
+  /* ── Merge confirmation banner ── */
+  #label-merge-banner {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200; display: none;
+    align-items: center; justify-content: center;
+  }
+  #label-merge-banner.open { display: flex; }
+  .merge-banner-box {
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 12px; padding: 1.25rem 1.5rem;
+    max-width: 300px; width: 90%; font-family: Georgia, serif;
+  }
+  .merge-banner-msg {
+    font-size: 13px; color: var(--text);
+    margin-bottom: 1rem; line-height: 1.5;
+  }
+  .merge-banner-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .merge-btn-no, .merge-btn-yes {
+    font-size: 12px; padding: 5px 14px;
+    border: 0.5px solid var(--border-strong); border-radius: 8px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif;
+    transition: background 0.12s, color 0.12s;
+  }
+  .merge-btn-yes { color: var(--accent); border-color: var(--accent); }
+  .merge-btn-no:hover { background: var(--surface2); }
+  .merge-btn-yes:hover { background: var(--accent); color: #fff; }
 </style>
 </head>
 <body>
@@ -887,6 +952,17 @@
 <div class="notif-bar" id="notif"></div>
 <canvas id="confetti-canvas"></canvas>
 
+<!-- Label merge confirmation banner -->
+<div id="label-merge-banner">
+  <div class="merge-banner-box">
+    <div class="merge-banner-msg" id="label-merge-msg"></div>
+    <div class="merge-banner-btns">
+      <button class="merge-btn-no" id="merge-btn-no">Nein</button>
+      <button class="merge-btn-yes" id="merge-btn-yes">Ja, zusammenführen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   const KEY = 'pomo_heatmap_v3';
@@ -903,6 +979,7 @@
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
 
   let currentLabel = '';
+  let currentLabelStatsData = [];
 
   let mode = 'work';
   let totalSec = 25 * 60;
@@ -2895,29 +2972,80 @@
   }
 
   function renderLabelStats(stats) {
+    currentLabelStatsData = stats || [];
     const content = document.getElementById('stats-detail-content');
     if (!stats || !stats.length) {
       content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Noch keine Label-Daten vorhanden.<br><span style="font-size:11px;">Benenne deine nächste Session und starte den Timer!</span></div>';
       return;
     }
+    const pencilSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
     const header = `<div class="detail-label-row" style="border-bottom:0.5px solid var(--border-strong);padding-bottom:6px;margin-bottom:2px;">
       <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Label</div>
       <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Heute</div>
       <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Woche</div>
       <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Gesamt</div>
     </div>`;
+    const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
     const rows = stats.map(s => {
       const todayStr  = s.today_minutes  > 0 ? minutesToDisplay(+s.today_minutes)   : '—';
       const weekStr   = s.week_minutes   > 0 ? minutesToDisplay(+s.week_minutes)    : '—';
       const totalStr  =                        minutesToDisplay(+s.alltime_minutes);
+      const safe = enc(s.label);
       return `<div class="detail-label-row">
-        <div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.label.replace(/"/g,'&quot;')}">${s.label.replace(/</g,'&lt;')}</div>
+        <div class="label-name-cell">
+          <span class="label-name-text" title="${safe}">${safe}</span>
+          <button class="label-edit-btn" data-label="${safe}" title="Label umbenennen">${pencilSvg}</button>
+        </div>
         <div style="font-size:12px;color:var(--text-muted);text-align:right;">${todayStr}</div>
         <div style="font-size:12px;color:var(--text-muted);text-align:right;">${weekStr}</div>
         <div style="font-size:12px;color:var(--accent);text-align:right;font-weight:normal;">${totalStr}</div>
       </div>`;
     }).join('');
     content.innerHTML = header + rows;
+  }
+
+  async function renameLabelInDb(oldLabel, newLabel) {
+    if (!currentUser) return false;
+    const token = await getValidToken();
+    if (!token) return false;
+    try {
+      const res = await fetch(
+        `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&label=eq.${encodeURIComponent(oldLabel)}`,
+        {
+          method: 'PATCH',
+          headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ label: newLabel }),
+        }
+      );
+      return res.ok;
+    } catch(e) { console.warn('renameLabelInDb error:', e); return false; }
+  }
+
+  function renameLabelInStorage(oldLabel, newLabel) {
+    let labels = getStoredLabels();
+    const seen = new Set();
+    labels = labels.map(l => l === oldLabel ? newLabel : l).filter(l => {
+      if (seen.has(l)) return false; seen.add(l); return true;
+    });
+    localStorage.setItem(LABELS_KEY, JSON.stringify(labels));
+    if (currentLabel === oldLabel) currentLabel = newLabel;
+    const inp = document.getElementById('session-label');
+    if (inp && inp.value.trim() === oldLabel) inp.value = newLabel;
+  }
+
+  function showMergeBanner(oldLabel, newLabel, onYes, onNo) {
+    const banner = document.getElementById('label-merge-banner');
+    document.getElementById('label-merge-msg').textContent =
+      `Das Label „${newLabel}" existiert bereits. Sollen die Zeiten von „${oldLabel}" und „${newLabel}" zusammengeführt werden?`;
+    banner.classList.add('open');
+    const yesBtn = document.getElementById('merge-btn-yes');
+    const noBtn  = document.getElementById('merge-btn-no');
+    const newYes = yesBtn.cloneNode(true);
+    const newNo  = noBtn.cloneNode(true);
+    yesBtn.replaceWith(newYes);
+    noBtn.replaceWith(newNo);
+    newYes.addEventListener('click', () => { banner.classList.remove('open'); onYes(); });
+    newNo.addEventListener('click',  () => { banner.classList.remove('open'); onNo(); });
   }
 
   function initStatsDetail() {
@@ -2927,6 +3055,57 @@
     });
     document.getElementById('stats-detail-back').addEventListener('click', () => {
       document.getElementById('stats-detail-panel').classList.remove('open');
+    });
+
+    const pencilSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
+    const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+    document.getElementById('stats-detail-content').addEventListener('click', async function(e) {
+      const btn = e.target.closest('.label-edit-btn');
+      if (!btn) return;
+      const row = btn.closest('.detail-label-row');
+      const nameCell = row.querySelector('.label-name-cell');
+      const labelName = btn.dataset.label; // already decoded by browser
+
+      nameCell.innerHTML = `<div class="label-edit-inline">
+        <input class="label-edit-input" value="${enc(labelName)}" maxlength="60">
+        <button class="label-edit-ok" title="Speichern">✓</button>
+        <button class="label-edit-cancel" title="Abbrechen">✗</button>
+      </div>`;
+      const input = nameCell.querySelector('.label-edit-input');
+      input.focus();
+      input.select();
+
+      function restoreCell() {
+        nameCell.innerHTML = `<span class="label-name-text" title="${enc(labelName)}">${enc(labelName)}</span><button class="label-edit-btn" data-label="${enc(labelName)}" title="Label umbenennen">${pencilSvg}</button>`;
+      }
+
+      async function doSave() {
+        const newLabel = input.value.trim();
+        if (!newLabel || newLabel === labelName) { restoreCell(); return; }
+        const exists = currentLabelStatsData.some(s => s.label === newLabel);
+        if (exists) {
+          showMergeBanner(labelName, newLabel,
+            async () => {
+              const ok = await renameLabelInDb(labelName, newLabel);
+              if (ok) { renameLabelInStorage(labelName, newLabel); await loadLabelStats(); }
+              else restoreCell();
+            },
+            () => restoreCell()
+          );
+        } else {
+          const ok = await renameLabelInDb(labelName, newLabel);
+          if (ok) { renameLabelInStorage(labelName, newLabel); await loadLabelStats(); }
+          else restoreCell();
+        }
+      }
+
+      nameCell.querySelector('.label-edit-ok').addEventListener('click', doSave);
+      nameCell.querySelector('.label-edit-cancel').addEventListener('click', restoreCell);
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); doSave(); }
+        if (ev.key === 'Escape') restoreCell();
+      });
     });
   }
 
