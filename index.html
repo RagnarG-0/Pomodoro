@@ -3013,11 +3013,20 @@
         `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&label=eq.${encodeURIComponent(oldLabel)}`,
         {
           method: 'PATCH',
-          headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
           body: JSON.stringify({ label: newLabel }),
         }
       );
-      return res.ok;
+      if (!res.ok) {
+        console.warn('renameLabelInDb failed:', res.status, await res.text());
+        return false;
+      }
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        console.warn('renameLabelInDb: 0 Zeilen aktualisiert – UPDATE-RLS-Policy für pomodoro_sessions prüfen');
+        return false;
+      }
+      return true;
     } catch(e) { console.warn('renameLabelInDb error:', e); return false; }
   }
 
@@ -3089,14 +3098,14 @@
             async () => {
               const ok = await renameLabelInDb(labelName, newLabel);
               if (ok) { renameLabelInStorage(labelName, newLabel); await loadLabelStats(); }
-              else restoreCell();
+              else { restoreCell(); toast('Zusammenführen fehlgeschlagen – bitte erneut versuchen.'); }
             },
             () => restoreCell()
           );
         } else {
           const ok = await renameLabelInDb(labelName, newLabel);
           if (ok) { renameLabelInStorage(labelName, newLabel); await loadLabelStats(); }
-          else restoreCell();
+          else { restoreCell(); toast('Umbenennen fehlgeschlagen – bitte erneut versuchen.'); }
         }
       }
 
