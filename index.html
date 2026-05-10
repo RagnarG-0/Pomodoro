@@ -471,6 +471,92 @@
     .card { padding: 1.5rem 1rem 1rem; }
     #settings-panel { width: calc(100vw - 2rem); }
   }
+
+  /* ── Label Input ── */
+  .label-row {
+    display: flex; align-items: center; gap: 8px;
+    justify-content: center; margin-bottom: 1.5rem;
+    position: relative;
+  }
+  .label-input-wrap { position: relative; }
+  .label-input {
+    font-size: 13px; padding: 6px 12px;
+    border: 0.5px solid var(--border-strong); border-radius: 8px;
+    background: var(--surface2); color: var(--text);
+    font-family: 'Georgia', serif; outline: none;
+    width: 220px; letter-spacing: 0.02em;
+    transition: border-color 0.12s;
+  }
+  .label-input:focus { border-color: var(--accent); }
+  .label-input::placeholder { color: var(--text-muted); }
+  .label-save-btn {
+    padding: 6px 14px; font-size: 12px;
+    border: 0.5px solid var(--border-strong); border-radius: 8px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: 'Georgia', serif;
+    letter-spacing: 0.03em; transition: background 0.12s, color 0.12s, border-color 0.12s;
+    white-space: nowrap;
+  }
+  .label-save-btn:hover { background: var(--surface2); color: var(--text); }
+  .label-save-btn.saved { color: var(--accent); border-color: var(--accent); }
+  .label-dropdown {
+    display: none; position: absolute; top: 100%; left: 0;
+    width: 220px;
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 50; max-height: 180px; overflow-y: auto;
+    margin-top: 4px;
+  }
+  .label-dropdown.open { display: block; }
+  .label-dropdown-item {
+    padding: 8px 14px; font-size: 13px; font-family: 'Georgia', serif;
+    color: var(--text); cursor: pointer;
+    border-bottom: 0.5px solid var(--border);
+    transition: background 0.1s;
+  }
+  .label-dropdown-item:last-child { border-bottom: none; }
+  .label-dropdown-item:hover { background: var(--surface2); }
+
+  /* ── Stats Detail Overlay ── */
+  .stats-card-wrap { position: relative; }
+  .stats-detail-overlay {
+    display: none; position: absolute; inset: 0;
+    background: var(--surface); border-radius: 16px;
+    padding: 1.5rem; overflow-y: auto;
+    animation: fadeIn 0.15s ease;
+    z-index: 10;
+  }
+  .stats-detail-overlay.open { display: block; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .stats-detail-title {
+    font-size: 11px; color: var(--text-muted);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .stats-detail-period {
+    display: flex; gap: 5px; margin-bottom: 1rem; flex-wrap: wrap;
+  }
+  .stats-detail-tab {
+    font-size: 11px; padding: 4px 10px;
+    border: 0.5px solid var(--border-strong); border-radius: 16px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: 'Georgia', serif;
+    letter-spacing: 0.03em; transition: all 0.12s;
+  }
+  .stats-detail-tab.active { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+  .stats-detail-tab:hover { background: var(--surface2); }
+  .label-stat-row {
+    display: flex; align-items: center;
+    padding: 7px 8px; border-radius: 8px; margin-bottom: 3px;
+    font-family: 'Georgia', serif;
+  }
+  .label-stat-row:hover { background: var(--surface2); }
+  .label-stat-name { font-size: 13px; color: var(--text); min-width: 100px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .label-stat-bar-wrap {
+    flex: 1; margin: 0 10px;
+    height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .label-stat-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
+  .label-stat-val { font-size: 12px; color: var(--text-muted); white-space: nowrap; min-width: 60px; text-align: right; }
 </style>
 </head>
 <body>
@@ -687,6 +773,15 @@
   <div id="time-display">25:00</div>
   <div id="mode-label">Fokus</div>
 
+  <!-- Label input — only shown in Fokus mode -->
+  <div id="label-row" class="label-row">
+    <div class="label-input-wrap">
+      <input type="text" id="label-input" class="label-input" placeholder="Beschriftung (z.B. Anki)" maxlength="60" autocomplete="off">
+      <div id="label-dropdown" class="label-dropdown"></div>
+    </div>
+    <button id="label-save-btn" class="label-save-btn">Speichern</button>
+  </div>
+
   <div class="ctrl-row">
     <button class="ctrl-btn" id="btn-reset" title="Zurücksetzen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
@@ -740,8 +835,11 @@
 </div>
 
 <!-- Stats card -->
-<div class="card">
-  <div class="hmap-label" style="margin-bottom:1rem;">Statistik</div>
+<div class="card stats-card-wrap">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div class="hmap-label">Statistik</div>
+    <button id="stats-detail-btn" style="font-size:11px;padding:3px 10px;border:0.5px solid var(--border-strong);border-radius:12px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;letter-spacing:0.03em;transition:background 0.12s,color 0.12s;">mehr Infos</button>
+  </div>
   <div class="stats-row">
     <div class="stat-box" id="level-box">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
@@ -761,6 +859,20 @@
       <div class="stat-value" id="stat-week-val">—</div>
       <div class="stat-delta" id="stat-week-delta"></div>
     </div>
+  </div>
+
+  <!-- Detailed stats overlay (overlays the stats card) -->
+  <div id="stats-detail-overlay" class="stats-detail-overlay">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <div class="stats-detail-title">Zeit pro Beschriftung</div>
+      <button id="stats-detail-close" style="font-size:11px;padding:3px 10px;border:0.5px solid var(--border-strong);border-radius:12px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;letter-spacing:0.03em;transition:background 0.12s;">zurück</button>
+    </div>
+    <div class="stats-detail-period">
+      <button class="stats-detail-tab active" data-period="today">Heute</button>
+      <button class="stats-detail-tab" data-period="week">Diese Woche</button>
+      <button class="stats-detail-tab" data-period="alltime">Gesamt</button>
+    </div>
+    <div id="stats-detail-list"></div>
   </div>
 </div>
 
@@ -811,6 +923,10 @@
   let startedAt = null; // wall-clock ms when current run started (adjusted for elapsed)
   let pomoDay = null;   // todayKey() captured at timer start — ensures pomo is credited to correct day
 
+  // Label state
+  let currentLabel = '';
+  let usedLabels = [];
+
   // Persisted data
   let days = {};          // { 'YYYY-MM-DD': minutes } — fokussierte Minuten pro Tag
   let offDays = {};       // { 'YYYY-MM-DD': true } — manually struck out
@@ -841,6 +957,23 @@
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify({days, offDays, offWeekdays, totalPomodoros})); } catch(e) {}
+  }
+
+  function loadLabels() {
+    try { usedLabels = JSON.parse(localStorage.getItem('pomo_labels') || '[]'); } catch(e) { usedLabels = []; }
+  }
+  function saveLabels() {
+    try { localStorage.setItem('pomo_labels', JSON.stringify(usedLabels)); } catch(e) {}
+  }
+
+  function loadLocalSessions() {
+    try { return JSON.parse(localStorage.getItem('pomo_sessions_local') || '[]'); } catch { return []; }
+  }
+  function saveSessionLocally(date, minutes, label) {
+    const sessions = loadLocalSessions();
+    sessions.push({ date, minutes, label });
+    if (sessions.length > 500) sessions.splice(0, sessions.length - 500);
+    try { localStorage.setItem('pomo_sessions_local', JSON.stringify(sessions)); } catch {}
   }
 
   const SETTINGS_KEY = 'pomo_settings_v1';
@@ -1095,6 +1228,9 @@
     // Skip still disabled if somehow shown during focus
     skipBtn.disabled = !isBreak;
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
+    // Show label row only in focus mode
+    const labelRow = document.getElementById('label-row');
+    if (labelRow) labelRow.style.display = isBreak ? 'none' : 'flex';
   }
 
   function render() { renderTimer(); renderTomatoes(); renderHeatmap(); renderStats(); }
@@ -1326,10 +1462,15 @@
     const key = pomoDay || todayKey(); // use day when timer started, not when it ended
     pomoDay = null; // reset for next pomo
     const mins = Math.round(totalSec / 60);
+    const label = currentLabel || 'not specified';
     days[key] = (days[key] || 0) + mins;
     totalPomodoros++;
     save();
-    if (currentUser) addStudyMinutes(key, mins);
+    saveSessionLocally(key, mins, label);
+    if (currentUser) {
+      addStudyMinutes(key, mins);
+      savePomoSession(key, mins, label);
+    }
     launchConfetti();
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
@@ -1349,6 +1490,161 @@
       });
       if (!res.ok) console.warn('addStudyMinutes failed:', res.status, await res.text());
     } catch(e) { console.warn('addStudyMinutes error:', e); }
+  }
+
+  async function savePomoSession(date, minutes, label) {
+    if (!currentUser) return;
+    const token = await getValidToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${SB}/rest/v1/pomodoro_sessions`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ user_id: currentUser.id, date, minutes, label }),
+      });
+      if (!res.ok) console.warn('savePomoSession failed:', res.status, await res.text());
+    } catch(e) { console.warn('savePomoSession error:', e); }
+  }
+
+  async function loadLabelStatsFromSupabase(period) {
+    if (!currentUser) return null;
+    const token = await getValidToken();
+    if (!token) return null;
+    try {
+      const today = todayKey();
+      const weekAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+      let url = `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${currentUser.id}&select=label,minutes,date`;
+      if (period === 'today') url += `&date=eq.${today}`;
+      else if (period === 'week') url += `&date=gte.${weekAgo}`;
+      const res = await fetch(url, { headers: authHeaders(token) });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  }
+
+  function filterLocalSessionsByPeriod(sessions, period) {
+    const today = todayKey();
+    const weekAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+    return sessions.filter(s => {
+      if (period === 'today') return s.date === today;
+      if (period === 'week') return s.date >= weekAgo;
+      return true;
+    });
+  }
+
+  function aggregateLabelStats(sessions) {
+    const stats = {};
+    for (const s of sessions) {
+      const label = s.label || 'not specified';
+      stats[label] = (stats[label] || 0) + s.minutes;
+    }
+    return Object.entries(stats)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, minutes]) => ({ label, minutes }));
+  }
+
+  function renderDetailStats(stats) {
+    const container = document.getElementById('stats-detail-list');
+    if (!stats.length) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1.5rem 0;">Noch keine Daten vorhanden.</div>';
+      return;
+    }
+    const maxMins = stats[0].minutes;
+    container.innerHTML = stats.map(s => {
+      const pct = maxMins > 0 ? Math.round(s.minutes / maxMins * 100) : 0;
+      const escaped = s.label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<div class="label-stat-row">
+        <div class="label-stat-name" title="${escaped}">${escaped}</div>
+        <div class="label-stat-bar-wrap"><div class="label-stat-bar" style="width:${pct}%"></div></div>
+        <div class="label-stat-val">${minutesToDisplay(s.minutes)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  async function loadAndRenderDetailStats(period) {
+    const container = document.getElementById('stats-detail-list');
+    container.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1.5rem 0;">Wird geladen…</div>';
+    let sessions = null;
+    if (currentUser) sessions = await loadLabelStatsFromSupabase(period);
+    if (!sessions) {
+      const local = loadLocalSessions();
+      sessions = filterLocalSessionsByPeriod(local, period);
+    }
+    renderDetailStats(aggregateLabelStats(sessions || []));
+  }
+
+  function initLabelInput() {
+    const input = document.getElementById('label-input');
+    const dropdown = document.getElementById('label-dropdown');
+    const saveBtn = document.getElementById('label-save-btn');
+
+    function showDropdown() {
+      const val = input.value.toLowerCase();
+      const filtered = usedLabels.filter(l => !val || l.toLowerCase().includes(val));
+      if (!filtered.length) { dropdown.classList.remove('open'); return; }
+      dropdown.innerHTML = filtered.map(l => {
+        const esc = l.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const escAttr = l.replace(/"/g, '&quot;');
+        return `<div class="label-dropdown-item" data-label="${escAttr}">${esc}</div>`;
+      }).join('');
+      dropdown.classList.add('open');
+      dropdown.querySelectorAll('.label-dropdown-item').forEach(item => {
+        item.addEventListener('mousedown', e => {
+          e.preventDefault();
+          input.value = item.dataset.label;
+          saveCurrentLabel();
+          dropdown.classList.remove('open');
+        });
+      });
+    }
+
+    input.addEventListener('focus', () => showDropdown());
+    input.addEventListener('input', () => showDropdown());
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { saveCurrentLabel(); dropdown.classList.remove('open'); input.blur(); }
+      if (e.key === 'Escape') { dropdown.classList.remove('open'); input.blur(); }
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#label-row')) dropdown.classList.remove('open');
+    });
+    saveBtn.addEventListener('click', () => {
+      saveCurrentLabel();
+      saveBtn.classList.add('saved');
+      saveBtn.textContent = '✓';
+      setTimeout(() => { saveBtn.classList.remove('saved'); saveBtn.textContent = 'Speichern'; }, 1500);
+    });
+  }
+
+  function saveCurrentLabel() {
+    const input = document.getElementById('label-input');
+    currentLabel = input.value.trim();
+    if (currentLabel && !usedLabels.includes(currentLabel)) {
+      usedLabels.unshift(currentLabel);
+      if (usedLabels.length > 50) usedLabels = usedLabels.slice(0, 50);
+      saveLabels();
+    }
+  }
+
+  function initStatsDetail() {
+    const btn = document.getElementById('stats-detail-btn');
+    const overlay = document.getElementById('stats-detail-overlay');
+    const closeBtn = document.getElementById('stats-detail-close');
+    let detailPeriod = 'today';
+
+    btn.addEventListener('click', () => {
+      overlay.classList.add('open');
+      loadAndRenderDetailStats(detailPeriod);
+    });
+    closeBtn.addEventListener('click', () => overlay.classList.remove('open'));
+
+    overlay.querySelectorAll('.stats-detail-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        overlay.querySelectorAll('.stats-detail-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        detailPeriod = tab.dataset.period;
+        loadAndRenderDetailStats(detailPeriod);
+      });
+    });
   }
 
   function onTimerEnd() {
@@ -2713,6 +3009,9 @@
   initPrivacyToggle();
   initAvatarUpload();
   load();
+  loadLabels();
+  initLabelInput();
+  initStatsDetail();
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
   syncWdBtns();
