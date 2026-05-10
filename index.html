@@ -471,6 +471,99 @@
     .card { padding: 1.5rem 1rem 1rem; }
     #settings-panel { width: calc(100vw - 2rem); }
   }
+
+  /* ── Label Input ── */
+  .label-row {
+    display: flex; gap: 6px; justify-content: center; align-items: center;
+    margin-bottom: 1.5rem;
+  }
+  .label-input-wrap { position: relative; }
+  .label-input {
+    font-size: 12px; padding: 5px 12px;
+    border: 0.5px solid var(--border-strong); border-radius: 20px;
+    background: var(--surface2); color: var(--text);
+    font-family: 'Georgia', serif; outline: none;
+    width: 200px; letter-spacing: 0.03em; transition: border-color 0.15s;
+  }
+  .label-input:focus { border-color: var(--accent); }
+  .label-input::placeholder { color: var(--text-muted); }
+  .label-save-btn {
+    font-size: 11px; padding: 5px 14px;
+    border: 0.5px solid var(--border-strong); border-radius: 20px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; transition: all 0.15s; font-family: 'Georgia', serif;
+    letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .label-save-btn:hover { background: var(--surface2); color: var(--text); }
+  .label-save-btn.saved { color: var(--accent); border-color: var(--accent); }
+  .label-autocomplete {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0;
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 8px; padding: 4px;
+    z-index: 50; max-height: 180px; overflow-y: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14); min-width: 200px;
+  }
+  .label-autocomplete.open { display: block; }
+  .label-option {
+    padding: 6px 10px; font-size: 12px; font-family: 'Georgia', serif;
+    color: var(--text); cursor: pointer; border-radius: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .label-option:hover { background: var(--surface2); }
+
+  /* ── Stats Detail Overlay ── */
+  .stats-more-btn {
+    font-size: 10px; padding: 3px 10px;
+    border: 0.5px solid var(--border-strong); border-radius: 12px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: 'Georgia', serif;
+    letter-spacing: 0.04em; transition: background 0.12s;
+  }
+  .stats-more-btn:hover { background: var(--surface2); }
+  .stats-detail-panel {
+    display: none; position: absolute; inset: 0;
+    background: var(--surface); border-radius: 16px;
+    padding: 1.5rem; z-index: 5; overflow-y: auto;
+  }
+  .stats-detail-panel.open { display: block; }
+  .stats-detail-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  .stats-detail-title {
+    font-size: 11px; color: var(--text-muted);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .stats-back-btn {
+    font-size: 10px; padding: 3px 10px;
+    border: 0.5px solid var(--border-strong); border-radius: 12px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: 'Georgia', serif;
+    letter-spacing: 0.04em; transition: background 0.12s;
+  }
+  .stats-back-btn:hover { background: var(--surface2); }
+  .stats-period-tabs { display: flex; gap: 5px; margin-bottom: 1rem; }
+  .stats-period-btn {
+    font-size: 11px; padding: 4px 12px; flex: 1;
+    border: 0.5px solid var(--border-strong); border-radius: 16px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; transition: all 0.12s; font-family: 'Georgia', serif;
+    letter-spacing: 0.03em; text-align: center;
+  }
+  .stats-period-btn.active { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+  .stats-period-btn:hover { background: var(--surface2); }
+  .stats-label-list { font-family: 'Georgia', serif; }
+  .stats-label-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0; border-bottom: 0.5px solid var(--border);
+  }
+  .stats-label-item:last-child { border-bottom: none; }
+  .stats-label-name { color: var(--text); flex: 1; font-size: 13px; }
+  .stats-label-val { color: var(--text-muted); font-size: 12px; }
+  .stats-detail-empty {
+    font-size: 12px; color: var(--text-muted); text-align: center;
+    padding: 1rem 0; font-family: 'Georgia', serif;
+  }
 </style>
 </head>
 <body>
@@ -687,6 +780,15 @@
   <div id="time-display">25:00</div>
   <div id="mode-label">Fokus</div>
 
+  <!-- Label input for naming the current Pomodoro session -->
+  <div class="label-row">
+    <div class="label-input-wrap">
+      <input type="text" id="label-input" class="label-input" placeholder="Session benennen…" maxlength="60" autocomplete="off">
+      <div class="label-autocomplete" id="label-autocomplete"></div>
+    </div>
+    <button class="label-save-btn" id="label-save-btn">Speichern</button>
+  </div>
+
   <div class="ctrl-row">
     <button class="ctrl-btn" id="btn-reset" title="Zurücksetzen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
@@ -740,8 +842,11 @@
 </div>
 
 <!-- Stats card -->
-<div class="card">
-  <div class="hmap-label" style="margin-bottom:1rem;">Statistik</div>
+<div class="card" style="position:relative;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div class="hmap-label">Statistik</div>
+    <button class="stats-more-btn" id="stats-more-btn">Mehr Infos</button>
+  </div>
   <div class="stats-row">
     <div class="stat-box" id="level-box">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
@@ -761,6 +866,23 @@
       <div class="stat-value" id="stat-week-val">—</div>
       <div class="stat-delta" id="stat-week-delta"></div>
     </div>
+  </div>
+
+  <!-- Stats detail overlay panel -->
+  <div class="stats-detail-panel" id="stats-detail-panel">
+    <div class="stats-detail-header">
+      <div class="stats-detail-title">Lernzeit pro Label</div>
+      <button class="stats-back-btn" id="stats-back-btn">Zurück</button>
+    </div>
+    <div class="stats-period-tabs">
+      <button class="stats-period-btn active" data-period="today">Heute</button>
+      <button class="stats-period-btn" data-period="week">Woche</button>
+      <button class="stats-period-btn" data-period="alltime">Gesamt</button>
+    </div>
+    <div class="stats-label-list" id="stats-label-list">
+      <div class="stats-detail-empty">Keine Daten für diesen Zeitraum.</div>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;" id="stats-detail-status"></div>
   </div>
 </div>
 
@@ -816,6 +938,9 @@
   let offDays = {};       // { 'YYYY-MM-DD': true } — manually struck out
   let offWeekdays = [];   // [0..6] JS weekday numbers (0=Sun)
   let totalPomodoros = 0; // session counter for toast messages
+  let currentLabel = '';   // label for the current Pomodoro session
+  let labelHistory = [];   // previously used labels (for autocomplete)
+  let labelSessions = [];  // { date, label, minutes } — local per-label session log
 
   /* ── Storage ── */
   function todayKey() {
@@ -841,6 +966,22 @@
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify({days, offDays, offWeekdays, totalPomodoros})); } catch(e) {}
+  }
+
+  const LABELS_KEY = 'pomo_labels_v1';
+
+  function loadLabels() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LABELS_KEY) || '{}');
+      labelHistory = raw.labelHistory || [];
+      labelSessions = raw.labelSessions || [];
+    } catch(e) { labelHistory = []; labelSessions = []; }
+  }
+
+  function saveLabels() {
+    try {
+      localStorage.setItem(LABELS_KEY, JSON.stringify({ labelHistory, labelSessions }));
+    } catch(e) {}
   }
 
   const SETTINGS_KEY = 'pomo_settings_v1';
@@ -1329,7 +1470,19 @@
     days[key] = (days[key] || 0) + mins;
     totalPomodoros++;
     save();
-    if (currentUser) addStudyMinutes(key, mins);
+    // Save label session locally
+    const label = currentLabel.trim() || 'not specified';
+    labelSessions.push({ date: key, label, minutes: mins });
+    if (labelSessions.length > 500) labelSessions.splice(0, labelSessions.length - 500);
+    if (label !== 'not specified' && !labelHistory.includes(label)) {
+      labelHistory.unshift(label);
+      if (labelHistory.length > 50) labelHistory.pop();
+    }
+    saveLabels();
+    if (currentUser) {
+      addStudyMinutes(key, mins);
+      addPomoSession(key, mins, label);
+    }
     launchConfetti();
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
@@ -1349,6 +1502,20 @@
       });
       if (!res.ok) console.warn('addStudyMinutes failed:', res.status, await res.text());
     } catch(e) { console.warn('addStudyMinutes error:', e); }
+  }
+
+  async function addPomoSession(date, minutes, label) {
+    if (!currentUser) return;
+    const token = await getValidToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${SB}/rest/v1/pomodoro_sessions`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ user_id: currentUser.id, date, minutes, label }),
+      });
+      if (!res.ok) console.warn('addPomoSession failed:', res.status, await res.text());
+    } catch(e) { console.warn('addPomoSession error:', e); }
   }
 
   function onTimerEnd() {
@@ -2702,6 +2869,150 @@
     });
   }
 
+  /* ── Label Input ── */
+  function initLabelInput() {
+    const input = document.getElementById('label-input');
+    const saveBtn = document.getElementById('label-save-btn');
+    const dropdown = document.getElementById('label-autocomplete');
+
+    function showAutocomplete(filter) {
+      const filtered = filter
+        ? labelHistory.filter(l => l.toLowerCase().includes(filter.toLowerCase()))
+        : labelHistory;
+      if (!filtered.length) { dropdown.classList.remove('open'); return; }
+      dropdown.innerHTML = filtered.map(l =>
+        `<div class="label-option">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`
+      ).join('');
+      dropdown.classList.add('open');
+      dropdown.querySelectorAll('.label-option').forEach(opt => {
+        opt.addEventListener('mousedown', e => {
+          e.preventDefault();
+          input.value = opt.textContent;
+          currentLabel = opt.textContent;
+          dropdown.classList.remove('open');
+          saveBtn.textContent = 'Gespeichert ✓';
+          saveBtn.classList.add('saved');
+          setTimeout(() => { saveBtn.classList.remove('saved'); saveBtn.textContent = 'Speichern'; }, 1500);
+        });
+      });
+    }
+
+    input.addEventListener('focus', () => showAutocomplete(input.value));
+    input.addEventListener('input', () => {
+      currentLabel = input.value;
+      showAutocomplete(input.value);
+      saveBtn.classList.remove('saved');
+      saveBtn.textContent = 'Speichern';
+    });
+    input.addEventListener('blur', () => {
+      setTimeout(() => dropdown.classList.remove('open'), 150);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { saveBtn.click(); input.blur(); }
+      if (e.key === 'Escape') { dropdown.classList.remove('open'); input.blur(); }
+    });
+
+    saveBtn.addEventListener('click', () => {
+      currentLabel = input.value.trim();
+      saveBtn.textContent = 'Gespeichert ✓';
+      saveBtn.classList.add('saved');
+      setTimeout(() => { saveBtn.classList.remove('saved'); saveBtn.textContent = 'Speichern'; }, 1500);
+      dropdown.classList.remove('open');
+    });
+  }
+
+  /* ── Stats Detail Panel ── */
+  function initStatsDetail() {
+    const moreBtn = document.getElementById('stats-more-btn');
+    const panel = document.getElementById('stats-detail-panel');
+    const backBtn = document.getElementById('stats-back-btn');
+    let detailPeriod = 'today';
+
+    function berlDate(daysAgo) {
+      const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+      if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+      d.setDate(d.getDate() - daysAgo);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    async function renderLabelStats(period) {
+      const listEl = document.getElementById('stats-label-list');
+      const statusEl = document.getElementById('stats-detail-status');
+      listEl.innerHTML = '<div class="stats-detail-empty">Wird geladen…</div>';
+      statusEl.textContent = '';
+
+      let sessions = [];
+
+      if (currentUser) {
+        const token = await getValidToken();
+        if (token) {
+          try {
+            let url = `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${currentUser.id}&select=date,label,minutes&order=date.desc`;
+            if (period === 'today') url += `&date=eq.${berlDate(0)}`;
+            else if (period === 'week') url += `&date=gte.${berlDate(6)}`;
+            const res = await fetch(url, { headers: authHeaders(token) });
+            if (res.ok) {
+              sessions = await res.json();
+            } else {
+              statusEl.textContent = 'Tabelle noch nicht erstellt – bitte SQL-Befehl ausführen.';
+              listEl.innerHTML = '<div class="stats-detail-empty">Keine Daten verfügbar.</div>';
+              return;
+            }
+          } catch(e) { console.warn('loadLabelStats error', e); }
+        }
+      } else {
+        const today = todayKey();
+        const weekFrom = berlDate(6);
+        sessions = labelSessions.filter(s => {
+          if (period === 'today') return s.date === today;
+          if (period === 'week') return s.date >= weekFrom;
+          return true;
+        });
+        statusEl.textContent = 'Anmelden für vollständige Statistiken.';
+      }
+
+      const map = {};
+      for (const s of sessions) {
+        const lbl = s.label || 'not specified';
+        map[lbl] = (map[lbl] || 0) + (s.minutes || 0);
+      }
+      const entries = Object.entries(map).sort((a, b) => b[1] - a[1]);
+
+      if (!entries.length) {
+        listEl.innerHTML = '<div class="stats-detail-empty">Keine Daten für diesen Zeitraum.</div>';
+        return;
+      }
+      listEl.innerHTML = entries.map(([lbl, mins]) =>
+        `<div class="stats-label-item">
+          <span class="stats-label-name">${lbl.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>
+          <span class="stats-label-val">${minutesToDisplay(mins)}</span>
+        </div>`
+      ).join('');
+    }
+
+    function syncPeriodBtns() {
+      document.querySelectorAll('.stats-period-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.period === detailPeriod));
+    }
+
+    document.querySelectorAll('.stats-period-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        detailPeriod = btn.dataset.period;
+        syncPeriodBtns();
+        renderLabelStats(detailPeriod);
+      });
+    });
+
+    moreBtn.addEventListener('click', () => {
+      panel.classList.add('open');
+      renderLabelStats(detailPeriod);
+    });
+
+    backBtn.addEventListener('click', () => {
+      panel.classList.remove('open');
+    });
+  }
+
   /* ── Init ── */
   registerSW();
   drawTicks();
@@ -2712,7 +3023,10 @@
   initSound();
   initPrivacyToggle();
   initAvatarUpload();
+  initLabelInput();
+  initStatsDetail();
   load();
+  loadLabels();
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
   syncWdBtns();
