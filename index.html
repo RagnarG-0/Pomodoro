@@ -613,6 +613,55 @@
   .merge-btn-yes { color: var(--accent); border-color: var(--accent); }
   .merge-btn-no:hover { background: var(--surface2); }
   .merge-btn-yes:hover { background: var(--accent); color: #fff; }
+
+  /* ── Label Stats: Period Tabs ── */
+  .label-period-tabs {
+    display: flex; gap: 5px; margin-bottom: 1rem;
+  }
+  .label-period-tab {
+    font-size: 11px; padding: 4px 10px;
+    border: 0.5px solid var(--border-strong); border-radius: 16px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; transition: all 0.12s; font-family: 'Georgia', serif;
+    letter-spacing: 0.03em;
+  }
+  .label-period-tab:hover { background: var(--surface2); color: var(--text); }
+  .label-period-tab.active { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+
+  /* ── Label Stats: Table + Chart layout ── */
+  .stats-detail-body {
+    display: flex; gap: 1.5rem; align-items: flex-start;
+  }
+  .stats-detail-table-wrap { flex: 1; min-width: 0; }
+  .stats-detail-chart-wrap {
+    flex-shrink: 0; width: 150px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .detail-label-row-2col {
+    display: grid; grid-template-columns: 1fr 76px;
+    gap: 6px; align-items: center;
+    padding: 7px 0; border-bottom: 0.5px solid var(--border);
+    font-family: 'Georgia', serif;
+  }
+  .detail-label-row-2col:last-child { border-bottom: none; }
+  .detail-label-row-2col:hover .label-edit-btn { opacity: 1; }
+  .pie-dot {
+    flex-shrink: 0; width: 8px; height: 8px;
+    border-radius: 50%; display: inline-block;
+  }
+  .pie-svg { width: 140px; height: 140px; display: block; }
+  .pie-slice { transition: opacity 0.15s; cursor: default; }
+  .pie-slice:hover { opacity: 0.78; }
+  .pie-no-data {
+    text-align: center; color: var(--text-muted);
+    font-size: 11px; padding: 1.5rem 0;
+  }
+
+  @media (max-width: 500px) {
+    .stats-detail-body { flex-direction: column-reverse; gap: 1rem; }
+    .stats-detail-chart-wrap { width: 100%; }
+    .pie-svg { width: 120px; height: 120px; }
+  }
 </style>
 </head>
 <body>
@@ -980,6 +1029,14 @@
 
   let currentLabel = '';
   let currentLabelStatsData = [];
+  let currentStatsPeriod = 'alltime';
+
+  const PIE_COLORS = [
+    '#0F6E56','#1D9E75','#5DCAA5','#9FE1CB','#C5F0E3',
+    '#085041','#147A5E','#22B385','#6DD4B5','#AEEBD6',
+    '#0A4D3C','#1A9068','#3FBD96','#80D8BF','#B8EDDA',
+    '#0D5E4A','#19A078','#50C9A7','#90DFCB','#BFEFDF',
+  ];
 
   let mode = 'work';
   let totalSec = 25 * 60;
@@ -2978,30 +3035,103 @@
       content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Noch keine Label-Daten vorhanden.<br><span style="font-size:11px;">Benenne deine nächste Session und starte den Timer!</span></div>';
       return;
     }
-    const pencilSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
-    const header = `<div class="detail-label-row" style="border-bottom:0.5px solid var(--border-strong);padding-bottom:6px;margin-bottom:2px;">
-      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Label</div>
-      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Heute</div>
-      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Woche</div>
-      <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">Gesamt</div>
-    </div>`;
+
+    const PERIOD_LABELS = { today: 'Heute', month: 'Monat', alltime: 'Gesamt' };
+
+    function getPeriodMin(s) {
+      if (currentStatsPeriod === 'today') return +(s.today_minutes) || 0;
+      if (currentStatsPeriod === 'month') return +(s.month_minutes) || 0;
+      return +(s.alltime_minutes) || 0;
+    }
+
+    const sorted = stats
+      .map(s => ({ ...s, _min: getPeriodMin(s) }))
+      .filter(s => s._min > 0 || currentStatsPeriod === 'alltime')
+      .sort((a, b) => b._min - a._min)
+      .slice(0, 20);
+
+    const colorMap = {};
+    sorted.forEach((s, i) => { colorMap[s.label] = PIE_COLORS[i]; });
+
     const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-    const rows = stats.map(s => {
-      const todayStr  = s.today_minutes  > 0 ? minutesToDisplay(+s.today_minutes)   : '—';
-      const weekStr   = s.week_minutes   > 0 ? minutesToDisplay(+s.week_minutes)    : '—';
-      const totalStr  =                        minutesToDisplay(+s.alltime_minutes);
-      const safe = enc(s.label);
-      return `<div class="detail-label-row">
-        <div class="label-name-cell">
-          <span class="label-name-text" title="${safe}">${safe}</span>
-          <button class="label-edit-btn" data-label="${safe}" title="Label umbenennen">${pencilSvg}</button>
-        </div>
-        <div style="font-size:12px;color:var(--text-muted);text-align:right;">${todayStr}</div>
-        <div style="font-size:12px;color:var(--text-muted);text-align:right;">${weekStr}</div>
-        <div style="font-size:12px;color:var(--accent);text-align:right;font-weight:normal;">${totalStr}</div>
+    const pencilSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
+
+    const tabs = `<div class="label-period-tabs">${
+      Object.entries(PERIOD_LABELS).map(([p, label]) =>
+        `<button class="label-period-tab${currentStatsPeriod === p ? ' active' : ''}" data-period="${p}">${label}</button>`
+      ).join('')
+    }</div>`;
+
+    let tableHtml;
+    if (!sorted.length) {
+      tableHtml = `<div class="pie-no-data">Keine Daten für diesen Zeitraum.</div>`;
+    } else {
+      const colLabel = PERIOD_LABELS[currentStatsPeriod];
+      const header = `<div class="detail-label-row-2col" style="border-bottom:0.5px solid var(--border-strong);padding-bottom:6px;margin-bottom:2px;">
+        <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Label</div>
+        <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">${colLabel}</div>
       </div>`;
-    }).join('');
-    content.innerHTML = header + rows;
+      const rows = sorted.map(s => {
+        const safe = enc(s.label);
+        const dot = colorMap[s.label];
+        const val = s._min > 0 ? minutesToDisplay(s._min) : '—';
+        return `<div class="detail-label-row-2col">
+          <div class="label-name-cell">
+            <span class="pie-dot" style="background:${dot};"></span>
+            <span class="label-name-text" title="${safe}">${safe}</span>
+            <button class="label-edit-btn" data-label="${safe}" data-color="${dot}" title="Label umbenennen">${pencilSvg}</button>
+          </div>
+          <div style="font-size:12px;color:var(--accent);text-align:right;">${val}</div>
+        </div>`;
+      }).join('');
+      tableHtml = header + rows;
+    }
+
+    const pieHtml = renderPieChart(sorted, colorMap);
+
+    content.innerHTML = tabs + `<div class="stats-detail-body">
+      <div class="stats-detail-table-wrap">${tableHtml}</div>
+      <div class="stats-detail-chart-wrap">${pieHtml}</div>
+    </div>`;
+
+    content.querySelectorAll('.label-period-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentStatsPeriod = btn.dataset.period;
+        renderLabelStats(currentLabelStatsData);
+      });
+    });
+  }
+
+  function renderPieChart(items, colorMap) {
+    const valid = items.filter(s => s._min > 0);
+    if (!valid.length) return `<div class="pie-no-data">—</div>`;
+
+    const total = valid.reduce((s, x) => s + x._min, 0);
+    const cx = 70, cy = 70, r = 62;
+    const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+    let inner;
+    if (valid.length === 1) {
+      inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${colorMap[valid[0].label]}" class="pie-slice"><title>${enc(valid[0].label)}: 100%</title></circle>`;
+    } else {
+      let startAngle = -Math.PI / 2;
+      inner = valid.map(s => {
+        const frac = s._min / total;
+        const sweep = frac * 2 * Math.PI;
+        const endAngle = startAngle + sweep;
+        const x1 = (cx + r * Math.cos(startAngle)).toFixed(2);
+        const y1 = (cy + r * Math.sin(startAngle)).toFixed(2);
+        const x2 = (cx + r * Math.cos(endAngle)).toFixed(2);
+        const y2 = (cy + r * Math.sin(endAngle)).toFixed(2);
+        const large = sweep > Math.PI ? 1 : 0;
+        const pct = Math.round(frac * 100);
+        const path = `<path d="M${cx},${cy} L${x1},${y1} A${r},${r},0,${large},1,${x2},${y2}Z" fill="${colorMap[s.label]}" class="pie-slice"><title>${enc(s.label)}: ${pct}%</title></path>`;
+        startAngle = endAngle;
+        return path;
+      }).join('');
+    }
+
+    return `<svg viewBox="0 0 140 140" class="pie-svg" role="img">${inner}</svg>`;
   }
 
   async function renameLabelInDb(oldLabel, newLabel) {
@@ -3072,9 +3202,10 @@
     document.getElementById('stats-detail-content').addEventListener('click', async function(e) {
       const btn = e.target.closest('.label-edit-btn');
       if (!btn) return;
-      const row = btn.closest('.detail-label-row');
+      const row = btn.closest('.detail-label-row, .detail-label-row-2col');
       const nameCell = row.querySelector('.label-name-cell');
       const labelName = btn.dataset.label; // already decoded by browser
+      const dotColor = btn.dataset.color || '';
 
       nameCell.innerHTML = `<div class="label-edit-inline">
         <input class="label-edit-input" value="${enc(labelName)}" maxlength="60">
@@ -3086,7 +3217,8 @@
       input.select();
 
       function restoreCell() {
-        nameCell.innerHTML = `<span class="label-name-text" title="${enc(labelName)}">${enc(labelName)}</span><button class="label-edit-btn" data-label="${enc(labelName)}" title="Label umbenennen">${pencilSvg}</button>`;
+        const dotHtml = dotColor ? `<span class="pie-dot" style="background:${dotColor};"></span>` : '';
+        nameCell.innerHTML = `${dotHtml}<span class="label-name-text" title="${enc(labelName)}">${enc(labelName)}</span><button class="label-edit-btn" data-label="${enc(labelName)}" data-color="${dotColor}" title="Label umbenennen">${pencilSvg}</button>`;
       }
 
       async function doSave() {
