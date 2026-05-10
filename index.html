@@ -1031,6 +1031,23 @@
   let currentLabelStatsData = [];
   let currentStatsPeriod = 'alltime';
 
+  const CACHE_TTL_LABEL_STATS = 5 * 60 * 1000;
+  const CACHE_TTL_LB = { today: 2 * 60 * 1000, week: 10 * 60 * 1000, month: 10 * 60 * 1000, alltime: 10 * 60 * 1000 };
+
+  function cacheGet(key, ttl) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts > ttl) return null;
+      return data;
+    } catch(e) { return null; }
+  }
+  function cacheSet(key, data) {
+    try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch(e) {}
+  }
+  function cacheDel(key) { try { localStorage.removeItem(key); } catch(e) {} }
+
   const PIE_COLORS = [
     '#0F6E56','#1D9E75','#5DCAA5','#9FE1CB','#C5F0E3',
     '#085041','#147A5E','#22B385','#6DD4B5','#AEEBD6',
@@ -2167,16 +2184,26 @@
       'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
   }
 
-  async function loadLeaderboard(period) {
+  async function loadLeaderboard(period, forceRefresh = false) {
     if (!supabaseReady()) {
       document.getElementById('lb-status').textContent = 'Supabase nicht konfiguriert.';
       return;
     }
     if (period) lbPeriod = period;
     const status = document.getElementById('lb-status');
-    status.textContent = 'Wird geladen …';
 
-    // Use valid (auto-refreshed) token
+    const cacheKey = `pomo_lb_cache_${lbPeriod}`;
+    if (!forceRefresh) {
+      const cached = cacheGet(cacheKey, CACHE_TTL_LB[lbPeriod]);
+      if (cached) {
+        yesterdayWinner = cached.winner;
+        renderLeaderboard(cached.list);
+        status.textContent = '';
+        return;
+      }
+    }
+
+    status.textContent = 'Wird geladen …';
     const token = await getValidToken() || SUPABASE_ANON_KEY;
     const headers = {
       'Content-Type': 'application/json',
@@ -2211,7 +2238,6 @@
         list = await res.json();
       }
       renderLeaderboard(list);
-      console.log('Leaderboard data:', list);
       // Fetch yesterday's winner for gold border highlight
       try {
         const ywRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_yesterday_winner`, {
@@ -2219,9 +2245,11 @@
         });
         if (ywRes.ok) {
           yesterdayWinner = await ywRes.json();
-          renderLeaderboard(list); // re-render with winner info
+          renderLeaderboard(list);
         }
       } catch(e) { /* non-critical */ }
+      cacheSet(cacheKey, { list, winner: yesterdayWinner });
+      status.textContent = '';
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
       console.warn('Leaderboard load error', e);
@@ -2243,7 +2271,7 @@
       });
     });
 
-    document.getElementById('lb-refresh').addEventListener('click', () => loadLeaderboard());
+    document.getElementById('lb-refresh').addEventListener('click', () => loadLeaderboard(undefined, true));
 
     // Auto-refresh every 60s when tab is visible
     setInterval(() => {
@@ -3004,11 +3032,16 @@
   }
 
   /* ── Label Statistics ── */
-  async function loadLabelStats() {
+  async function loadLabelStats(forceRefresh = false) {
     const content = document.getElementById('stats-detail-content');
     if (!currentUser) {
       content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Bitte anmelden, um Label-Statistiken zu sehen.</div>';
       return;
+    }
+    const cacheKey = `pomo_label_stats_${currentUser.id}`;
+    if (!forceRefresh) {
+      const cached = cacheGet(cacheKey, CACHE_TTL_LABEL_STATS);
+      if (cached) { renderLabelStats(cached); return; }
     }
     content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Wird geladen…</div>';
     const token = await getValidToken();
@@ -3021,6 +3054,7 @@
       });
       if (!res.ok) throw new Error(res.status + ' ' + await res.text());
       const stats = await res.json();
+      cacheSet(cacheKey, stats);
       renderLabelStats(stats);
     } catch(e) {
       content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Konnte nicht geladen werden.</div>';
@@ -3233,14 +3267,14 @@
           showMergeBanner(labelName, newLabel,
             async () => {
               const ok = await renameLabelInDb(labelName, newLabel);
-              if (ok) { renameLabelInStorage(labelName, newLabel); await loadLabelStats(); }
+              if (ok) { renameLabelInStorage(labelName, newLabel); cacheDel(`pomo_label_stats_${currentUser?.id}`); await loadLabelStats(true); }
               else { restoreCell(); toast('Zusammenführen fehlgeschlagen – bitte erneut versuchen.'); }
             },
             () => restoreCell()
           );
         } else {
           const ok = await renameLabelInDb(labelName, newLabel);
-          if (ok) { renameLabelInStorage(labelName, newLabel); await loadLabelStats(); }
+          if (ok) { renameLabelInStorage(labelName, newLabel); cacheDel(`pomo_label_stats_${currentUser?.id}`); await loadLabelStats(true); }
           else { restoreCell(); toast('Umbenennen fehlgeschlagen – bitte erneut versuchen.'); }
         }
       }
