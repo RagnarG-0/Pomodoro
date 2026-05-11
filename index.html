@@ -2283,10 +2283,12 @@
     const status = document.getElementById('lb-status');
 
     const cacheKey = `pomo_lb_cache_${lbPeriod}`;
+    const winnerCacheKey = 'pomo_lb_winner';
     if (!forceRefresh) {
       const cached = cacheGet(cacheKey, CACHE_TTL_LB[lbPeriod]);
       if (cached) {
-        yesterdayWinner = cached.winner;
+        const cachedWinner = cacheGet(winnerCacheKey, 60 * 60 * 1000);
+        yesterdayWinner = cachedWinner !== null ? cachedWinner : cached.winner;
         renderLeaderboard(cached.list);
         status.textContent = '';
         return;
@@ -2334,11 +2336,15 @@
           method: 'POST', headers, body: JSON.stringify({}),
         });
         if (ywRes.ok) {
-          yesterdayWinner = await ywRes.json();
-          renderLeaderboard(list);
+          const w = await ywRes.json();
+          if (w) {
+            yesterdayWinner = w;
+            cacheSet(winnerCacheKey, w);
+            renderLeaderboard(list);
+          }
         }
-      } catch(e) { /* non-critical */ }
-      cacheSet(cacheKey, { list, winner: yesterdayWinner });
+      } catch(e) { console.warn('get_yesterday_winner error', e); }
+      cacheSet(cacheKey, { list });
       status.textContent = '';
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
