@@ -963,6 +963,18 @@
       <div class="stat-delta" id="stat-week-delta"></div>
     </div>
   </div>
+  <div class="stats-row" style="margin-top:0;">
+    <div class="stat-box">
+      <div class="stat-label">Aktuelle Streak</div>
+      <div class="stat-value" id="stat-streak-val">—</div>
+      <div class="stat-delta" id="stat-streak-record"></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Bester Tag</div>
+      <div class="stat-value" id="stat-bestday-val">—</div>
+      <div class="stat-delta" id="stat-bestday-date"></div>
+    </div>
+  </div>
 
   <!-- Label Stats Detail Overlay -->
   <div id="stats-detail-panel">
@@ -1452,6 +1464,53 @@
       barEl.style.width = '100%';
     }
   }
+  function computeCurrentStreak() {
+    let streak = 0;
+    for (let i = 0; i <= 365; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      if (isOff(d, key)) continue;
+      if ((days[key] || 0) > 0) { streak++; }
+      else if (i === 0) { /* today empty, check earlier */ }
+      else break;
+    }
+    return streak;
+  }
+
+  function computeLongestStreak() {
+    const studyDays = Object.keys(days).filter(k => days[k] > 0).sort();
+    if (!studyDays.length) return 0;
+    let longest = 0, current = 0, prevKey = null;
+    for (const key of studyDays) {
+      const d = new Date(key + 'T12:00:00');
+      if (isOff(d, key)) continue;
+      if (!prevKey) {
+        current = 1;
+      } else {
+        const prev = new Date(prevKey + 'T12:00:00');
+        const diff = Math.round((d - prev) / 86400000);
+        let gapAllOff = true;
+        for (let j = 1; j < diff; j++) {
+          const mid = new Date(prev); mid.setDate(prev.getDate() + j);
+          const midKey = mid.toISOString().slice(0, 10);
+          if (!isOff(mid, midKey)) { gapAllOff = false; break; }
+        }
+        current = gapAllOff ? current + 1 : 1;
+      }
+      longest = Math.max(longest, current);
+      prevKey = key;
+    }
+    return longest;
+  }
+
+  function computeBestDay() {
+    let bestKey = null, bestMin = 0;
+    for (const [k, v] of Object.entries(days)) {
+      if (v > bestMin) { bestMin = v; bestKey = k; }
+    }
+    return { key: bestKey, min: bestMin };
+  }
+
   function renderStats() {
     renderLevel();
 
@@ -1501,6 +1560,35 @@
       } else {
         weekDeltaEl.textContent = '';
       }
+    }
+
+    // ── Streak ──
+    const curStreak  = computeCurrentStreak();
+    const longStreak = computeLongestStreak();
+    const streakEl   = document.getElementById('stat-streak-val');
+    const recordEl   = document.getElementById('stat-streak-record');
+    if (curStreak === 0) {
+      streakEl.textContent = '—';
+      recordEl.textContent = longStreak > 0 ? `Rekord: ${longStreak} Tag${longStreak !== 1 ? 'e' : ''}` : '';
+      recordEl.className = 'stat-delta flat';
+    } else {
+      streakEl.textContent = `🔥 ${curStreak} Tag${curStreak !== 1 ? 'e' : ''}`;
+      recordEl.textContent = longStreak > curStreak ? `Rekord: ${longStreak} Tage` : 'Persönlicher Rekord!';
+      recordEl.className   = longStreak > curStreak ? 'stat-delta flat' : 'stat-delta up';
+    }
+
+    // ── Best day ──
+    const best = computeBestDay();
+    const bestValEl  = document.getElementById('stat-bestday-val');
+    const bestDateEl = document.getElementById('stat-bestday-date');
+    if (!best.key || best.min === 0) {
+      bestValEl.textContent  = '—';
+      bestDateEl.textContent = '';
+    } else {
+      const [y, m, dd] = best.key.split('-').map(Number);
+      bestValEl.textContent  = minutesToDisplay(best.min);
+      bestDateEl.textContent = `${dd}. ${MONTHS_DE[m - 1]} ${y}`;
+      bestDateEl.className   = 'stat-delta flat';
     }
   }
 
