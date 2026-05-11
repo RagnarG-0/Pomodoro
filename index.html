@@ -1696,12 +1696,12 @@
     } catch(e) { console.warn('addStudyMinutes error:', e); }
   }
 
-  function onTimerEnd() {
+  async function onTimerEnd() {
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_RESET' });
-    clearTimerState();
+    const claimed = await clearTimerState();
     if (mode==='work') {
-      completePomo();
+      if (claimed) completePomo();
       const next=(totalPomodoros%getLongAfter()===0)?'long':'short';
       setTimeout(()=>switchTo(next, false),1400);
     } else {
@@ -1976,9 +1976,9 @@
       navigator.serviceWorker.addEventListener('message', async e => {
         if (e.data?.type === 'TIMER_DONE' && running) {
           clearInterval(tid); running = false; startedAt = null;
-          await clearTimerState(); // clear BEFORE completing to prevent double-count
+          const claimed = await clearTimerState();
           if (e.data.mode === 'work') {
-            completePomo();
+            if (claimed) completePomo();
             const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
             setTimeout(() => switchTo(next, false), 1400);
           } else {
@@ -2013,14 +2013,17 @@
   }
 
   async function clearTimerState() {
-    if (!currentUser) return;
+    if (!currentUser) return true;
     const token = await getValidToken();
-    if (!token) return;
+    if (!token) return true;
     try {
-      await fetch(`${SB}/rest/v1/timer_state?user_id=eq.${currentUser.id}`, {
-        method: 'DELETE', headers: authHeaders(token),
+      const res = await fetch(`${SB}/rest/v1/timer_state?user_id=eq.${currentUser.id}`, {
+        method: 'DELETE', headers: { ...authHeaders(token), 'Prefer': 'return=representation' },
       });
-    } catch(e) { console.warn('clearTimerState error', e); }
+      if (!res.ok) return true;
+      const deleted = await res.json();
+      return Array.isArray(deleted) && deleted.length > 0;
+    } catch(e) { console.warn('clearTimerState error', e); return true; }
   }
 
   async function loadTimerState() {
@@ -2059,8 +2062,7 @@
         renderTimer();
         toast('Timer wird fortgesetzt…');
       } else {
-        // Timer expired while away — clear state FIRST to prevent double-counting on reload
-        await clearTimerState();
+        // Timer expired while away — onTimerEnd claims the timer_state row atomically
         mode = state.mode || 'work';
         totalSec = state.total_sec;
         remaining = 0;
