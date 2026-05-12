@@ -1398,7 +1398,7 @@
     add5Btn.style.display = isBreak ? 'none' : 'inline-flex';
     skipBtn.disabled = !isBreak;
     const elapsedSec = totalSec - remaining;
-    finishEarlyBtn.style.display = (!isBreak && running && elapsedSec >= 25 * 60) ? 'inline-flex' : 'none';
+    finishEarlyBtn.style.display = (!isBreak && remaining < totalSec && elapsedSec >= 25 * 60) ? 'inline-flex' : 'none';
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
   }
 
@@ -2192,7 +2192,7 @@
   document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; syncModeBtns(); reset(); }));
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
   document.getElementById('btn-reset').addEventListener('click', () => {
-    if (mode === 'work' && running) {
+    if (mode === 'work' && remaining < totalSec) {
       showTimerConfirmBanner('Timer wirklich zurücksetzen? Der aktuelle Fokus-Fortschritt geht verloren.', reset);
     } else {
       reset();
