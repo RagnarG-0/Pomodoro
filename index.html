@@ -3164,7 +3164,7 @@
       });
     }
 
-    input.addEventListener('focus', () => showDropdown(input.value));
+    input.addEventListener('focus', () => showDropdown(null));
     input.addEventListener('input', () => showDropdown(input.value));
     input.addEventListener('blur', () => setTimeout(() => dropdown.classList.remove('open'), 150));
 
