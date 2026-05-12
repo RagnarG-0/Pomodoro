@@ -137,49 +137,40 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 
 ---
 
-## Clan-System (teilweise implementiert — SQL-Migration noch ausstehend)
+## Clan-System (Phase 1 implementiert ✅)
 
-### Datenbank
+### Datenbank ✅
+- Tabelle `clans`: `id`, `name`, `leader_id`, `min_focus_min`, `max_focus_min`, `level_config`, `created_at`
+- Tabelle `clan_requests`: `id`, `clan_id`, `user_id`, `status` (`pending`/`accepted`/`rejected`), `created_at`
+- `profiles` erweitert um `clan_id` und `clan_role` (`'leader'`\|`'member'`\|null)
+- RLS: `profiles_read_own` (eigenes Profil), `profiles_read_clan_peers` (via `my_clan_id()` SECURITY DEFINER)
+- **Wichtig**: Subqueries in RLS-Policies auf `profiles` müssen SECURITY DEFINER-Funktionen nutzen, sonst rekursiver Loop → Profil nicht lesbar → Auto-Reset
 
-**Neue Tabelle `clans`**
-| Spalte | Typ | Beschreibung |
-|---|---|---|
-| `id` | uuid PK | |
-| `name` | text unique | |
-| `leader_id` | uuid FK → auth.users | |
-| `min_focus_min` | int default 1 | Harte Untergrenze für Timer |
-| `max_focus_min` | int default 300 | Harte Obergrenze für Timer |
-| `level_config` | jsonb | Array `{min_minutes, name, icon}` × 25 |
-| `created_at` | timestamptz | |
-
-**Änderungen an `profiles`**: `clan_id` (uuid nullable), `clan_role` (`'leader'` \| `'member'` \| null)
-
-**Neue Tabelle `clan_requests`**: `id`, `clan_id`, `user_id`, `status` (`'pending'` \| `'accepted'` \| `'rejected'`), `created_at`
-- Nur Nutzer → Clan (keine Einladungen vom Leader)
-
-### RPCs
+### RPCs (deployed) ✅
 | Funktion | Zweck |
 |---|---|
-| `create_clan(p_name)` | Clan anlegen, Aufrufer wird Leader |
-| `request_join_clan(p_clan_id)` | Beitrittsanfrage stellen |
-| `respond_to_request(p_request_id, p_accept)` | Leader bestätigt/lehnt ab |
-| `remove_clan_member(p_user_id)` | Leader entfernt Mitglied |
-| `leave_clan()` | Mitglied/Leader verlässt; Nachfolger = Mitglied mit meisten Minuten (bei Gleichstand zufällig) |
-| `leaderboard_clan(p_clan_id, p_period)` | Leaderboard für Clan-Mitglieder |
-| `leaderboard_clan_comparison()` | ⌀ Minuten pro aktivem Mitglied je Clan (aktiv = mind. 1 Session im Zeitraum) |
-| `get_pending_requests(p_clan_id)` | Offene Anfragen für Leader |
+| `respond_to_clan_request(p_request_id, p_accept)` | Leader bestätigt/lehnt Anfrage ab; updated profiles bei Accept |
+| `remove_clan_member(p_user_id)` | Leader entfernt Mitglied (SECURITY DEFINER) |
+| `submit_join_request()` | Neue Nutzer: findet Clan automatisch, legt pending request an |
+| `get_clan_members()` | Gibt Mitglieder des eigenen Clans zurück (SECURITY DEFINER) |
+| `my_clan_id()` | Hilfsfunktion für RLS-Policy (SECURITY DEFINER, kein direkter Aufruf) |
 
-### UI
-- **Registrierungsflow**: Nach erstem Login Screen mit „Clan gründen" / „Clan beitreten" / „Später" _(ausstehend)_
-- **Header**: Glocken-Icon mit Badge für Leader; Klick öffnet Dropdown mit offenen Anfragen (Bestätigen/Ablehnen) ✅
-- **Leaderboard**: Scope-Tabs „Mein Clan · Global · Clan-Vergleich" über den bestehenden Zeitraum-Tabs _(ausstehend)_
-- **Leader-Einstellungen**: Min./Max. Fokuszeit ✅, Level-Namen-Editor _(ausstehend)_, Mitgliederliste mit Entfernen-Button ✅
-- **Timer**: `+5 min` geclampt auf `clanMaxFocus` ✅; Timer-Input in Settings geclampt ✅
-- **Neue Nutzer**: `submitJoinRequest()` wird automatisch nach Registrierung aufgerufen ✅
+### UI ✅
+- **Header**: Glocken-Icon (nur Leader) mit Badge + Dropdown für Beitrittsanfragen
+- **Header**: „Clan"-Button (Nutzer ohne Clan) mit Dropdown zum Anfragen
+- **Leaderboard**: nur sichtbar wenn `userPublic && clanRole` — neue unapproved Nutzer sehen es nicht
+- **Leader-Einstellungen**: Min./Max. Fokuszeit + Mitgliederliste mit Entfernen-Button
+- **Timer**: `+5 min` geclampt auf `clanMaxFocus`
+- **Neue Nutzer**: `submitJoinRequest()` automatisch nach Registrierung
 
-### Migration bestehender Nutzer ✅
-- SQL-Script `clan_migration.sql` erstellt — **noch im Supabase SQL-Editor ausführen**
-- Legt Clan „Schwitzende Verbindung Halle" an, Ragnar als Leader, alle `public = true` Profile als Member
+### Migration ✅
+- Clan „Schwitzende Verbindung Halle" angelegt, Ragnar als Leader
+- Alle `public = true` Profile direkt als Member eingetragen
+
+### Ausstehend (Phase 2)
+- Leaderboard-Tabs: Mein Clan / Global / Clan-Vergleich
+- Level-Namen-Editor für Leader
+- Registrierungsflow: Clan gründen / beitreten / überspringen
 
 ### Default Level-Namen
 | Level | Name | Icon | Ab (Min) |
