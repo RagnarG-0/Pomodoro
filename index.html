@@ -66,6 +66,66 @@
   #gear-btn.open { transform: rotate(60deg); color: var(--accent); }
   #gear-btn svg { width: 16px; height: 16px; }
 
+  /* ── Bell (Leader only) ── */
+  #bell-wrap {
+    position: relative; display: none; align-items: center; margin-right: 6px;
+  }
+  #bell-btn {
+    width: 36px; height: 36px;
+    border: 0.5px solid var(--border-strong); border-radius: 50%;
+    background: var(--surface); color: var(--text-muted);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s; padding: 0; flex-shrink: 0;
+  }
+  #bell-btn:hover { background: var(--surface2); color: var(--text); }
+  #bell-btn svg { width: 16px; height: 16px; }
+  #bell-badge {
+    position: absolute; top: -2px; right: -2px;
+    background: var(--accent); color: #fff; font-size: 9px; border-radius: 50%;
+    width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;
+    font-family: Georgia, serif; pointer-events: none;
+  }
+  #bell-dropdown {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 10px; padding: 0.75rem; min-width: 240px; max-width: 300px;
+    z-index: 150; display: none; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    font-family: Georgia, serif;
+  }
+  #bell-dropdown.open { display: block; }
+  .bell-request-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0; border-bottom: 0.5px solid var(--border);
+    font-size: 12px; color: var(--text);
+  }
+  .bell-request-row:last-child { border-bottom: none; }
+  .bell-req-btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .bell-req-accept, .bell-req-reject {
+    font-size: 11px; padding: 3px 10px; border: 0.5px solid var(--border-strong);
+    border-radius: 6px; background: transparent; cursor: pointer; font-family: Georgia, serif;
+    color: var(--text-muted);
+  }
+  .bell-req-accept { color: var(--accent); border-color: var(--accent); }
+  .bell-req-accept:hover { background: var(--accent); color: #fff; }
+  .bell-req-reject:hover { background: var(--surface2); }
+  .bell-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 4px 0; }
+
+  /* ── Clan leader settings ── */
+  #clan-leader-section { display: none; }
+  #clan-member-list { max-height: 150px; overflow-y: auto; margin-bottom: 0.5rem; }
+  .clan-member-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 0; border-bottom: 0.5px solid var(--border);
+    font-size: 12px; color: var(--text);
+  }
+  .clan-member-row:last-child { border-bottom: none; }
+  .clan-member-remove {
+    font-size: 11px; padding: 2px 8px; border: 0.5px solid var(--border-strong);
+    border-radius: 6px; background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif;
+  }
+  .clan-member-remove:hover { background: var(--surface2); }
+
   .card {
     background: var(--surface); border: 0.5px solid var(--border);
     border-radius: 16px; padding: 2rem 1.5rem 1.5rem;
@@ -703,6 +763,18 @@
     <span id="user-name-display"></span>
     <button id="logout-btn">Abmelden</button>
   </div>
+  <div id="bell-wrap">
+    <button id="bell-btn" title="Benachrichtigungen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+    </button>
+    <span id="bell-badge" style="display:none;">0</span>
+    <div id="bell-dropdown">
+      <div id="bell-request-list"><div class="bell-empty">Keine Anfragen</div></div>
+    </div>
+  </div>
   <button id="gear-btn" title="Einstellungen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="3"/>
@@ -871,6 +943,24 @@
     </div>
     <div id="username-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-bottom:0.5rem;"></div>
     <div id="privacy-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-top:4px;"></div>
+
+    <div id="clan-leader-section">
+      <div class="panel-divider"></div>
+      <div class="panel-section">Clan-Verwaltung</div>
+      <div class="panel-row">
+        <label for="clan-min-focus">Min. Fokuszeit</label>
+        <div class="inp-wrap"><input type="number" id="clan-min-focus" value="1" min="1" max="300" style="width:52px;"> min</div>
+      </div>
+      <div class="panel-row">
+        <label for="clan-max-focus">Max. Fokuszeit</label>
+        <div class="inp-wrap"><input type="number" id="clan-max-focus" value="300" min="1" max="300" style="width:52px;"> min</div>
+      </div>
+      <div class="panel-divider" style="margin:0.5rem 0;"></div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:0.5rem;">Mitglieder</div>
+      <div id="clan-member-list"></div>
+      <button id="save-clan-settings-btn" style="width:100%;margin-top:0.25rem;padding:8px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Clan-Einstellungen speichern</button>
+      <div id="clan-settings-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
+    </div>
 
     <button id="save-settings-btn" style="width:100%;margin-top:0.5rem;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;transition:background 0.12s;">Einstellungen speichern</button>
     <div id="settings-save-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:6px;"></div>
@@ -1077,6 +1167,11 @@
   let userDiamonds = 0;
   let userAwardsLast = 0;
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
+
+  let clanId = null;
+  let clanRole = null;
+  let clanMinFocus = 1;
+  let clanMaxFocus = 300;
 
   let currentLabel = '';
   let currentLabelStatsData = [];
@@ -2213,7 +2308,8 @@
   document.getElementById('btn-add5').addEventListener('mousedown', e => {
     e.preventDefault();
     if (mode !== 'work') return;
-    const add = 5 * 60;
+    if (totalSec >= clanMaxFocus * 60) return;
+    const add = Math.min(5 * 60, clanMaxFocus * 60 - totalSec);
     totalSec  += add;
     remaining += add;
     if (startedAt !== null) {
@@ -2722,6 +2818,8 @@
       userDiamonds  = profile.diamonds || 0;
       userAwardsLast = profile.awards_last || 0;
       displayUnit = profile.display_unit || 'pomodoros';
+      clanId   = profile.clan_id   || null;
+      clanRole = profile.clan_role || null;
       // Sync display unit buttons
       document.querySelectorAll('.unit-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.unit === displayUnit));
@@ -2738,6 +2836,9 @@
       totalSec = getMin(mode) * 60;
       remaining = totalSec;
     }
+
+    if (clanId) await loadClanSettings(token);
+    updateLeaderUI();
 
     // Load study days from server
     await loadStudyDays(token);
@@ -3080,6 +3181,7 @@
           display_unit: displayUnit, off_weekdays: offWeekdays,
           avatar_url: uploadedAvatarUrl,
         });
+        await submitJoinRequest(data.access_token);
         userName = username; userPublic = pub;
         avatarUrl = uploadedAvatarUrl;
         await onLoginSuccess(data, true);
@@ -3483,6 +3585,190 @@
       sound: document.getElementById('sound-select')?.value,
     });
   }
+
+  /* ── Clan ── */
+
+  function updateLeaderUI() {
+    const isLeader = clanRole === 'leader';
+    document.getElementById('bell-wrap').style.display = isLeader ? 'flex' : 'none';
+    document.getElementById('clan-leader-section').style.display = isLeader ? 'block' : 'none';
+  }
+
+  async function loadClanSettings(token) {
+    try {
+      const res = await fetch(`${SB}/rest/v1/clans?id=eq.${clanId}&select=min_focus_min,max_focus_min`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      if (!rows[0]) return;
+      clanMinFocus = rows[0].min_focus_min;
+      clanMaxFocus = rows[0].max_focus_min;
+      const workInput = document.getElementById('set-work');
+      workInput.min = clanMinFocus;
+      workInput.max = clanMaxFocus;
+      const cur = parseInt(workInput.value) || 25;
+      if (cur < clanMinFocus) workInput.value = clanMinFocus;
+      if (cur > clanMaxFocus) workInput.value = clanMaxFocus;
+      if (!running) { totalSec = getMin(mode) * 60; remaining = totalSec; renderTimer(); }
+      if (clanRole === 'leader') {
+        document.getElementById('clan-min-focus').value = clanMinFocus;
+        document.getElementById('clan-max-focus').value = clanMaxFocus;
+      }
+    } catch(e) { console.warn('loadClanSettings error', e); }
+  }
+
+  async function loadPendingRequests() {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/clan_requests?clan_id=eq.${clanId}&status=eq.pending&select=id,user_id`, {
+        headers: authHeaders(token),
+      });
+      const requests = await res.json();
+      if (!Array.isArray(requests) || !requests.length) { renderBellRequests([], {}); return; }
+      const ids = requests.map(r => r.user_id).join(',');
+      const pRes = await fetch(`${SB}/rest/v1/profiles?id=in.(${ids})&select=id,username`, {
+        headers: authHeaders(token),
+      });
+      const profiles = await pRes.json();
+      const nameMap = Object.fromEntries((profiles || []).map(p => [p.id, p.username]));
+      renderBellRequests(requests, nameMap);
+    } catch(e) { console.warn('loadPendingRequests error', e); }
+  }
+
+  function renderBellRequests(requests, nameMap) {
+    const list  = document.getElementById('bell-request-list');
+    const badge = document.getElementById('bell-badge');
+    if (!requests.length) {
+      badge.style.display = 'none';
+      list.innerHTML = '<div class="bell-empty">Keine offenen Anfragen</div>';
+      return;
+    }
+    badge.style.display = 'flex';
+    badge.textContent = requests.length;
+    list.innerHTML = requests.map(r => `
+      <div class="bell-request-row">
+        <span>${(nameMap[r.user_id] || 'Unbekannt').replace(/</g,'&lt;')}</span>
+        <div class="bell-req-btns">
+          <button class="bell-req-accept" data-id="${r.id}">✓</button>
+          <button class="bell-req-reject" data-id="${r.id}">✕</button>
+        </div>
+      </div>`).join('');
+    list.querySelectorAll('.bell-req-accept').forEach(btn =>
+      btn.addEventListener('click', async () => { await respondToRequest(btn.dataset.id, true);  loadPendingRequests(); }));
+    list.querySelectorAll('.bell-req-reject').forEach(btn =>
+      btn.addEventListener('click', async () => { await respondToRequest(btn.dataset.id, false); loadPendingRequests(); }));
+  }
+
+  async function respondToRequest(requestId, accept) {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      await fetch(`${SB}/rest/v1/rpc/respond_to_clan_request`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_request_id: requestId, p_accept: accept }),
+      });
+    } catch(e) { console.warn('respondToRequest error', e); }
+  }
+
+  async function loadClanMembers() {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/profiles?clan_id=eq.${clanId}&select=id,username,clan_role`, {
+        headers: authHeaders(token),
+      });
+      const members = await res.json();
+      renderClanMemberList(Array.isArray(members) ? members : []);
+    } catch(e) { console.warn('loadClanMembers error', e); }
+  }
+
+  function renderClanMemberList(members) {
+    const el = document.getElementById('clan-member-list');
+    if (!members.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Keine Mitglieder</div>'; return; }
+    el.innerHTML = members.map(m => `
+      <div class="clan-member-row">
+        <span>${m.username.replace(/</g,'&lt;')}${m.clan_role === 'leader' ? ' 👑' : ''}</span>
+        ${m.id !== currentUser?.id
+          ? `<button class="clan-member-remove" data-id="${m.id}" data-name="${m.username.replace(/"/g,'&quot;')}">Entfernen</button>`
+          : ''}
+      </div>`).join('');
+    el.querySelectorAll('.clan-member-remove').forEach(btn =>
+      btn.addEventListener('click', async () => {
+        showTimerConfirmBanner(`„${btn.dataset.name}" wirklich aus dem Clan entfernen?`, async () => {
+          await removeClanMember(btn.dataset.id);
+          loadClanMembers();
+        });
+      }));
+  }
+
+  async function removeClanMember(userId) {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      await fetch(`${SB}/rest/v1/rpc/remove_clan_member`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_user_id: userId }),
+      });
+    } catch(e) { console.warn('removeClanMember error', e); }
+  }
+
+  async function saveClanSettings() {
+    const minF = parseInt(document.getElementById('clan-min-focus').value) || 1;
+    const maxF = parseInt(document.getElementById('clan-max-focus').value) || 300;
+    const fb   = document.getElementById('clan-settings-feedback');
+    if (minF >= maxF) { fb.textContent = 'Min muss kleiner als Max sein.'; return; }
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/clans?id=eq.${clanId}`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ min_focus_min: minF, max_focus_min: maxF }),
+      });
+      if (!res.ok) { fb.textContent = 'Fehler beim Speichern.'; return; }
+      clanMinFocus = minF; clanMaxFocus = maxF;
+      const workInput = document.getElementById('set-work');
+      workInput.min = minF; workInput.max = maxF;
+      fb.textContent = '✓ Gespeichert';
+      setTimeout(() => { fb.textContent = ''; }, 2000);
+    } catch(e) { console.warn('saveClanSettings error', e); }
+  }
+
+  async function submitJoinRequest(token) {
+    try {
+      const res = await fetch(`${SB}/rest/v1/clans?select=id&limit=1`, {
+        headers: authHeaders(token),
+      });
+      const clans = await res.json();
+      if (!clans.length) return;
+      await fetch(`${SB}/rest/v1/clan_requests`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ clan_id: clans[0].id, user_id: currentUser.id }),
+      });
+    } catch(e) { console.warn('submitJoinRequest error', e); }
+  }
+
+  document.getElementById('bell-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    const dd = document.getElementById('bell-dropdown');
+    const isOpen = dd.classList.toggle('open');
+    if (isOpen) loadPendingRequests();
+  });
+
+  document.addEventListener('click', e => {
+    const wrap = document.getElementById('bell-wrap');
+    if (!wrap.contains(e.target)) document.getElementById('bell-dropdown').classList.remove('open');
+  });
+
+  document.getElementById('gear-btn').addEventListener('click', () => {
+    if (clanRole === 'leader') loadClanMembers();
+  });
+
+  document.getElementById('save-clan-settings-btn').addEventListener('click', saveClanSettings);
 
   /* ── Init ── */
   registerSW();
