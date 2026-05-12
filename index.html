@@ -1873,7 +1873,7 @@
         localStorage.setItem('pomo_display_unit', displayUnit);
         syncBtns();
         renderStats();
-        if (userPublic && userName) renderLeaderboard(lastLeaderboardData);
+        if (userPublic && userName && clanRole) renderLeaderboard(lastLeaderboardData);
       });
     });
   }
@@ -2532,7 +2532,7 @@
   }
 
   function initLeaderboard() {
-    if (userName && userPublic) {
+    if (userName && userPublic && clanRole) {
       document.getElementById('leaderboard-card').style.display = 'block';
       loadLeaderboard(lbPeriod);
     }
@@ -2550,7 +2550,7 @@
 
     // Auto-refresh every 60s when tab is visible
     setInterval(() => {
-      if (userPublic && userName && !document.hidden) loadLeaderboard();
+      if (userPublic && userName && clanRole && !document.hidden) loadLeaderboard();
     }, 60000);
   }
 
@@ -2562,7 +2562,7 @@
         const feedback = document.getElementById('privacy-feedback');
         if (makePublic && !userPublic) {
           userPublic = true;
-          document.getElementById('leaderboard-card').style.display = 'block';
+          document.getElementById('leaderboard-card').style.display = clanRole ? 'block' : 'none';
           loadLeaderboard(lbPeriod);
           if (feedback) feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
         } else if (!makePublic && userPublic) {
@@ -2859,7 +2859,7 @@
     document.getElementById('time-display').style.opacity = '1';
     document.getElementById('watch-svg').style.opacity = '1';
     render();
-    if (userPublic) { document.getElementById('leaderboard-card').style.display = 'block'; }
+    if (userPublic && clanRole) { document.getElementById('leaderboard-card').style.display = 'block'; }
     initLeaderboard();
     // Restore timer if it was running before page reload
     await restoreTimerState();
@@ -3676,8 +3676,10 @@
     try {
       const token = await getValidToken();
       if (!token) return;
-      const res = await fetch(`${SB}/rest/v1/profiles?clan_id=eq.${clanId}&select=id,username,clan_role`, {
-        headers: authHeaders(token),
+      const res = await fetch(`${SB}/rest/v1/rpc/get_clan_members`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       });
       const members = await res.json();
       renderClanMemberList(Array.isArray(members) ? members : []);
@@ -3739,15 +3741,10 @@
 
   async function submitJoinRequest(token) {
     try {
-      const res = await fetch(`${SB}/rest/v1/clans?select=id&limit=1`, {
-        headers: authHeaders(token),
-      });
-      const clans = await res.json();
-      if (!clans.length) return;
-      await fetch(`${SB}/rest/v1/clan_requests`, {
+      await fetch(`${SB}/rest/v1/rpc/submit_join_request`, {
         method: 'POST',
-        headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ clan_id: clans[0].id, user_id: currentUser.id }),
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       });
     } catch(e) { console.warn('submitJoinRequest error', e); }
   }
