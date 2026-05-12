@@ -137,7 +137,7 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 
 ---
 
-## Geplantes Feature: Clan-System (noch nicht implementiert)
+## Clan-System (teilweise implementiert — SQL-Migration noch ausstehend)
 
 ### Datenbank
 
@@ -170,14 +170,16 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 | `get_pending_requests(p_clan_id)` | Offene Anfragen für Leader |
 
 ### UI
-- **Registrierungsflow**: Nach erstem Login Screen mit „Clan gründen" / „Clan beitreten" / „Später"
-- **Header**: Glocken-Icon mit Badge für Leader; Klick öffnet Dropdown mit offenen Anfragen (Bestätigen/Ablehnen)
-- **Leaderboard**: Scope-Tabs „Mein Clan · Global · Clan-Vergleich" über den bestehenden Zeitraum-Tabs
-- **Leader-Einstellungen**: Min./Max. Fokuszeit, Level-Namen-Editor (25 Zeilen, Name + Emoji), Mitgliederliste mit Entfernen-Button
-- **Timer**: `+5 min` disabled wenn `totalSec >= maxFocusMin * 60`; Timer-Input in Settings geclampt
+- **Registrierungsflow**: Nach erstem Login Screen mit „Clan gründen" / „Clan beitreten" / „Später" _(ausstehend)_
+- **Header**: Glocken-Icon mit Badge für Leader; Klick öffnet Dropdown mit offenen Anfragen (Bestätigen/Ablehnen) ✅
+- **Leaderboard**: Scope-Tabs „Mein Clan · Global · Clan-Vergleich" über den bestehenden Zeitraum-Tabs _(ausstehend)_
+- **Leader-Einstellungen**: Min./Max. Fokuszeit ✅, Level-Namen-Editor _(ausstehend)_, Mitgliederliste mit Entfernen-Button ✅
+- **Timer**: `+5 min` geclampt auf `clanMaxFocus` ✅; Timer-Input in Settings geclampt ✅
+- **Neue Nutzer**: `submitJoinRequest()` wird automatisch nach Registrierung aufgerufen ✅
 
-### Migration bestehender Nutzer
-- Einmaliger SQL-Script: Clan „Schwitzende Verbindung Halle" anlegen, Ragnar als Leader, alle `profiles` mit `public = true` direkt als Member eintragen (ohne Bestätigung)
+### Migration bestehender Nutzer ✅
+- SQL-Script `clan_migration.sql` erstellt — **noch im Supabase SQL-Editor ausführen**
+- Legt Clan „Schwitzende Verbindung Halle" an, Ragnar als Leader, alle `public = true` Profile als Member
 
 ### Default Level-Namen
 | Level | Name | Icon | Ab (Min) |
