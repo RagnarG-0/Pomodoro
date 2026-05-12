@@ -66,6 +66,43 @@
   #gear-btn.open { transform: rotate(60deg); color: var(--accent); }
   #gear-btn svg { width: 16px; height: 16px; }
 
+  /* ── Clan-Join Button (klanlose eingeloggte Nutzer) ── */
+  #clan-join-wrap {
+    position: relative; display: none; align-items: center; margin-right: 6px;
+  }
+  #clan-join-btn {
+    height: 36px; padding: 0 12px;
+    border: 0.5px solid var(--border-strong); border-radius: 18px;
+    background: var(--surface); color: var(--text-muted);
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-family: Georgia, serif; letter-spacing: 0.03em;
+    transition: background 0.15s, color 0.15s; flex-shrink: 0;
+  }
+  #clan-join-btn:hover { background: var(--surface2); color: var(--text); }
+  #clan-join-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  #clan-join-dropdown {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 10px; padding: 0.75rem 1rem;
+    min-width: 220px; z-index: 150; display: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); font-family: Georgia, serif;
+  }
+  #clan-join-dropdown.open { display: block; }
+  .clan-join-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .clan-join-name { font-size: 12px; color: var(--text); }
+  .clan-join-request-btn {
+    font-size: 11px; padding: 4px 12px; flex-shrink: 0;
+    border: 0.5px solid var(--accent); border-radius: 6px;
+    background: transparent; color: var(--accent);
+    cursor: pointer; font-family: Georgia, serif;
+    transition: background 0.12s, color 0.12s;
+  }
+  .clan-join-request-btn:hover { background: var(--accent); color: #fff; }
+  .clan-join-request-btn:disabled { opacity: 0.5; cursor: default; }
+  .clan-join-pending { font-size: 11px; color: var(--text-muted); }
+
   /* ── Bell (Leader only) ── */
   #bell-wrap {
     position: relative; display: none; align-items: center; margin-right: 6px;
@@ -762,6 +799,20 @@
     <img id="user-avatar" src="" alt="" title="Profilbild ändern" style="display:none;">
     <span id="user-name-display"></span>
     <button id="logout-btn">Abmelden</button>
+  </div>
+  <div id="clan-join-wrap">
+    <button id="clan-join-btn" title="Clan beitreten">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      Clan
+    </button>
+    <div id="clan-join-dropdown">
+      <div id="clan-join-list"><div class="clan-join-pending">Wird geladen…</div></div>
+    </div>
   </div>
   <div id="bell-wrap">
     <button id="bell-btn" title="Benachrichtigungen">
@@ -3590,9 +3641,62 @@
 
   function updateLeaderUI() {
     const isLeader = clanRole === 'leader';
-    document.getElementById('bell-wrap').style.display = isLeader ? 'flex' : 'none';
+    const noClan   = currentUser && !clanRole;
+    document.getElementById('bell-wrap').style.display      = isLeader ? 'flex' : 'none';
     document.getElementById('clan-leader-section').style.display = isLeader ? 'block' : 'none';
+    document.getElementById('clan-join-wrap').style.display = noClan ? 'flex' : 'none';
   }
+
+  async function loadClanList() {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const [clansRes, reqRes] = await Promise.all([
+        fetch(`${SB}/rest/v1/clans?select=id,name`, { headers: authHeaders(token) }),
+        fetch(`${SB}/rest/v1/clan_requests?user_id=eq.${currentUser.id}&status=eq.pending&select=clan_id`, { headers: authHeaders(token) }),
+      ]);
+      const clans    = await clansRes.json();
+      const pending  = await reqRes.json();
+      const pendingIds = new Set((Array.isArray(pending) ? pending : []).map(r => r.clan_id));
+      renderClanList(Array.isArray(clans) ? clans : [], pendingIds);
+    } catch(e) { console.warn('loadClanList error', e); }
+  }
+
+  function renderClanList(clans, pendingIds) {
+    const el = document.getElementById('clan-join-list');
+    if (!clans.length) {
+      el.innerHTML = '<div class="clan-join-pending">Keine Clans verfügbar</div>';
+      return;
+    }
+    el.innerHTML = clans.map(c => {
+      const isPending = pendingIds.has(c.id);
+      return `<div class="clan-join-row">
+        <span class="clan-join-name">${c.name.replace(/</g,'&lt;')}</span>
+        ${isPending
+          ? '<span class="clan-join-pending">Anfrage gesendet</span>'
+          : `<button class="clan-join-request-btn" data-id="${c.id}">Anfragen</button>`}
+      </div>`;
+    }).join('');
+    el.querySelectorAll('.clan-join-request-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        await submitJoinRequest(await getValidToken());
+        btn.replaceWith(Object.assign(document.createElement('span'), { className: 'clan-join-pending', textContent: 'Anfrage gesendet' }));
+      });
+    });
+  }
+
+  document.getElementById('clan-join-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    const dd = document.getElementById('clan-join-dropdown');
+    const isOpen = dd.classList.toggle('open');
+    if (isOpen) loadClanList();
+  });
+
+  document.addEventListener('click', e => {
+    const wrap = document.getElementById('clan-join-wrap');
+    if (!wrap.contains(e.target)) document.getElementById('clan-join-dropdown').classList.remove('open');
+  });
 
   async function loadClanSettings(token) {
     try {
