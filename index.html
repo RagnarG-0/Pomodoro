@@ -614,6 +614,33 @@
   .merge-btn-no:hover { background: var(--surface2); }
   .merge-btn-yes:hover { background: var(--accent); color: #fff; }
 
+  /* ── Timer confirmation banner ── */
+  #timer-confirm-banner {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200; display: none;
+    align-items: center; justify-content: center;
+  }
+  #timer-confirm-banner.open { display: flex; }
+  .timer-confirm-box {
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 12px; padding: 1.25rem 1.5rem;
+    max-width: 300px; width: 90%; font-family: Georgia, serif;
+  }
+  .timer-confirm-msg {
+    font-size: 13px; color: var(--text);
+    margin-bottom: 1rem; line-height: 1.5;
+  }
+  .timer-confirm-btns { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* ── Finish-early button ── */
+  #btn-finish-early {
+    display: none;
+    font-size: 11px; font-family: Georgia, serif; letter-spacing: 0.02em;
+    color: var(--accent); border-color: var(--accent);
+  }
+  #btn-finish-early:hover { background: var(--accent); color: #fff; }
+
   /* ── Label Stats: Period Tabs ── */
   .label-period-tabs {
     display: flex; gap: 5px; margin-bottom: 1rem;
@@ -896,6 +923,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
     </button>
     <button class="ctrl-btn" id="btn-add5" title="+5 Minuten" style="font-size:12px;font-family:Georgia,serif;letter-spacing:0.02em;">+5 min</button>
+    <button class="ctrl-btn" id="btn-finish-early" title="Frühzeitig abschließen">✓ Jetzt</button>
   </div>
 
   <div class="today-row">
@@ -1012,6 +1040,17 @@
 
 <div class="notif-bar" id="notif"></div>
 <canvas id="confetti-canvas"></canvas>
+
+<!-- Timer action confirmation banner -->
+<div id="timer-confirm-banner">
+  <div class="timer-confirm-box">
+    <div class="timer-confirm-msg" id="timer-confirm-msg"></div>
+    <div class="timer-confirm-btns">
+      <button class="merge-btn-no" id="timer-confirm-no">Abbrechen</button>
+      <button class="merge-btn-yes" id="timer-confirm-yes">Bestätigen</button>
+    </div>
+  </div>
+</div>
 
 <!-- Label merge confirmation banner -->
 <div id="label-merge-banner">
@@ -1353,11 +1392,13 @@
     // Show +5min during focus, skip (✓) during breaks
     const skipBtn = document.getElementById('btn-skip');
     const add5Btn = document.getElementById('btn-add5');
+    const finishEarlyBtn = document.getElementById('btn-finish-early');
     const isBreak = mode === 'short' || mode === 'long';
     skipBtn.style.display = isBreak ? 'inline-flex' : 'none';
     add5Btn.style.display = isBreak ? 'none' : 'inline-flex';
-    // Skip still disabled if somehow shown during focus
     skipBtn.disabled = !isBreak;
+    const elapsedSec = totalSec - remaining;
+    finishEarlyBtn.style.display = (!isBreak && running && elapsedSec >= 25 * 60) ? 'inline-flex' : 'none';
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
   }
 
@@ -2098,12 +2139,37 @@
     renderTimer();
   }
 
+  function showTimerConfirmBanner(msg, onYes) {
+    const banner = document.getElementById('timer-confirm-banner');
+    document.getElementById('timer-confirm-msg').textContent = msg;
+    banner.classList.add('open');
+    const yesBtn = document.getElementById('timer-confirm-yes');
+    const noBtn  = document.getElementById('timer-confirm-no');
+    const newYes = yesBtn.cloneNode(true);
+    const newNo  = noBtn.cloneNode(true);
+    yesBtn.replaceWith(newYes);
+    noBtn.replaceWith(newNo);
+    newYes.addEventListener('click', () => { banner.classList.remove('open'); onYes(); });
+    newNo.addEventListener('click',  () => { banner.classList.remove('open'); });
+  }
+
   function reset() {
     clearInterval(tid); running=false; startedAt=null;
     totalSec=getMin(mode)*60; remaining=totalSec;
     swSend({ type: 'TIMER_RESET' });
     clearTimerState();
     render();
+  }
+
+  async function finishEarly() {
+    const elapsedSec = totalSec - remaining;
+    clearInterval(tid); running = false; startedAt = null;
+    swSend({ type: 'TIMER_RESET' });
+    await clearTimerState();
+    totalSec = elapsedSec;
+    completePomo();
+    const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
+    setTimeout(() => switchTo(next, false), 1400);
   }
 
   function skip() {
@@ -2125,8 +2191,18 @@
 
   document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; syncModeBtns(); reset(); }));
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
-  document.getElementById('btn-reset').addEventListener('click', reset);
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    if (mode === 'work' && running) {
+      showTimerConfirmBanner('Timer wirklich zurücksetzen? Der aktuelle Fokus-Fortschritt geht verloren.', reset);
+    } else {
+      reset();
+    }
+  });
   document.getElementById('btn-skip').addEventListener('click', skip);
+  document.getElementById('btn-finish-early').addEventListener('click', () => {
+    const elapsedMin = Math.round((totalSec - remaining) / 60);
+    showTimerConfirmBanner(`${elapsedMin} Minuten als Pomodoro speichern und Fokus-Session beenden?`, finishEarly);
+  });
   document.getElementById('btn-add5').addEventListener('mousedown', e => {
     e.preventDefault();
     if (mode !== 'work') return;

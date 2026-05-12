@@ -95,7 +95,7 @@ currentStatsPeriod  // 'today' | 'month' | 'alltime' — Label-Stats-Tab
 
 ## UI-Karten (von oben nach unten)
 
-1. **Timer-Card** — Analog-Uhr SVG, Modi (Fokus/Kurze Pause/Lange Pause), Label-Input mit Dropdown, +5min, Confetti bei Abschluss
+1. **Timer-Card** — Analog-Uhr SVG, Modi (Fokus/Kurze Pause/Lange Pause), Label-Input mit Dropdown, +5min, „✓ Jetzt"-Button (frühzeitiger Abschluss), Confetti bei Abschluss
 2. **Heatmap-Card** — 100-Tage-Grid, scrollbar, Klick = Off-Day togglen, DOW-Labels links
 3. **Stats-Card** — Level (25 Stufen), Streak, Bester Tag, Wochenschnitt; „mehr Infos" öffnet Label-Stats-Overlay (inset, gleiche Card)
 4. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border; Live-Timer-Dot (grün)
@@ -128,3 +128,9 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 - `add_study_minutes` ist nicht idempotent → nur über das Claim-Mutex in `clearTimerState` aufrufen
 - Winner-Cache (`pomo_lb_winner`) ist bewusst vom Listen-Cache getrennt, damit ein fehlgeschlagener Winner-Fetch nicht die Liste blockiert
 - `offWeekdays` speichert JS-Wochentagnummern (0=Sonntag), nicht ISO (1=Montag)
+- `finishEarly()` überschreibt `totalSec` mit der tatsächlich verstrichenen Zeit, bevor `completePomo()` aufgerufen wird — so wird die reale Dauer gespeichert, nicht die geplante
+- `showTimerConfirmBanner(msg, onYes)` ist ein wiederverwendbares Bestätigungs-Modal (`#timer-confirm-banner`); Buttons werden per `cloneNode` ausgetauscht, um Event-Listener-Leaks zu vermeiden
+
+### Bestätigungs-Dialoge (Timer-Card)
+- **Reset im Fokus-Modus** (nur wenn `running`): zeigt Bestätigungs-Banner vor `reset()`
+- **„✓ Jetzt"-Button**: erscheint nur bei `mode === 'work' && running && elapsedSec >= 25*60`; Bestätigungs-Banner vor `finishEarly()`
