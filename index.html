@@ -3165,7 +3165,7 @@
     }
 
     input.addEventListener('focus', () => showDropdown(null));
-    input.addEventListener('input', () => showDropdown(input.value));
+    input.addEventListener('input', () => showDropdown(null));
     input.addEventListener('blur', () => setTimeout(() => dropdown.classList.remove('open'), 150));
 
     input.addEventListener('keydown', e => {
