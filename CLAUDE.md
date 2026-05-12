@@ -134,3 +134,76 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 ### Bestätigungs-Dialoge (Timer-Card)
 - **Reset im Fokus-Modus** (nur wenn `running`): zeigt Bestätigungs-Banner vor `reset()`
 - **„✓ Jetzt"-Button**: erscheint nur bei `mode === 'work' && running && elapsedSec >= 25*60`; Bestätigungs-Banner vor `finishEarly()`
+
+---
+
+## Geplantes Feature: Clan-System (noch nicht implementiert)
+
+### Datenbank
+
+**Neue Tabelle `clans`**
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | uuid PK | |
+| `name` | text unique | |
+| `leader_id` | uuid FK → auth.users | |
+| `min_focus_min` | int default 1 | Harte Untergrenze für Timer |
+| `max_focus_min` | int default 300 | Harte Obergrenze für Timer |
+| `level_config` | jsonb | Array `{min_minutes, name, icon}` × 25 |
+| `created_at` | timestamptz | |
+
+**Änderungen an `profiles`**: `clan_id` (uuid nullable), `clan_role` (`'leader'` \| `'member'` \| null)
+
+**Neue Tabelle `clan_requests`**: `id`, `clan_id`, `user_id`, `status` (`'pending'` \| `'accepted'` \| `'rejected'`), `created_at`
+- Nur Nutzer → Clan (keine Einladungen vom Leader)
+
+### RPCs
+| Funktion | Zweck |
+|---|---|
+| `create_clan(p_name)` | Clan anlegen, Aufrufer wird Leader |
+| `request_join_clan(p_clan_id)` | Beitrittsanfrage stellen |
+| `respond_to_request(p_request_id, p_accept)` | Leader bestätigt/lehnt ab |
+| `remove_clan_member(p_user_id)` | Leader entfernt Mitglied |
+| `leave_clan()` | Mitglied/Leader verlässt; Nachfolger = Mitglied mit meisten Minuten (bei Gleichstand zufällig) |
+| `leaderboard_clan(p_clan_id, p_period)` | Leaderboard für Clan-Mitglieder |
+| `leaderboard_clan_comparison()` | ⌀ Minuten pro aktivem Mitglied je Clan (aktiv = mind. 1 Session im Zeitraum) |
+| `get_pending_requests(p_clan_id)` | Offene Anfragen für Leader |
+
+### UI
+- **Registrierungsflow**: Nach erstem Login Screen mit „Clan gründen" / „Clan beitreten" / „Später"
+- **Header**: Glocken-Icon mit Badge für Leader; Klick öffnet Dropdown mit offenen Anfragen (Bestätigen/Ablehnen)
+- **Leaderboard**: Scope-Tabs „Mein Clan · Global · Clan-Vergleich" über den bestehenden Zeitraum-Tabs
+- **Leader-Einstellungen**: Min./Max. Fokuszeit, Level-Namen-Editor (25 Zeilen, Name + Emoji), Mitgliederliste mit Entfernen-Button
+- **Timer**: `+5 min` disabled wenn `totalSec >= maxFocusMin * 60`; Timer-Input in Settings geclampt
+
+### Migration bestehender Nutzer
+- Einmaliger SQL-Script: Clan „Schwitzende Verbindung Halle" anlegen, Ragnar als Leader, alle `profiles` mit `public = true` direkt als Member eintragen (ohne Bestätigung)
+
+### Default Level-Namen
+| Level | Name | Icon | Ab (Min) |
+|---|---|---|---|
+| 1 | Erkaltete Tastatur | 🧊 | 0 |
+| 2 | Morgenmuffel | 🧊 | 300 |
+| 3 | Notizzettelsammler | 🧊 | 600 |
+| 4 | Koffeinabhängiger | 🧊 | 900 |
+| 5 | Halbherziger Held | 🧊 | 1.500 |
+| 6 | Sofagelehrter | 🛋️ | 2.100 |
+| 7 | Bücherstapelturmer | 🛋️ | 3.000 |
+| 8 | Pausensnacker | 🛋️ | 3.900 |
+| 9 | Gemütlicher Grübler | 🛋️ | 4.800 |
+| 10 | Pflichterfüller | 🛋️ | 6.000 |
+| 11 | Entflammter | 🔥 | 7.800 |
+| 12 | Nachtschwarmer | 🔥 | 9.600 |
+| 13 | Karteikartenkönig | 🔥 | 12.000 |
+| 14 | Zeitfresser | 🔥 | 14.400 |
+| 15 | Leuchtendes Beispiel | 🔥 | 17.400 |
+| 16 | Schreibtischkämpfer | 🦁 | 21.000 |
+| 17 | Geduldiger Riese | 🦁 | 25.200 |
+| 18 | Stirnrunzler | 🦁 | 30.000 |
+| 19 | Schlafloser Denker | 🦁 | 35.400 |
+| 20 | Unaufhaltsamer | 🦁 | 41.400 |
+| 21 | Zeitsouverän | 👑 | 45.000 |
+| 22 | Chronos-Bezwinger | 👑 | 49.200 |
+| 23 | Erleuchteter | 👑 | 54.000 |
+| 24 | Pomodoro-Legende | 👑 | 58.800 |
+| 25 | Pomodoro-Gott | 👑 | 63.000 |
