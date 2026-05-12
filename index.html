@@ -2189,7 +2189,14 @@
     tick();
   });
 
-  document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; syncModeBtns(); reset(); }));
+  document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
+    const target = b.dataset.mode;
+    if (target !== 'work' && mode === 'work' && remaining < totalSec) {
+      showTimerConfirmBanner('Fokus-Timer abbrechen? Der aktuelle Fortschritt geht verloren.', () => { mode = target; syncModeBtns(); reset(); });
+    } else {
+      mode = target; syncModeBtns(); reset();
+    }
+  }));
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
   document.getElementById('btn-reset').addEventListener('click', () => {
     if (mode === 'work' && remaining < totalSec) {
