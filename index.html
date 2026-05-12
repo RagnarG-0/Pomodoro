@@ -3780,10 +3780,8 @@
     try {
       const token = await getValidToken();
       if (!token) return;
-      const res = await fetch(`${SB}/rest/v1/rpc/get_clan_members`, {
-        method: 'POST',
-        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+      const res = await fetch(`${SB}/rest/v1/profiles?clan_id=eq.${clanId}&select=id,username,clan_role&order=username`, {
+        headers: authHeaders(token),
       });
       const members = await res.json();
       renderClanMemberList(Array.isArray(members) ? members : []);
