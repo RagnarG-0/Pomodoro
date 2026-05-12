@@ -1583,41 +1583,42 @@
   }
 
   /* ── Level system ── */
-  const LEVELS = [
-    { name: 'Level 1',  label: 'They/Them',                  icon: '🧊', minMinutes: 0     },
-    { name: 'Level 2',  label: 'Soziologiestudent',           icon: '🧊', minMinutes: 300   },
-    { name: 'Level 3',  label: 'Awareness-Seminarleiter',     icon: '🧊', minMinutes: 600   },
-    { name: 'Level 4',  label: 'Bunter Nagellack',            icon: '🧊', minMinutes: 900   },
-    { name: 'Level 5',  label: 'FSR-Mitglied',                icon: '🧊', minMinutes: 1500  },
-    { name: 'Level 6',  label: 'Warmduscher',                 icon: '🛋️', minMinutes: 2100  },
-    { name: 'Level 7',  label: 'Mensa-Frau',                  icon: '🛋️', minMinutes: 3000  },
-    { name: 'Level 8',  label: 'Histo-Tutor',                 icon: '🛋️', minMinutes: 3900  },
-    { name: 'Level 9',  label: 'Gym10-Duscher ohne Latschen', icon: '🛋️', minMinutes: 4800  },
-    { name: 'Level 10', label: 'Skillslab-Schauspieler',      icon: '🛋️', minMinutes: 6000  },
-    { name: 'Level 11', label: 'Anki-Controller-Besitzer',    icon: '🔥', minMinutes: 7800  },
-    { name: 'Level 12', label: 'Transportdienst UKH',         icon: '🔥', minMinutes: 9600  },
-    { name: 'Level 13', label: 'Präp-Tutor',                  icon: '🔥', minMinutes: 12000 },
-    { name: 'Level 14', label: 'Doktorand',                   icon: '🔥', minMinutes: 14400 },
-    { name: 'Level 15', label: 'Peter Hippe',                 icon: '🔥', minMinutes: 17400 },
-    { name: 'Level 16', label: 'Löwe',                        icon: '🦁', minMinutes: 21000 },
-    { name: 'Level 17', label: 'Daniel Fister',               icon: '🦁', minMinutes: 25200 },
-    { name: 'Level 18', label: 'Schwester Rabiata',           icon: '🦁', minMinutes: 30000 },
-    { name: 'Level 19', label: 'Oberarzt Hagel',              icon: '🦁', minMinutes: 35400 },
-    { name: 'Level 20', label: 'Penig-Bürgermeister',         icon: '🦁', minMinutes: 41400 },
-    { name: 'Level 21', label: 'Monster White - Abonnent',    icon: '👑', minMinutes: 45000 },
-    { name: 'Level 22', label: 'ST-Hebungsüberseher',         icon: '👑', minMinutes: 49200 },
-    { name: 'Level 23', label: 'Koffein-Tablette',            icon: '👑', minMinutes: 54000 },
-    { name: 'Level 24', label: 'Beta-GPC-Konsument',          icon: '👑', minMinutes: 58800 },
-    { name: 'Level 25', label: 'Pomodoro-Messi',              icon: '👑', minMinutes: 63000 },
+  const DEFAULT_LEVELS = [
+    { name: 'Level 1',  label: 'Erkaltete Tastatur',     icon: '🧊', minMinutes: 0     },
+    { name: 'Level 2',  label: 'Morgenmuffel',            icon: '🧊', minMinutes: 300   },
+    { name: 'Level 3',  label: 'Notizzettelsammler',      icon: '🧊', minMinutes: 600   },
+    { name: 'Level 4',  label: 'Koffeinabhängiger',       icon: '🧊', minMinutes: 900   },
+    { name: 'Level 5',  label: 'Halbherziger Held',       icon: '🧊', minMinutes: 1500  },
+    { name: 'Level 6',  label: 'Sofagelehrter',           icon: '🛋️', minMinutes: 2100  },
+    { name: 'Level 7',  label: 'Bücherstapelturmer',      icon: '🛋️', minMinutes: 3000  },
+    { name: 'Level 8',  label: 'Pausensnacker',           icon: '🛋️', minMinutes: 3900  },
+    { name: 'Level 9',  label: 'Gemütlicher Grübler',     icon: '🛋️', minMinutes: 4800  },
+    { name: 'Level 10', label: 'Pflichterfüller',         icon: '🛋️', minMinutes: 6000  },
+    { name: 'Level 11', label: 'Entflammter',             icon: '🔥', minMinutes: 7800  },
+    { name: 'Level 12', label: 'Nachtschwarmer',          icon: '🔥', minMinutes: 9600  },
+    { name: 'Level 13', label: 'Karteikartenkönig',       icon: '🔥', minMinutes: 12000 },
+    { name: 'Level 14', label: 'Zeitfresser',             icon: '🔥', minMinutes: 14400 },
+    { name: 'Level 15', label: 'Leuchtendes Beispiel',    icon: '🔥', minMinutes: 17400 },
+    { name: 'Level 16', label: 'Schreibtischkämpfer',     icon: '🦁', minMinutes: 21000 },
+    { name: 'Level 17', label: 'Geduldiger Riese',        icon: '🦁', minMinutes: 25200 },
+    { name: 'Level 18', label: 'Stirnrunzler',            icon: '🦁', minMinutes: 30000 },
+    { name: 'Level 19', label: 'Schlafloser Denker',      icon: '🦁', minMinutes: 35400 },
+    { name: 'Level 20', label: 'Unaufhaltsamer',          icon: '🦁', minMinutes: 41400 },
+    { name: 'Level 21', label: 'Zeitsouverän',            icon: '👑', minMinutes: 45000 },
+    { name: 'Level 22', label: 'Chronos-Bezwinger',       icon: '👑', minMinutes: 49200 },
+    { name: 'Level 23', label: 'Erleuchteter',            icon: '👑', minMinutes: 54000 },
+    { name: 'Level 24', label: 'Pomodoro-Legende',        icon: '👑', minMinutes: 58800 },
+    { name: 'Level 25', label: 'Pomodoro-Gott',           icon: '👑', minMinutes: 63000 },
   ];
+  let activeLevels = DEFAULT_LEVELS;
 
   function getCurrentLevel(totalMins) {
-    let current = LEVELS[0];
-    let next = LEVELS[1] || null;
-    for (let i = LEVELS.length - 1; i >= 0; i--) {
-      if (totalMins >= LEVELS[i].minMinutes) {
-        current = LEVELS[i];
-        next = LEVELS[i + 1] || null;
+    let current = activeLevels[0];
+    let next = activeLevels[1] || null;
+    for (let i = activeLevels.length - 1; i >= 0; i--) {
+      if (totalMins >= activeLevels[i].minMinutes) {
+        current = activeLevels[i];
+        next = activeLevels[i + 1] || null;
         break;
       }
     }
@@ -3700,13 +3701,16 @@
 
   async function loadClanSettings(token) {
     try {
-      const res = await fetch(`${SB}/rest/v1/clans?id=eq.${clanId}&select=min_focus_min,max_focus_min`, {
+      const res = await fetch(`${SB}/rest/v1/clans?id=eq.${clanId}&select=min_focus_min,max_focus_min,level_config`, {
         headers: authHeaders(token),
       });
       const rows = await res.json();
       if (!rows[0]) return;
       clanMinFocus = rows[0].min_focus_min;
       clanMaxFocus = rows[0].max_focus_min;
+      if (Array.isArray(rows[0].level_config) && rows[0].level_config.length > 0) {
+        activeLevels = rows[0].level_config;
+      }
       const workInput = document.getElementById('set-work');
       workInput.min = clanMinFocus;
       workInput.max = clanMaxFocus;
