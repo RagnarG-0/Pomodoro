@@ -1007,8 +1007,8 @@
         <div class="inp-wrap"><input type="number" id="clan-max-focus" value="300" min="1" max="300" style="width:52px;"> min</div>
       </div>
       <div class="panel-divider" style="margin:0.5rem 0;"></div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:0.5rem;">Mitglieder</div>
-      <div id="clan-member-list"></div>
+      <button id="toggle-member-list-btn" style="width:100%;padding:6px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;text-align:left;">Mitglieder anzeigen ▸</button>
+      <div id="clan-member-list" style="display:none;margin-top:0.4rem;"></div>
       <button id="save-clan-settings-btn" style="width:100%;margin-top:0.5rem;padding:8px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Clan-Einstellungen speichern</button>
       <div id="clan-settings-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
     </div>
@@ -3867,8 +3867,16 @@
     if (!wrap.contains(e.target)) document.getElementById('bell-dropdown').classList.remove('open');
   });
 
-  document.getElementById('gear-btn').addEventListener('click', () => {
-    if (clanRole === 'leader') loadClanMembers();
+  document.getElementById('toggle-member-list-btn').addEventListener('click', () => {
+    const list = document.getElementById('clan-member-list');
+    const btn  = document.getElementById('toggle-member-list-btn');
+    const open = list.style.display === 'none';
+    list.style.display = open ? 'block' : 'none';
+    btn.textContent = open ? 'Mitglieder ausblenden ▾' : 'Mitglieder anzeigen ▸';
+    if (open && !list.dataset.loaded) {
+      list.dataset.loaded = '1';
+      loadClanMembers();
+    }
   });
 
   document.getElementById('save-clan-settings-btn').addEventListener('click', saveClanSettings);
