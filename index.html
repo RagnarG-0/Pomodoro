@@ -999,6 +999,10 @@
       <div class="panel-divider"></div>
       <div class="panel-section">Clan-Verwaltung</div>
       <div class="panel-row">
+        <label for="clan-name-input">Clan-Name</label>
+        <div class="inp-wrap"><input type="text" id="clan-name-input" maxlength="60" style="width:140px;"></div>
+      </div>
+      <div class="panel-row">
         <label for="clan-min-focus">Min. Fokuszeit</label>
         <div class="inp-wrap"><input type="number" id="clan-min-focus" value="1" min="1" max="300" style="width:52px;"> min</div>
       </div>
@@ -3701,7 +3705,7 @@
 
   async function loadClanSettings(token) {
     try {
-      const res = await fetch(`${SB}/rest/v1/clans?id=eq.${clanId}&select=min_focus_min,max_focus_min,level_config`, {
+      const res = await fetch(`${SB}/rest/v1/clans?id=eq.${clanId}&select=name,min_focus_min,max_focus_min,level_config`, {
         headers: authHeaders(token),
       });
       const rows = await res.json();
@@ -3719,6 +3723,7 @@
       if (cur > clanMaxFocus) workInput.value = clanMaxFocus;
       if (!running) { totalSec = getMin(mode) * 60; remaining = totalSec; renderTimer(); }
       if (clanRole === 'leader') {
+        document.getElementById('clan-name-input').value = rows[0].name || '';
         document.getElementById('clan-min-focus').value = clanMinFocus;
         document.getElementById('clan-max-focus').value = clanMaxFocus;
       }
@@ -3824,9 +3829,11 @@
   }
 
   async function saveClanSettings() {
-    const minF = parseInt(document.getElementById('clan-min-focus').value) || 1;
-    const maxF = parseInt(document.getElementById('clan-max-focus').value) || 300;
-    const fb   = document.getElementById('clan-settings-feedback');
+    const newName = document.getElementById('clan-name-input').value.trim();
+    const minF    = parseInt(document.getElementById('clan-min-focus').value) || 1;
+    const maxF    = parseInt(document.getElementById('clan-max-focus').value) || 300;
+    const fb      = document.getElementById('clan-settings-feedback');
+    if (!newName) { fb.textContent = 'Clan-Name darf nicht leer sein.'; return; }
     if (minF >= maxF) { fb.textContent = 'Min muss kleiner als Max sein.'; return; }
     try {
       const token = await getValidToken();
@@ -3834,7 +3841,7 @@
       const res = await fetch(`${SB}/rest/v1/clans?id=eq.${clanId}`, {
         method: 'PATCH',
         headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ min_focus_min: minF, max_focus_min: maxF }),
+        body: JSON.stringify({ name: newName, min_focus_min: minF, max_focus_min: maxF }),
       });
       if (!res.ok) { fb.textContent = 'Fehler beim Speichern.'; return; }
       clanMinFocus = minF; clanMaxFocus = maxF;
