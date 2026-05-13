@@ -102,6 +102,29 @@
   .clan-join-request-btn:hover { background: var(--accent); color: #fff; }
   .clan-join-request-btn:disabled { opacity: 0.5; cursor: default; }
   .clan-join-pending { font-size: 11px; color: var(--text-muted); }
+  .clan-mode-btn {
+    font-size: 11px; padding: 4px 10px; flex: 1;
+    border: 0.5px solid var(--border-strong); border-radius: 6px;
+    background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif;
+    transition: background 0.12s, color 0.12s;
+  }
+  .clan-mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #clan-new-name {
+    width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 12px;
+    border: 0.5px solid var(--border-strong); border-radius: 6px;
+    background: var(--surface2); color: var(--text); font-family: Georgia, serif;
+    outline: none; margin-bottom: 6px;
+  }
+  #clan-create-confirm-btn {
+    width: 100%; padding: 6px; font-size: 12px;
+    border: 0.5px solid var(--accent); border-radius: 6px;
+    background: transparent; color: var(--accent);
+    cursor: pointer; font-family: Georgia, serif;
+    transition: background 0.12s, color 0.12s;
+  }
+  #clan-create-confirm-btn:hover { background: var(--accent); color: #fff; }
+  #clan-create-confirm-btn:disabled { opacity: 0.5; cursor: default; }
 
   /* ── Bell (Leader only) ── */
   #bell-wrap {
@@ -811,7 +834,19 @@
       Clan
     </button>
     <div id="clan-join-dropdown">
-      <div id="clan-join-list"><div class="clan-join-pending">Wird geladen…</div></div>
+      <div style="display:flex;gap:6px;margin-bottom:0.6rem;">
+        <button class="clan-mode-btn active" id="clan-tab-search">Clan suchen</button>
+        <button class="clan-mode-btn" id="clan-tab-create">Neuen Clan erstellen</button>
+      </div>
+      <div id="clan-search-panel">
+        <div id="clan-join-list"><div class="clan-join-pending">Wird geladen…</div></div>
+      </div>
+      <div id="clan-create-panel" style="display:none;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Gib deinem Clan einen Namen:</div>
+        <input type="text" id="clan-new-name" placeholder="Clan-Name…" maxlength="60">
+        <button id="clan-create-confirm-btn">Erstellen</button>
+        <div id="clan-create-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
+      </div>
     </div>
   </div>
   <div id="bell-wrap">
@@ -3685,17 +3720,82 @@
     el.querySelectorAll('.clan-join-request-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
-        await submitJoinRequest(await getValidToken());
+        await submitJoinRequestTo(await getValidToken(), btn.dataset.id);
         btn.replaceWith(Object.assign(document.createElement('span'), { className: 'clan-join-pending', textContent: 'Anfrage gesendet' }));
       });
     });
+  }
+
+  async function submitJoinRequestTo(token, targetClanId) {
+    try {
+      await fetch(`${SB}/rest/v1/rpc/submit_join_request_to`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_clan_id: targetClanId }),
+      });
+    } catch(e) { console.warn('submitJoinRequestTo error', e); }
+  }
+
+  async function createClan(name) {
+    try {
+      const token = await getValidToken();
+      if (!token) return null;
+      const res = await fetch(`${SB}/rest/v1/rpc/create_clan`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_name: name }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch(e) { console.warn('createClan error', e); return null; }
   }
 
   document.getElementById('clan-join-btn').addEventListener('click', e => {
     e.stopPropagation();
     const dd = document.getElementById('clan-join-dropdown');
     const isOpen = dd.classList.toggle('open');
-    if (isOpen) loadClanList();
+    if (isOpen) {
+      document.getElementById('clan-tab-search').classList.add('active');
+      document.getElementById('clan-tab-create').classList.remove('active');
+      document.getElementById('clan-search-panel').style.display = 'block';
+      document.getElementById('clan-create-panel').style.display = 'none';
+      loadClanList();
+    }
+  });
+
+  document.getElementById('clan-tab-search').addEventListener('click', () => {
+    document.getElementById('clan-tab-search').classList.add('active');
+    document.getElementById('clan-tab-create').classList.remove('active');
+    document.getElementById('clan-search-panel').style.display = 'block';
+    document.getElementById('clan-create-panel').style.display = 'none';
+  });
+
+  document.getElementById('clan-tab-create').addEventListener('click', () => {
+    document.getElementById('clan-tab-create').classList.add('active');
+    document.getElementById('clan-tab-search').classList.remove('active');
+    document.getElementById('clan-create-panel').style.display = 'block';
+    document.getElementById('clan-search-panel').style.display = 'none';
+    document.getElementById('clan-new-name').value = '';
+    document.getElementById('clan-create-feedback').textContent = '';
+  });
+
+  document.getElementById('clan-create-confirm-btn').addEventListener('click', async () => {
+    const name = document.getElementById('clan-new-name').value.trim();
+    const fb   = document.getElementById('clan-create-feedback');
+    if (!name) { fb.textContent = 'Name darf nicht leer sein.'; return; }
+    const btn = document.getElementById('clan-create-confirm-btn');
+    btn.disabled = true;
+    fb.textContent = '';
+    const newClanId = await createClan(name);
+    if (!newClanId) { fb.textContent = 'Fehler beim Erstellen.'; btn.disabled = false; return; }
+    clanId   = newClanId;
+    clanRole = 'leader';
+    document.getElementById('clan-join-dropdown').classList.remove('open');
+    updateLeaderUI();
+    const token = await getValidToken();
+    if (token) await loadClanSettings(token);
+    if (userPublic) document.getElementById('leaderboard-card').style.display = 'block';
+    btn.disabled = false;
   });
 
   document.addEventListener('click', e => {
