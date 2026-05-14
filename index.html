@@ -3317,7 +3317,6 @@
           display_unit: displayUnit, off_weekdays: offWeekdays,
           avatar_url: uploadedAvatarUrl,
         });
-        await submitJoinRequest(data.access_token);
         userName = username; userPublic = pub;
         avatarUrl = uploadedAvatarUrl;
         await onLoginSuccess(data, true);
