@@ -1899,8 +1899,7 @@
     const label = currentLabel.trim() || 'not specified';
     if (currentLabel.trim()) storeLabel(currentLabel.trim());
     if (currentUser) {
-      addStudyMinutes(key, mins);
-      savePomoSession(key, mins, label);
+      writeOrQueueCredit(key, mins, label);
     }
     launchConfetti();
     playSound('work');
@@ -1910,17 +1909,48 @@
   }
 
   async function addStudyMinutes(date, delta) {
-    if (!currentUser) return;
+    if (!currentUser) return false;
     const token = await getValidToken();
-    if (!token) return;
+    if (!token) return false;
     try {
       const res = await fetch(`${SB}/rest/v1/rpc/add_study_minutes`, {
         method: 'POST',
         headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
         body: JSON.stringify({ p_date: date, p_minutes: delta }),
       });
-      if (!res.ok) console.warn('addStudyMinutes failed:', res.status, await res.text());
-    } catch(e) { console.warn('addStudyMinutes error:', e); }
+      if (!res.ok) { console.warn('addStudyMinutes failed:', res.status); return false; }
+      return true;
+    } catch(e) { console.warn('addStudyMinutes error:', e); return false; }
+  }
+
+  const PENDING_KEY = 'pomo_pending_credits';
+
+  function queuePendingCredit(date, minutes, label, studyDone = false, sessionDone = false) {
+    const queue = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+    queue.push({ id: crypto.randomUUID(), date, minutes, label, studyDone, sessionDone });
+    localStorage.setItem(PENDING_KEY, JSON.stringify(queue));
+  }
+
+  async function writeOrQueueCredit(date, minutes, label) {
+    if (!navigator.onLine) { queuePendingCredit(date, minutes, label); return; }
+    const [studyDone, sessionDone] = await Promise.all([
+      addStudyMinutes(date, minutes),
+      savePomoSession(date, minutes, label),
+    ]);
+    if (!studyDone || !sessionDone) queuePendingCredit(date, minutes, label, studyDone, sessionDone);
+  }
+
+  async function drainPendingCredits() {
+    if (!currentUser || !navigator.onLine) return;
+    const queue = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+    if (!queue.length) return;
+    const remaining = [];
+    for (const entry of queue) {
+      if (!entry.studyDone) entry.studyDone = await addStudyMinutes(entry.date, entry.minutes);
+      if (!entry.sessionDone) entry.sessionDone = await savePomoSession(entry.date, entry.minutes, entry.label);
+      if (!entry.studyDone || !entry.sessionDone) remaining.push(entry);
+    }
+    localStorage.setItem(PENDING_KEY, JSON.stringify(remaining));
   }
 
   async function onTimerEnd() {
@@ -2368,6 +2398,8 @@
     setTimeout(() => switchTo('work', false), 1400);
   }
 
+  window.addEventListener('online', () => { if (currentUser) drainPendingCredits(); });
+
   // Page Visibility API: re-anchor when tab comes back into foreground
   document.addEventListener('visibilitychange', () => {
     if (document.hidden || !running || !startedAt) return;
@@ -2813,6 +2845,17 @@
     }
   }
 
+  async function reconcileStudyDays(localDays) {
+    for (const [date, localMins] of Object.entries(localDays)) {
+      const serverMins = days[date] || 0;
+      if (localMins > serverMins) {
+        const delta = localMins - serverMins;
+        const ok = await addStudyMinutes(date, delta);
+        if (ok) days[date] = serverMins + delta;
+      }
+    }
+  }
+
   // Upsert a single day
   async function saveStudyDay(token, date, minutes, off) {
     const offVal = offDays[date] === true ? true : offDays[date] === false ? false : null;
@@ -2931,16 +2974,21 @@
     if (clanId) await loadClanSettings(token);
     updateLeaderUI();
 
+    // Read local days before server overwrites them (for reconciliation)
+    const localRaw = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
+    const localDays = localRaw.days || {};
+
     // Load study days from server
     await loadStudyDays(token);
 
+    // Push any locally-recorded minutes that never reached the server
+    await reconcileStudyDays(localDays);
+
+    // Drain sessions that were completed while offline
+    await drainPendingCredits();
+
     // Clear stale localStorage — Supabase is now source of truth
     localStorage.removeItem(KEY);
-
-    // Migration banner only for brand new users who have local data
-    const localRaw = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
-    const localDays = localRaw.days || {};
-    const hasLocal = Object.keys(localDays).length > 0;
 
     closeAuthModal();
     updateUserChip();
@@ -2955,9 +3003,6 @@
     // Restore timer if it was running before page reload
     await restoreTimerState();
 
-    if (isNew && hasLocal) {
-      showMigrationPrompt(session, localDays);
-    }
   }
 
   function showMigrationPrompt(session, localDays) {
@@ -3385,9 +3430,9 @@
 
   /* ── Supabase: save pomodoro session with label ── */
   async function savePomoSession(date, durationMinutes, label) {
-    if (!currentUser) return;
+    if (!currentUser) return false;
     const token = await getValidToken();
-    if (!token) return;
+    if (!token) return false;
     try {
       const res = await fetch(`${SB}/rest/v1/pomodoro_sessions`, {
         method: 'POST',
@@ -3399,8 +3444,9 @@
           duration_minutes: durationMinutes,
         }),
       });
-      if (!res.ok) console.warn('savePomoSession failed:', res.status, await res.text());
-    } catch(e) { console.warn('savePomoSession error:', e); }
+      if (!res.ok) { console.warn('savePomoSession failed:', res.status); return false; }
+      return true;
+    } catch(e) { console.warn('savePomoSession error:', e); return false; }
   }
 
   /* ── Label Statistics ── */
