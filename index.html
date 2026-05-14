@@ -3966,11 +3966,16 @@
     try {
       const token = await getValidToken();
       if (!token) return;
-      await fetch(`${SB}/rest/v1/rpc/remove_clan_member`, {
+      const res = await fetch(`${SB}/rest/v1/rpc/remove_clan_member`, {
         method: 'POST',
         headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
         body: JSON.stringify({ p_user_id: userId }),
       });
+      if (res.ok) {
+        ['today', 'week', 'month', 'alltime'].forEach(p => cacheDel(`pomo_lb_cache_${p}`));
+        cacheDel('pomo_lb_winner');
+        loadLeaderboard(lbPeriod, true);
+      }
     } catch(e) { console.warn('removeClanMember error', e); }
   }
 
