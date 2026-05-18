@@ -2541,9 +2541,10 @@
       const session = getToken();
       if (session) {
         await saveProfile(session.access_token, {
-          focus_min:    parseInt(document.getElementById('set-work').value) || 25,
-          short_min:    getMin('short'),
-          long_min:     getMin('long'),
+          focus_min:        parseInt(document.getElementById('set-work').value) || 25,
+          label_focus_mins: labelDurations,
+          short_min:        getMin('short'),
+          long_min:         getMin('long'),
           long_after:   getLongAfter(),
           display_unit: displayUnit,
           off_weekdays: offWeekdays,
@@ -3038,6 +3039,10 @@
         const sel = document.getElementById('sound-select');
         if (sel) sel.value = profile.sound;
       }
+      if (profile.label_focus_mins && typeof profile.label_focus_mins === 'object') {
+        labelDurations = { ...labelDurations, ...profile.label_focus_mins };
+        saveLabelDurations();
+      }
       // Recalculate timer with loaded settings
       totalSec = getMin(mode) * 60;
       remaining = totalSec;
@@ -3384,8 +3389,8 @@
         // Create profile
         await saveProfile(data.access_token, {
           username, public: pub,
-          focus_min: getMin('work'), short_min: getMin('short'),
-          long_min: getMin('long'), long_after: getLongAfter(),
+          focus_min: getMin('work'), label_focus_mins: labelDurations,
+          short_min: getMin('short'), long_min: getMin('long'), long_after: getLongAfter(),
           display_unit: displayUnit, off_weekdays: offWeekdays,
           avatar_url: uploadedAvatarUrl,
         });
@@ -3789,8 +3794,9 @@
     const token = await getValidToken();
     if (!token) return;
     await saveProfile(token, {
-      focus_min: parseInt(document.getElementById('set-work').value) || 25,
-      short_min: getMin('short'),
+      focus_min:        parseInt(document.getElementById('set-work').value) || 25,
+      label_focus_mins: labelDurations,
+      short_min:        getMin('short'),
       long_min: getMin('long'), long_after: getLongAfter(),
       display_unit: displayUnit, off_weekdays: offWeekdays,
       sound: document.getElementById('sound-select')?.value,
