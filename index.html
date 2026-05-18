@@ -1367,24 +1367,27 @@
     const defaultVal = parseInt(document.getElementById('set-work').value) || 25;
     const section = document.getElementById('focus-settings-section');
     if (!labels.length) {
-      section.innerHTML = `<div class="panel-row">
+      section.innerHTML = `<div class="panel-row" style="margin-bottom:0.75rem;">
         <label for="focus-dur-default">Fokus</label>
         <div class="inp-wrap"><input type="number" id="focus-dur-default" value="${defaultVal}" min="1" max="300"> min</div>
       </div>`;
       return;
     }
-    let html = `<div class="panel-row">
-      <label for="focus-dur-default">Standard</label>
-      <div class="inp-wrap"><input type="number" id="focus-dur-default" value="${defaultVal}" min="1" max="300"> min</div>
-    </div>`;
+    let labelRows = '';
     for (const label of labels) {
       const val = labelDurations[label] != null ? labelDurations[label] : defaultVal;
-      html += `<div class="panel-row">
-        <label style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${enc(label)}">${enc(label)}</label>
+      labelRows += `<div class="panel-row" style="margin-bottom:0.5rem;padding-left:10px;">
+        <label style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);" title="${enc(label)}">${enc(label)}</label>
         <div class="inp-wrap"><input type="number" class="focus-dur-label" data-label="${enc(label)}" value="${val}" min="1" max="300"> min</div>
       </div>`;
     }
-    section.innerHTML = html;
+    section.innerHTML = `<div style="border:0.5px solid var(--border-strong);border-radius:8px;padding:0.6rem 0.75rem;margin-bottom:0.75rem;">
+      <div class="panel-row" style="margin-bottom:${labels.length ? '0.6rem' : '0'};">
+        <label for="focus-dur-default">Standard</label>
+        <div class="inp-wrap"><input type="number" id="focus-dur-default" value="${defaultVal}" min="1" max="300"> min</div>
+      </div>
+      ${labelRows}
+    </div>`;
   }
 
   /* ── Settings getters ── */
