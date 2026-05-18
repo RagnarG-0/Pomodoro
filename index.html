@@ -3473,7 +3473,7 @@
           e.preventDefault(); // prevent blur before click
           input.value = opt.textContent;
           currentLabel = opt.textContent;
-          if (!running && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
+          if (!running && remaining === totalSec && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
           dropdown.classList.remove('open');
           saveBtn.classList.add('saved');
           setTimeout(() => saveBtn.classList.remove('saved'), 1500);
@@ -3493,7 +3493,7 @@
     saveBtn.addEventListener('click', () => {
       const val = input.value.trim();
       currentLabel = val;
-      if (!running && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
+      if (!running && remaining === totalSec && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
       if (val) storeLabel(val);
       saveBtn.classList.add('saved');
       setTimeout(() => saveBtn.classList.remove('saved'), 1500);
