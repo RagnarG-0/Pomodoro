@@ -813,6 +813,7 @@
 </head>
 <body>
 
+
 <div style="width:100%;max-width:680px;text-align:center;padding-top:1.5rem;">
   <h1>Pomodoro</h1>
 </div>
@@ -946,10 +947,8 @@
     <div class="panel-title">Einstellungen</div>
 
     <div class="panel-section">Timer</div>
-    <div class="panel-row">
-      <label for="set-work">Fokus</label>
-      <div class="inp-wrap"><input type="number" id="set-work" value="25" min="1" max="90"> min</div>
-    </div>
+    <div id="focus-settings-section"></div>
+    <input type="hidden" id="set-work" value="25">
     <div class="panel-row">
       <label for="set-short">Kurze Pause</label>
       <div class="inp-wrap"><input type="number" id="set-short" value="5" min="1" max="30"> min</div>
@@ -1214,7 +1213,6 @@
   <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid var(--border);">
     <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 Tagessiege: 1. Platz = 3, 2. Platz = 2, 3. Platz = 1</span>
-    <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">🧻 Letzter Platz</span>
   </div>
 </div>
 
@@ -1255,7 +1253,6 @@
   let userName = null;
   let userPublic = false;
   let userDiamonds = 0;
-  let userAwardsLast = 0;
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
 
   let clanId = null;
@@ -1332,6 +1329,8 @@
   }
 
   const SETTINGS_KEY = 'pomo_settings_v1';
+  const LABEL_DURATIONS_KEY = 'pomo_label_durations_v1';
+  let labelDurations = {};
 
   function loadSettings() {
     try {
@@ -1354,8 +1353,45 @@
     } catch(e) {}
   }
 
+  function loadLabelDurations() {
+    try { labelDurations = JSON.parse(localStorage.getItem(LABEL_DURATIONS_KEY) || '{}'); } catch(e) { labelDurations = {}; }
+  }
+
+  function saveLabelDurations() {
+    try { localStorage.setItem(LABEL_DURATIONS_KEY, JSON.stringify(labelDurations)); } catch(e) {}
+  }
+
+  function renderFocusDurationsSettings() {
+    const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    const labels = getStoredLabels();
+    const defaultVal = parseInt(document.getElementById('set-work').value) || 25;
+    const section = document.getElementById('focus-settings-section');
+    if (!labels.length) {
+      section.innerHTML = `<div class="panel-row">
+        <label for="focus-dur-default">Fokus</label>
+        <div class="inp-wrap"><input type="number" id="focus-dur-default" value="${defaultVal}" min="1" max="300"> min</div>
+      </div>`;
+      return;
+    }
+    let html = `<div class="panel-row">
+      <label for="focus-dur-default">Standard</label>
+      <div class="inp-wrap"><input type="number" id="focus-dur-default" value="${defaultVal}" min="1" max="300"> min</div>
+    </div>`;
+    for (const label of labels) {
+      const val = labelDurations[label] != null ? labelDurations[label] : defaultVal;
+      html += `<div class="panel-row">
+        <label style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${enc(label)}">${enc(label)}</label>
+        <div class="inp-wrap"><input type="number" class="focus-dur-label" data-label="${enc(label)}" value="${val}" min="1" max="300"> min</div>
+      </div>`;
+    }
+    section.innerHTML = html;
+  }
+
   /* ── Settings getters ── */
   function getMin(m) {
+    if (m === 'work' && currentLabel && labelDurations[currentLabel] != null) {
+      return Math.max(1, labelDurations[currentLabel]);
+    }
     return Math.max(1, parseInt(document.getElementById('set-' + m).value) || {work:25,short:5,long:15}[m]);
   }
   function getLongAfter() {
@@ -1664,13 +1700,6 @@
     return { current, next };
   }
 
-  function diamondsStr(diamonds, last) {
-    const parts = [];
-    if (diamonds > 0) parts.push(diamonds + ' 💎');
-    if (last > 0)     parts.push(last + ' 🧻');
-    return parts.length ? '  ' + parts.join('  ') : '';
-  }
-
   function renderLevel() {
     const totalMins = Object.values(days).reduce((a, b) => a + b, 0);
     const { current, next } = getCurrentLevel(totalMins);
@@ -1887,6 +1916,7 @@
     clearInterval(tid); running=false; startedAt=null;
     totalSec=getMin(m)*60; remaining=totalSec;
     renderTimer();
+    window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
   }
 
   function completePomo() {
@@ -1968,11 +1998,17 @@
     }
   }
 
+  let _lastTraySecond = -1;
   function tick() {
     if (!startedAt) return;
     const elapsed = Math.floor((Date.now() - startedAt) / 1000);
     remaining = Math.max(0, totalSec - elapsed);
     renderTimer();
+    // Throttle tray updates to 1×/sec
+    if (remaining !== _lastTraySecond) {
+      _lastTraySecond = remaining;
+      window.electronAPI?.sendState({ running, mode, remaining, label: currentLabel });
+    }
     if (remaining <= 0) onTimerEnd();
   }
 
@@ -2353,6 +2389,7 @@
       saveTimerState({ end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null, pomoday: mode === 'work' ? pomoDay : null });
     }
     renderTimer();
+    window.electronAPI?.sendState({ running, mode, remaining, label: currentLabel });
   }
 
   function showTimerConfirmBanner(msg, onYes) {
@@ -2375,6 +2412,7 @@
     swSend({ type: 'TIMER_RESET' });
     clearTimerState();
     render();
+    window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
   }
 
   async function finishEarly() {
@@ -2448,6 +2486,27 @@
     document.getElementById('set-'+m).addEventListener('change', () => { if (mode===m) reset(); });
   });
 
+  // Tauri: sendState via invoke; commands via window.__tauriCmd (called by Rust eval)
+  if (window.__TAURI__) {
+    const { core: { invoke } } = window.__TAURI__;
+    window.electronAPI = {
+      sendState: (state) => invoke('update_state', state).catch(() => {}),
+    };
+
+    // Window drag: top 40px, leaving 72px for macOS traffic lights
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || e.clientY > 40 || e.clientX < 72) return;
+      if (e.target.closest('button, a, input, select, textarea, [role="button"]')) return;
+      window.__TAURI__.window.getCurrentWindow().startDragging().catch(() => {});
+    });
+  }
+
+  window.__tauriCmd = ({ action, mode: m }) => {
+    if (action === 'toggle') start();
+    if (action === 'reset')  reset();
+    if (action === 'setMode') switchTo(m, false);
+  };
+
   /* ── Settings overlay ── */
   const overlay=document.getElementById('overlay');
   const gearBtn=document.getElementById('gear-btn');
@@ -2455,6 +2514,7 @@
     const open = overlay.classList.toggle('open');
     gearBtn.classList.toggle('open', open);
     if (open) {
+      renderFocusDurationsSettings();
       const unField = document.getElementById('change-username');
       if (unField && userName) unField.value = userName;
       const uf = document.getElementById('username-feedback');
@@ -2465,12 +2525,20 @@
   document.getElementById('save-settings-btn').addEventListener('click', async () => {
     const feedback = document.getElementById('settings-save-feedback');
     feedback.textContent = 'Wird gespeichert…';
+    const defaultDurInput = document.getElementById('focus-dur-default');
+    if (defaultDurInput) document.getElementById('set-work').value = defaultDurInput.value;
+    document.querySelectorAll('.focus-dur-label').forEach(inp => {
+      const lbl = inp.dataset.label;
+      const val = parseInt(inp.value);
+      if (lbl && !isNaN(val) && val >= 1) labelDurations[lbl] = val;
+    });
+    saveLabelDurations();
     saveSettings(); // save to localStorage
     if (currentUser) {
       const session = getToken();
       if (session) {
         await saveProfile(session.access_token, {
-          focus_min:    getMin('work'),
+          focus_min:    parseInt(document.getElementById('set-work').value) || 25,
           short_min:    getMin('short'),
           long_min:     getMin('long'),
           long_after:   getLongAfter(),
@@ -2481,7 +2549,10 @@
       }
     }
     // Apply new timer duration if not running
-    if (!running) { totalSec = getMin(mode) * 60; remaining = totalSec; renderTimer(); }
+    if (!running) {
+      totalSec = getMin(mode) * 60; remaining = totalSec; renderTimer();
+      window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
+    }
     feedback.textContent = '✓ Gespeichert';
     setTimeout(() => { feedback.textContent = ''; }, 2500);
   });
@@ -2551,8 +2622,7 @@
       // Always use alltime_minutes for level calculation
       const alltimeMins = entry.alltime_minutes ?? mins;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
-      const dStr = diamondsStr(entry.diamonds || 0, entry.awards_last || 0);
-      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})${dStr}</span>`;
+      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})</span>`;
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
@@ -2950,7 +3020,6 @@
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
       userDiamonds  = profile.diamonds || 0;
-      userAwardsLast = profile.awards_last || 0;
       displayUnit = profile.display_unit || 'pomodoros';
       clanId   = profile.clan_id   || null;
       clanRole = profile.clan_role || null;
@@ -3401,6 +3470,7 @@
           e.preventDefault(); // prevent blur before click
           input.value = opt.textContent;
           currentLabel = opt.textContent;
+          if (!running && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
           dropdown.classList.remove('open');
           saveBtn.classList.add('saved');
           setTimeout(() => saveBtn.classList.remove('saved'), 1500);
@@ -3420,6 +3490,7 @@
     saveBtn.addEventListener('click', () => {
       const val = input.value.trim();
       currentLabel = val;
+      if (!running && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
       if (val) storeLabel(val);
       saveBtn.classList.add('saved');
       setTimeout(() => saveBtn.classList.remove('saved'), 1500);
@@ -3715,7 +3786,8 @@
     const token = await getValidToken();
     if (!token) return;
     await saveProfile(token, {
-      focus_min: getMin('work'), short_min: getMin('short'),
+      focus_min: parseInt(document.getElementById('set-work').value) || 25,
+      short_min: getMin('short'),
       long_min: getMin('long'), long_after: getLongAfter(),
       display_unit: displayUnit, off_weekdays: offWeekdays,
       sound: document.getElementById('sound-select')?.value,
@@ -4051,6 +4123,7 @@
   initLabelInput();
   initStatsDetail();
   load();
+  loadLabelDurations();
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
   syncWdBtns();
