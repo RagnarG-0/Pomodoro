@@ -809,6 +809,212 @@
     .stats-detail-chart-wrap { width: 100%; }
     .pie-svg { width: 120px; height: 120px; }
   }
+
+  /* ─── Ei-Box & Karten-Deck ───────────────────────────────────────────────── */
+
+  #egg-section-wrapper { width: 100%; max-width: 680px; position: relative; }
+
+  #egg-placeholder-overlay {
+    position: absolute; inset: -4px; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: all; transition: opacity 0.4s ease;
+  }
+  #egg-placeholder-overlay.hidden { opacity: 0; pointer-events: none; }
+  .egg-placeholder-inner {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    font-family: Georgia, serif; color: var(--text-muted); text-align: center;
+  }
+  .egg-placeholder-title { font-size: 18px; letter-spacing: 0.08em; }
+  .egg-placeholder-sub   { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.6; }
+
+  .diamond-error-banner {
+    width: 100%; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 10px; padding: 10px 16px; font-family: -apple-system, sans-serif;
+    font-size: 13px; color: #dc2626; text-align: center; display: none; margin-bottom: 0;
+  }
+  @media (prefers-color-scheme: dark) { .diamond-error-banner { color: #f87171; } }
+  .diamond-error-banner.visible { display: block; }
+
+  .diamond-badge {
+    font-family: -apple-system, sans-serif; font-size: 12px;
+    font-weight: 600; color: #60a5fa; letter-spacing: 0.02em;
+  }
+  .egg-section-label {
+    font-family: -apple-system, sans-serif; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-muted);
+    margin-bottom: 10px; opacity: 0.65;
+  }
+
+  /* Brutkasten */
+  .incubator-area { margin-bottom: 16px; }
+  .incubator-slot {
+    min-height: 178px; border: 1.5px dashed var(--border-strong); border-radius: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 18px; transition: border-color 0.15s, background-color 0.15s;
+  }
+  .incubator-slot.drag-over { border-color: var(--accent); background-color: rgba(29,158,117,0.05); }
+  .drop-hint {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    color: var(--text-muted); font-family: -apple-system, sans-serif; font-size: 13px;
+    opacity: 0.5; pointer-events: none; text-align: center;
+  }
+  .drop-hint-icon { font-size: 26px; }
+  .egg-display-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+  .egg-stage-wrap   { position: relative; display: inline-flex; align-items: center; justify-content: center; user-select: none; }
+  .progress-wrap  { width: 100%; }
+  .progress-track { height: 6px; background: var(--surface2); border-radius: 6px; overflow: hidden; }
+  .progress-fill  { height: 100%; border-radius: 6px; background: var(--accent); transition: width 0.9s linear; width: 0%; }
+  .progress-text  { font-family: -apple-system, sans-serif; font-size: 11px; color: var(--text-muted); margin-top: 6px; text-align: center; }
+
+  .incubator-buttons { display: flex; gap: 10px; margin-top: 12px; }
+  .btn-incubator {
+    flex: 1; padding: 9px 6px; border-radius: 9px; border: 1px solid var(--border-strong);
+    background: var(--surface2); color: var(--text); font-family: -apple-system, sans-serif;
+    font-size: 12px; cursor: pointer; transition: background 0.15s, opacity 0.15s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .btn-incubator:hover:not(:disabled) { background: rgba(96,165,250,0.12); border-color: rgba(96,165,250,0.4); }
+  .btn-incubator:active:not(:disabled) { transform: scale(0.97); }
+  .btn-incubator:disabled { opacity: 0.32; cursor: not-allowed; }
+
+  /* Inventar */
+  .inv-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 2px 0; }
+  .inv-toggle-btn {
+    background: none; border: none; cursor: pointer; color: var(--text-muted);
+    font-size: 11px; padding: 0; font-family: -apple-system, sans-serif;
+    letter-spacing: 0.04em; pointer-events: none;
+  }
+  .inv-content { overflow: hidden; max-height: 0; transition: max-height 0.32s ease, margin-top 0.32s ease; margin-top: 0; }
+  .inv-content.open { max-height: 300px; margin-top: 14px; }
+  .inv-slots { display: flex; flex-wrap: wrap; gap: 8px; }
+  .inv-slot {
+    width: calc(10% - 8px); min-width: 48px; min-height: 68px; background: var(--surface2);
+    border: 1.5px dashed var(--border); border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: transform 0.1s, opacity 0.15s, background 0.15s;
+  }
+  .inv-slot.occupied { border-style: solid; border-color: transparent; cursor: grab; }
+  .inv-slot.occupied:hover { transform: translateY(-3px); }
+  .inv-slot.occupied:active { cursor: grabbing; }
+  .inv-slot.dragging-from { opacity: 0.18; }
+  .inv-slot.plus-slot { cursor: pointer; gap: 2px; }
+  .inv-slot.plus-slot:hover { background: rgba(96,165,250,0.1); transform: translateY(-2px); border-color: rgba(96,165,250,0.35); }
+  .plus-icon { font-size: 18px; color: var(--text-muted); opacity: 0.5; line-height: 1; }
+  .plus-cost { font-family: -apple-system, sans-serif; font-size: 9px; color: var(--text-muted); opacity: 0.5; }
+
+  /* Deck-Box */
+  .deck-toggle-area { cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+  .deck-content { overflow: hidden; max-height: 0; transition: max-height 0.32s ease, margin-top 0.32s ease; margin-top: 0; }
+  .deck-content.open { max-height: 700px; margin-top: 16px; }
+  .deck-grid  { display: flex; flex-wrap: wrap; gap: 10px; }
+  .deck-empty { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--text-muted); opacity: 0.5; text-align: center; padding: 12px 0; width: 100%; }
+  .deck-card-wrap { position: relative; }
+  .deck-card {
+    width: 60px; height: 82px; border-radius: 8px;
+    border: 1.5px solid var(--card-color, #999); background: var(--card-bg, #222);
+    position: relative; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 4px; cursor: pointer;
+  }
+  .deck-card.stack-2::before {
+    content: ''; position: absolute; inset: 0; border-radius: 8px;
+    border: 1.5px solid var(--card-color, #999); background: var(--card-bg, #222);
+    transform: rotate(-3.5deg) translate(-2px, 3px); z-index: -1;
+  }
+  .deck-card.stack-3::after {
+    content: ''; position: absolute; inset: 0; border-radius: 8px;
+    border: 1.5px solid var(--card-color, #999); background: var(--card-bg, #222);
+    transform: rotate(3deg) translate(2px, 3px); z-index: -2;
+  }
+  .deck-count-badge {
+    position: absolute; top: -7px; right: -7px; width: 18px; height: 18px;
+    border-radius: 50%; background: var(--accent); color: #fff;
+    font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, sans-serif;
+  }
+  .deck-toggle-btn {
+    background: none; border: none; cursor: pointer; color: var(--text-muted);
+    font-size: 11px; padding: 0; font-family: -apple-system, sans-serif; letter-spacing: 0.04em;
+  }
+  .deck-toggle-btn:hover { opacity: 0.7; }
+
+  /* Animationen */
+  @keyframes eggShake {
+    0%,100% { transform: rotate(0deg) translateX(0); }
+    10%  { transform: rotate(-10deg) translateX(-5px); }
+    22%  { transform: rotate(10deg)  translateX(5px); }
+    34%  { transform: rotate(-10deg) translateX(-5px); }
+    46%  { transform: rotate(10deg)  translateX(5px); }
+    58%  { transform: rotate(-6deg)  translateX(-3px); }
+    70%  { transform: rotate(6deg)   translateX(3px); }
+    82%  { transform: rotate(-3deg); }
+    92%  { transform: rotate(2deg); }
+  }
+  @keyframes eggGlow {
+    0%,100% { filter: drop-shadow(0 0 5px var(--glow)) drop-shadow(0 0 12px var(--glow)); }
+    50%      { filter: drop-shadow(0 0 14px var(--glow)) drop-shadow(0 0 28px var(--glow)); }
+  }
+  @keyframes eggTextPulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+  @keyframes hatchCardReveal {
+    0%   { transform: scale(0) rotate(-10deg); opacity: 0; }
+    65%  { transform: scale(1.07) rotate(1.5deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  @keyframes hatchFadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes hatchShimmer { from { background-position:-200% center; } to { background-position:200% center; } }
+  @keyframes hatchCardPop  { 0% { transform:scale(0.2); opacity:0; } 70% { transform:scale(1.15); opacity:1; } 100% { transform:scale(1); opacity:1; } }
+  @keyframes hatchBadgePop { 0% { transform:scale(0.5); } 70% { transform:scale(1.4); } 100% { transform:scale(1); } }
+
+  .egg-shaking   { animation: eggShake 0.48s ease-in-out; }
+  .egg-pulsing   { animation: eggGlow 1.7s ease-in-out infinite; }
+  .egg-ready-txt { animation: eggTextPulse 1.4s ease-in-out infinite; }
+
+  /* Schlüpf-Overlay */
+  #hatchOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.84);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; z-index: 900; animation: hatchFadeIn 0.25s ease;
+  }
+  #hatchOverlay.visible { display: flex; }
+  .hatch-heading { font-size: 20px; font-weight: normal; letter-spacing: 0.1em; color: #f5f5f0; }
+  .hatch-card {
+    width: min(82vw, 380px); height: min(80vh, 530px); border-radius: 14px; border: 2px solid;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 12px 12px 48px; position: relative; overflow: hidden;
+    animation: hatchCardReveal 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  .hatch-card-glow { position: absolute; inset: 0; opacity: 0.1; }
+  .rarity-badge-h {
+    font-family: -apple-system, sans-serif; font-size: 10px; font-weight: 800;
+    letter-spacing: 0.15em; text-transform: uppercase; padding: 4px 12px;
+    border-radius: 20px; position: absolute; bottom: 16px; z-index: 1;
+  }
+  .rarity-badge-h.mystisch {
+    background: linear-gradient(90deg,#FF4081,#FF80AB,#FF6EC7,#FF4081);
+    background-size: 200% auto; animation: hatchShimmer 2s linear infinite; color: white;
+  }
+  .btn-to-deck {
+    font-family: 'Georgia', serif; background: var(--accent); color: #fff; border: none;
+    padding: 12px 34px; border-radius: 10px; font-size: 15px; cursor: pointer;
+    letter-spacing: 0.04em; transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn-to-deck:hover { opacity: 0.85; }
+  .btn-to-deck:active { transform: scale(0.97); }
+
+  /* Karten-Ansicht-Overlay */
+  #cardViewOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.84);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; z-index: 910; cursor: pointer; animation: hatchFadeIn 0.2s ease;
+  }
+  #cardViewOverlay.visible { display: flex; }
+  #cardViewOverlay .hatch-card { animation: hatchCardReveal 0.3s cubic-bezier(0.34,1.56,0.64,1) both; }
+  .card-view-hint {
+    font-family: -apple-system, sans-serif; font-size: 11px;
+    color: rgba(255,255,255,0.35); letter-spacing: 0.14em; text-transform: uppercase;
+  }
 </style>
 </head>
 <body>
@@ -1049,6 +1255,11 @@
       <div id="clan-member-list" style="display:none;margin-top:0.4rem;"></div>
       <button id="save-clan-settings-btn" style="width:100%;margin-top:0.5rem;padding:8px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Clan-Einstellungen speichern</button>
       <div id="clan-settings-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
+      <div class="panel-divider" style="margin:0.5rem 0;"></div>
+      <div class="panel-row">
+        <label style="font-size:12px;">Eier-Vorschau</label>
+        <button id="egg-preview-toggle" style="font-size:11px;padding:5px 12px;border:0.5px solid var(--border-strong);border-radius:7px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:-apple-system,sans-serif;">🔍 aktivieren</button>
+      </div>
     </div>
 
     <button id="save-settings-btn" style="width:100%;margin-top:0.5rem;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;transition:background 0.12s;">Einstellungen speichern</button>
@@ -1193,6 +1404,80 @@
       <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>
     </div>
   </div>
+</div>
+
+
+<!-- Ei-Box + Deck-Box (durch Platzhalter verdeckt; Leader-Toggle in Einstellungen) -->
+<div id="egg-section-wrapper">
+
+  <div id="egg-placeholder-overlay">
+    <div class="egg-placeholder-inner">
+      <div style="font-size:2.2rem">🥚</div>
+      <div class="egg-placeholder-title">Bald verfügbar</div>
+      <div class="egg-placeholder-sub">Eier &amp; Kartensammlung</div>
+    </div>
+  </div>
+
+  <div id="diamondBanner" class="diamond-error-banner"></div>
+
+  <!-- Ei-Box -->
+  <div class="card" id="eggBox">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <div class="hmap-label">🥚 Eier</div>
+      <span class="diamond-badge" id="diamondDisplay">💎 —</span>
+    </div>
+
+    <div class="incubator-area">
+      <div class="egg-section-label">Brutkasten</div>
+      <div class="incubator-slot" id="incubatorSlot">
+        <div class="drop-hint" id="dropHint">
+          <div class="drop-hint-icon">🔥</div>
+          Ei aus Inventar hierher ziehen
+        </div>
+      </div>
+      <div class="incubator-buttons">
+        <button class="btn-incubator" id="btnMinus1h" disabled>−1h &nbsp;💎1</button>
+        <button class="btn-incubator" id="btnSkip" disabled>Überspringen 💎—</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="inv-header" id="invHeader">
+        <div class="egg-section-label" style="margin-bottom:0">Inventar</div>
+        <button class="inv-toggle-btn" id="invBtn">▼ aufklappen</button>
+      </div>
+      <div class="inv-content" id="invContent">
+        <div class="inv-slots" id="invSlots"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deck-Box -->
+  <div class="card" id="deckBox">
+    <div class="deck-toggle-area" id="deckToggle">
+      <div class="hmap-label">🃏 Meine Karten <span id="deckCount" style="opacity:0.45;font-size:11px">(0)</span></div>
+      <button class="deck-toggle-btn" id="deckBtn">▼ aufklappen</button>
+    </div>
+    <div class="deck-content" id="deckContent">
+      <div class="deck-grid" id="deckGrid">
+        <div class="deck-empty">Noch keine Karten</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Schlüpf-Overlay -->
+<div id="hatchOverlay">
+  <div class="hatch-heading">Eine neue Karte!</div>
+  <div id="hatchCardEl"></div>
+  <button class="btn-to-deck" id="btnDeck">In Deck legen</button>
+</div>
+
+<!-- Karten-Ansicht-Overlay -->
+<div id="cardViewOverlay">
+  <div id="cardViewEl"></div>
+  <div class="card-view-hint">Tippen zum Schließen</div>
 </div>
 
 
@@ -1926,6 +2211,7 @@
     const key = pomoDay || todayKey(); // use day when timer started, not when it ended
     pomoDay = null; // reset for next pomo
     const mins = Math.round(totalSec / 60);
+    const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
     days[key] = (days[key] || 0) + mins;
     totalPomodoros++;
     save();
@@ -1939,6 +2225,12 @@
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
     toast('Pomodoro #' + totalPomodoros + ' geschafft! ' + todayPomos + ' heute');
     renderTomatoes(); renderHeatmap(); renderStats();
+    // Level-Up → Ei vergeben
+    const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
+    const { current: lvlAfter  } = getCurrentLevel(Object.values(days).reduce((s, m) => s + m, 0));
+    if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
+    // Brutkasten-Fortschritt neu berechnen
+    if (incubatorData) renderIncubator();
   }
 
   async function addStudyMinutes(date, delta) {
@@ -4132,6 +4424,462 @@
   initLabelInput();
   initStatsDetail();
   load();
+  // ─── Eier & Kartensammlung ────────────────────────────────────────────────
+
+  const EGG_TOTAL_MIN = 600;
+  const EGG_BUY_COST  = 12;
+  const EGG_COLOR_IDS = ['y','b','g','r'];
+  const EGG_STAGE_SCALE = [1.0, 1.02, 1.08, 1.25];
+  const EGG_BREAK_L = 'polygon(0 0,50% 0,57% 10%,43% 22%,59% 34%,41% 47%,58% 59%,44% 71%,54% 83%,47% 100%,0 100%)';
+  const EGG_BREAK_R = 'polygon(47% 100%,54% 83%,44% 71%,58% 59%,41% 47%,59% 34%,43% 22%,57% 10%,50% 0,100% 0,100% 100%)';
+
+  const EGG_COLORS = {
+    y: { name:'Gelb', light:'#FFE87A', dark:'#9A7400', glow:'#F5C518' },
+    b: { name:'Blau', light:'#6EC8F5', dark:'#0C3E8A', glow:'#2196F3' },
+    g: { name:'Grün', light:'#8EDA6A', dark:'#1C5C0C', glow:'#4CAF50' },
+    r: { name:'Rot',  light:'#F07272', dark:'#6A0A0A', glow:'#F44336' },
+  };
+  const EGG_STAGES = {
+    y: ['Eier/yellow/Stadium_1.png','Eier/yellow/Stadium_2.png','Eier/yellow/Stadium_3.png','Eier/yellow/Stadium_4.png'],
+    b: ['Eier/blue/Stadium_1.png',  'Eier/blue/Stadium_2.png',  'Eier/blue/Stadium_3.png',  'Eier/blue/Stadium_4.png'],
+    g: ['Eier/green/Stadium_1.png', 'Eier/green/Stadium_2.png', 'Eier/green/Stadium_3.png', 'Eier/green/Stadium_4.png'],
+    r: ['Eier/red/Stadium_1.png',   'Eier/red/Stadium_2.png',   'Eier/red/Stadium_3.png',   'Eier/red/Stadium_4.png'],
+  };
+  const EGG_RARITIES = [
+    { name:'Normal',   key:'normal',    folder:'common',    color:'#aaa',    bg:'#28282a', weight:40 },
+    { name:'Selten',   key:'selten',    folder:'rare',      color:'#4da3ff', bg:'#07182e', weight:30 },
+    { name:'Episch',   key:'episch',    folder:'epic',      color:'#c278e8', bg:'#190430', weight:18 },
+    { name:'Legendär', key:'legendaer', folder:'legendary', color:'#ffd700', bg:'#201400', weight:9  },
+    { name:'Mystisch', key:'mystisch',  folder:'mystic',    color:'#ff4fbf', bg:'#1c0020', weight:3  },
+  ];
+  const CARD_CATALOG = [
+    { id:  1, name:'FSr-Mitglied',          rarity:'common',    folder:'common'    },
+    { id:  2, name:'Glutenboykottierer',     rarity:'common',    folder:'common'    },
+    { id:  3, name:'Histotutor',             rarity:'common',    folder:'common'    },
+    { id:  4, name:'M1Schwitzer',            rarity:'common',    folder:'common'    },
+    { id:  5, name:'Skillslabschauspieler',  rarity:'common',    folder:'common'    },
+    { id:  6, name:'Soziologiestudent-in',   rarity:'common',    folder:'common'    },
+    { id:  7, name:'Warmduscher',            rarity:'common',    folder:'common'    },
+    { id:  8, name:'Anki-Controler-User',    rarity:'rare',      folder:'rare'      },
+    { id:  9, name:'Biochemietrader',        rarity:'rare',      folder:'rare'      },
+    { id: 10, name:'Mensafrau',              rarity:'rare',      folder:'rare'      },
+    { id: 11, name:'Schwesterrabiata',       rarity:'rare',      folder:'rare'      },
+    { id: 12, name:'gym10duscher',           rarity:'rare',      folder:'rare'      },
+    { id: 13, name:'Medienny',               rarity:'epic',      folder:'epic'      },
+    { id: 14, name:'STHebungsüberseher',     rarity:'epic',      folder:'epic'      },
+    { id: 15, name:'TomS',                   rarity:'epic',      folder:'epic'      },
+    { id: 16, name:'Bibliothek-Schläfer',    rarity:'legendary', folder:'legendary' },
+    { id: 17, name:'FreundausHarvard',       rarity:'legendary', folder:'legendary' },
+    { id: 18, name:'glasn',                  rarity:'legendary', folder:'legendary' },
+    { id: 19, name:'Mediraggy',              rarity:'legendary', folder:'legendary' },
+    { id: 20, name:'Neurotutor',             rarity:'legendary', folder:'legendary' },
+    { id: 21, name:'Penig-BG',              rarity:'mystic',    folder:'mystic'    },
+  ];
+
+  // State
+  let eggInventory   = Array(10).fill(null);
+  let incubatorData  = null; // { color, focus_minutes_at_placement, bonusMin }
+  let eggDeck        = [];
+  let eggDeckOpen    = false;
+  let eggInvOpen     = false;
+  let eggDraggedId   = null;
+  let eggCurrentCard = null;
+  let eggNextId      = 1;
+  let eggBannerTimer = null;
+
+  const EGG_PREVIEW_KEY = 'pomo_egg_preview';
+
+  function isEggPreviewActive() {
+    return localStorage.getItem(EGG_PREVIEW_KEY) === '1';
+  }
+  function applyEggPreview() {
+    const overlay = document.getElementById('egg-placeholder-overlay');
+    const btn     = document.getElementById('egg-preview-toggle');
+    if (!overlay) return;
+    overlay.classList.toggle('hidden', isEggPreviewActive());
+    if (btn) btn.textContent = isEggPreviewActive() ? '🔍 deaktivieren' : '🔍 aktivieren';
+  }
+  document.getElementById('egg-preview-toggle')?.addEventListener('click', () => {
+    if (clanRole !== 'leader') return;
+    localStorage.setItem(EGG_PREVIEW_KEY, isEggPreviewActive() ? '0' : '1');
+    applyEggPreview();
+  });
+
+  // Hilfsfunktionen
+  function eggStageFrame(stage) {
+    if (stage === 'ready') return 3;
+    if (stage >= 2) return 2;
+    return stage;
+  }
+  function eggSprite(colorId, stage, px) {
+    const f   = eggStageFrame(stage);
+    const src = (EGG_STAGES[colorId] || EGG_STAGES['y'])[f];
+    const w   = Math.round(px * EGG_STAGE_SCALE[f]);
+    return `<img src="${src}" width="${w}" style="display:block;">`;
+  }
+  function getEggProgress() {
+    if (!incubatorData) return 0;
+    const total = Object.values(days).reduce((s, m) => s + m, 0);
+    return Math.min(total - incubatorData.focus_minutes_at_placement + (incubatorData.bonusMin || 0), EGG_TOTAL_MIN);
+  }
+  function getEggCrackStage(min) {
+    if (min >= EGG_TOTAL_MIN)             return 'ready';
+    if (min >= EGG_TOTAL_MIN * 0.70) return 2;
+    if (min >= EGG_TOTAL_MIN * 0.35) return 1;
+    return 0;
+  }
+
+  // Diamanten
+  function renderEggDiamonds() {
+    const el = document.getElementById('diamondDisplay');
+    if (el) el.textContent = '💎 ' + userDiamonds;
+  }
+  function showEggDiamondError() {
+    const b = document.getElementById('diamondBanner');
+    if (!b) return;
+    b.textContent = 'Du bist anscheinend gesetzlich versichert. Verdiene mehr Diamanten und probiere es nochmal!';
+    b.classList.add('visible');
+    clearTimeout(eggBannerTimer);
+    eggBannerTimer = setTimeout(() => b.classList.remove('visible'), 4000);
+  }
+
+  // Inventar
+  function renderInventory() {
+    const c = document.getElementById('invSlots');
+    if (!c) return;
+    c.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+      const egg  = eggInventory[i];
+      const slot = document.createElement('div');
+      if (egg) {
+        slot.className   = 'inv-slot occupied';
+        slot.innerHTML   = eggSprite(egg.color, 0, 36);
+        slot.draggable   = true;
+        slot.dataset.idx = i;
+        slot.addEventListener('dragstart', (e) => {
+          eggDraggedId = egg.id;
+          setTimeout(() => slot.classList.add('dragging-from'), 0);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        slot.addEventListener('dragend', () => { slot.classList.remove('dragging-from'); eggDraggedId = null; });
+      } else {
+        slot.className = 'inv-slot plus-slot';
+        slot.innerHTML  = `<span class="plus-icon">+</span><span class="plus-cost">${EGG_BUY_COST} 💎</span>`;
+        slot.addEventListener('click', buyEgg);
+      }
+      c.appendChild(slot);
+    }
+  }
+  function buyEgg() {
+    const freeIdx = eggInventory.findIndex(e => e === null);
+    if (freeIdx === -1) return;
+    if (userDiamonds < EGG_BUY_COST) { showEggDiamondError(); return; }
+    userDiamonds -= EGG_BUY_COST;
+    eggInventory[freeIdx] = { id: eggNextId++, color: EGG_COLOR_IDS[Math.floor(Math.random() * 4)] };
+    renderEggDiamonds(); renderInventory();
+    // TODO Phase 3: UPDATE profiles SET diamonds = diamonds - 12, eggs = ...
+  }
+  function toggleEggInv() {
+    eggInvOpen = !eggInvOpen;
+    document.getElementById('invContent')?.classList.toggle('open', eggInvOpen);
+    const btn = document.getElementById('invBtn');
+    if (btn) btn.textContent = eggInvOpen ? '▲ zuklappen' : '▼ aufklappen';
+  }
+  document.getElementById('invHeader')?.addEventListener('click', toggleEggInv);
+
+  // Brutkasten
+  function renderIncubator() {
+    const slot = document.getElementById('incubatorSlot');
+    const hint = document.getElementById('dropHint');
+    if (!slot) return;
+    slot.querySelectorAll('.egg-display-wrap').forEach(el => el.remove());
+    if (!incubatorData) { if (hint) hint.style.display = ''; renderIncubatorButtons(); return; }
+    if (hint) hint.style.display = 'none';
+
+    const progress  = getEggProgress();
+    const stage     = getEggCrackStage(progress);
+    const pct       = Math.min((progress / EGG_TOTAL_MIN) * 100, 100);
+    const remaining = Math.max(EGG_TOTAL_MIN - progress, 0);
+    const isReady   = stage === 'ready';
+    const glow      = EGG_COLORS[incubatorData.color]?.glow || '#fff';
+    const h = Math.floor(remaining / 60), m = remaining % 60;
+    const remText = h > 0 ? `noch ${h}h ${m}min` : `noch ${m}min`;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'egg-display-wrap';
+    wrap.innerHTML = `
+      <div class="egg-stage-wrap ${isReady ? 'egg-pulsing' : ''}" id="incEggWrap"
+           style="--glow:${glow};${isReady ? 'cursor:pointer' : ''}">
+        ${eggSprite(incubatorData.color, stage, 88)}
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${pct}%;${isReady ? 'background:'+glow : ''}"></div>
+        </div>
+        <div class="progress-text ${isReady ? 'egg-ready-txt' : ''}">
+          ${isReady ? '✨ Schlüpfbereit — klicken!' : remText}
+        </div>
+      </div>`;
+    slot.appendChild(wrap);
+    if (isReady) document.getElementById('incEggWrap')?.addEventListener('click', startHatch);
+    renderIncubatorButtons();
+  }
+  function renderIncubatorButtons() {
+    const progress  = getEggProgress();
+    const remaining = Math.max(EGG_TOTAL_MIN - progress, 0);
+    const skipCost  = Math.ceil(remaining / 60);
+    const hasEgg    = !!incubatorData;
+    const timeLeft  = remaining > 0;
+    const btnM = document.getElementById('btnMinus1h');
+    const btnS = document.getElementById('btnSkip');
+    if (btnM) btnM.disabled = !hasEgg || !timeLeft || userDiamonds < 1;
+    if (btnS) { btnS.disabled = !hasEgg || !timeLeft || userDiamonds < skipCost; btnS.innerHTML = `Überspringen &nbsp;💎${skipCost}`; }
+  }
+  document.getElementById('btnMinus1h')?.addEventListener('click', () => {
+    if (!incubatorData || userDiamonds < 1) { showEggDiamondError(); return; }
+    if (Math.max(EGG_TOTAL_MIN - getEggProgress(), 0) <= 0) return;
+    userDiamonds -= 1;
+    incubatorData.bonusMin = Math.min((incubatorData.bonusMin || 0) + 60, EGG_TOTAL_MIN);
+    renderEggDiamonds(); renderIncubator();
+    // TODO Phase 3: UPDATE incubator SET focus_minutes_at_placement -= 60 + UPDATE profiles SET diamonds -= 1
+  });
+  document.getElementById('btnSkip')?.addEventListener('click', () => {
+    if (!incubatorData) return;
+    const remaining = Math.max(EGG_TOTAL_MIN - getEggProgress(), 0);
+    if (remaining <= 0) return;
+    const cost = Math.ceil(remaining / 60);
+    if (userDiamonds < cost) { showEggDiamondError(); return; }
+    userDiamonds -= cost;
+    incubatorData.bonusMin = EGG_TOTAL_MIN;
+    renderEggDiamonds(); renderIncubator();
+    // TODO Phase 3: UPDATE incubator + UPDATE profiles SET diamonds
+  });
+
+  // Drag & Drop → Brutkasten
+  const _eggIncSlot = document.getElementById('incubatorSlot');
+  _eggIncSlot?.addEventListener('dragover', (e) => {
+    if (incubatorData) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    _eggIncSlot.classList.add('drag-over');
+  });
+  _eggIncSlot?.addEventListener('dragleave', (e) => {
+    if (!_eggIncSlot.contains(e.relatedTarget)) _eggIncSlot.classList.remove('drag-over');
+  });
+  _eggIncSlot?.addEventListener('drop', (e) => {
+    e.preventDefault(); _eggIncSlot.classList.remove('drag-over');
+    if (incubatorData || !eggDraggedId) return;
+    const idx = eggInventory.findIndex(eg => eg && eg.id === eggDraggedId);
+    if (idx === -1) return;
+    const egg = eggInventory[idx];
+    eggInventory[idx] = null;
+    const totalMins = Object.values(days).reduce((s, m) => s + m, 0);
+    incubatorData = { color: egg.color, focus_minutes_at_placement: totalMins, bonusMin: 0 };
+    eggDraggedId = null;
+    preloadEggImgs(egg.color);
+    renderInventory(); renderIncubator();
+    // TODO Phase 3: INSERT incubator + UPDATE profiles SET eggs
+  });
+  function preloadEggImgs(colorId) {
+    const old = document.getElementById('eggPreload');
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'eggPreload';
+    wrap.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;';
+    (EGG_STAGES[colorId] || EGG_STAGES['y']).forEach(src => { const img = new Image(); img.src = src; wrap.appendChild(img); });
+    document.body.appendChild(wrap);
+  }
+
+  // Schlüpf-Sequenz
+  function startHatch() {
+    if (!incubatorData) return;
+    const wrap = document.getElementById('incEggWrap');
+    if (!wrap) return;
+    wrap.classList.add('egg-shaking');
+    setTimeout(() => splitEgg(wrap), 480);
+  }
+  function splitEgg(wrapEl) {
+    const rect  = wrapEl.getBoundingClientRect();
+    const color = EGG_COLORS[incubatorData.color] || EGG_COLORS['y'];
+    spawnEggChips(rect, color);
+    function makeHalf(clip, tx, ty, rot) {
+      const d = document.createElement('div');
+      d.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;clip-path:${clip};z-index:802;pointer-events:none;`;
+      d.innerHTML = wrapEl.innerHTML;
+      document.body.appendChild(d);
+      d.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:`translate(${tx}px,${ty}px) rotate(${rot}deg)`,opacity:0}],{duration:540,easing:'ease-in',fill:'forwards'});
+      return d;
+    }
+    const lh = makeHalf(EGG_BREAK_L, -88, -60, -48);
+    const rh = makeHalf(EGG_BREAK_R,  88, -54,  48);
+    wrapEl.style.visibility = 'hidden';
+    setTimeout(() => {
+      lh.remove(); rh.remove();
+      // TODO Phase 3: ersetzen durch await supabase.rpc('draw_card') → card_id → CARD_CATALOG
+      const rarity = rollEggRarity();
+      eggCurrentCard = rollEggCard(rarity);
+      showHatchOverlay(eggCurrentCard);
+    }, 540);
+  }
+  function spawnEggChips(rect, color) {
+    const count = 8 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < count; i++) {
+      const chip = document.createElement('div');
+      const w = 4 + Math.random()*11, h = 3 + Math.random()*9;
+      chip.style.cssText = `position:fixed;left:${rect.left+rect.width*(0.18+Math.random()*0.64)}px;top:${rect.top+rect.height*(0.12+Math.random()*0.76)}px;width:${w}px;height:${h}px;background:${color.light};border:0.5px solid ${color.dark};border-radius:${Math.random()>0.55?'2px':'0'};z-index:803;pointer-events:none;transform-origin:center;`;
+      document.body.appendChild(chip);
+      const angle = Math.random()*2*Math.PI, speed = 70+Math.random()*120;
+      chip.animate([{transform:'translate(0,0) rotate(0deg) scale(1)',opacity:0.95},{transform:`translate(${Math.cos(angle)*speed}px,${Math.sin(angle)*speed+25}px) rotate(${(Math.random()-0.5)*800}deg) scale(0.1)`,opacity:0}],{duration:500+Math.random()*320,easing:'ease-in',fill:'forwards'});
+      setTimeout(() => chip.remove(), 950);
+    }
+  }
+
+  // Karten-Draw (clientseitig; Phase 3 ersetzt durch draw_card() RPC)
+  function rollEggRarity() {
+    const roll = Math.random() * 100;
+    let cum = 0;
+    for (const r of EGG_RARITIES) { cum += r.weight; if (roll < cum) return r; }
+    return EGG_RARITIES[0];
+  }
+  function rollEggCard(rarity) {
+    const pool  = CARD_CATALOG.filter(c => c.folder === rarity.folder);
+    const entry = pool[Math.floor(Math.random() * pool.length)];
+    return { ...entry, src: encodeURI(`Karten/${entry.folder}/${entry.name}.png`), rarity };
+  }
+  function showHatchOverlay(card) {
+    const { rarity, src } = card;
+    const isMyst = rarity.key === 'mystisch';
+    document.getElementById('hatchCardEl').innerHTML = `
+      <div class="hatch-card" style="border-color:${rarity.color};box-shadow:0 0 30px ${rarity.color}66,0 0 60px ${rarity.color}22;background:${rarity.bg}">
+        <div class="hatch-card-glow" style="background:${rarity.color}"></div>
+        <img src="${src}" style="width:100%;height:100%;object-fit:contain;padding:8px;position:relative;z-index:1;">
+        <div class="rarity-badge-h ${isMyst?'mystisch':''}"
+          style="${isMyst?'':` background:${rarity.color}20;color:${rarity.color};border:1px solid ${rarity.color}44`}">
+          ${rarity.name}</div>
+      </div>`;
+    document.getElementById('hatchOverlay').classList.add('visible');
+  }
+
+  // Karte ins Deck
+  document.getElementById('btnDeck')?.addEventListener('click', () => {
+    if (!eggCurrentCard) return;
+    const card    = eggCurrentCard;
+    const rarity  = card.rarity;
+    const overlay = document.getElementById('hatchOverlay');
+    const cardEl  = document.getElementById('hatchCardEl').querySelector('.hatch-card');
+    const deckBox = document.getElementById('deckBox');
+    if (!eggDeckOpen) toggleEggDeck();
+    deckBox?.scrollIntoView({ behavior:'instant', block:'nearest' });
+    const cRect = cardEl.getBoundingClientRect();
+    const dRect = deckBox.getBoundingClientRect();
+    const fly   = document.createElement('div');
+    fly.style.cssText = `position:fixed;left:${cRect.left}px;top:${cRect.top}px;width:${cRect.width}px;height:${cRect.height}px;z-index:950;pointer-events:none;border-radius:14px;border:2px solid ${rarity.color};background:${rarity.bg};box-shadow:0 0 20px ${rarity.color}55;overflow:hidden;`;
+    fly.innerHTML = `<img src="${card.src}" style="width:100%;height:100%;object-fit:contain;padding:4px;">`;
+    document.body.appendChild(fly);
+    overlay.classList.remove('visible');
+    const tx = (dRect.left+dRect.width*0.14)-(cRect.left+cRect.width/2);
+    const ty = (dRect.top+dRect.height*0.5)-(cRect.top+cRect.height/2);
+    const rot = (Math.random()-0.5)*22;
+    fly.animate([
+      {transform:'translate(0,0) scale(1) rotate(0deg)',opacity:1,offset:0},
+      {transform:`translate(${tx*.55}px,${ty*.45}px) scale(0.68) rotate(${rot*.4}deg)`,opacity:0.95,offset:0.48},
+      {transform:`translate(${tx}px,${ty}px) scale(0.3) rotate(${rot}deg)`,opacity:0.5,offset:1},
+    ],{duration:680,easing:'cubic-bezier(0.4,0,0.2,1)',fill:'forwards'})
+    .onfinish = () => {
+      fly.remove();
+      addToEggDeck(card);
+      eggCurrentCard = null; incubatorData = null;
+      renderInventory(); renderIncubator();
+      deckBox?.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      // TODO Phase 3: DELETE FROM incubator WHERE user_id = auth.uid()
+    };
+  });
+
+  // Deck
+  function addToEggDeck(card) {
+    const ex = eggDeck.find(c => c.id === card.id);
+    if (ex) { ex.count++; renderEggDeck(card.id, true); }
+    else { eggDeck.push({...card, count:1}); eggDeck.sort((a,b)=>a.rarity.weight-b.rarity.weight); renderEggDeck(card.id, false); }
+  }
+  function renderEggDeck(highlightId, isDuplicate) {
+    const grid    = document.getElementById('deckGrid');
+    const countEl = document.getElementById('deckCount');
+    if (!grid) return;
+    if (countEl) countEl.textContent = `(${eggDeck.reduce((s,c)=>s+c.count,0)})`;
+    if (!eggDeck.length) { grid.innerHTML='<div class="deck-empty">Noch keine Karten</div>'; return; }
+    grid.innerHTML = '';
+    eggDeck.forEach(({ id, src, rarity, count }) => {
+      const safeId     = 'c'+id;
+      const stackClass = count>=3?'stack-2 stack-3':count===2?'stack-2':'';
+      const wrap = document.createElement('div');
+      wrap.className = 'deck-card-wrap';
+      wrap.innerHTML = `
+        <div class="deck-card ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}" id="dc_${safeId}">
+          ${count>1?`<div class="deck-count-badge" id="dcb_${safeId}">×${count}</div>`:''}
+          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+        </div>`;
+      grid.appendChild(wrap);
+      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ src, rarity }));
+      if (highlightId===id && !isDuplicate) {
+        const dc=document.getElementById(`dc_${safeId}`);
+        if(dc) dc.style.animation='hatchCardPop 0.38s cubic-bezier(0.34,1.56,0.64,1) both';
+      }
+      if (highlightId===id && isDuplicate) {
+        requestAnimationFrame(()=>{ const b=document.getElementById(`dcb_${safeId}`); if(b) b.style.animation='hatchBadgePop 0.32s cubic-bezier(0.34,1.56,0.64,1) both'; });
+      }
+    });
+  }
+  function showEggCardView(card) {
+    const { rarity, src } = card;
+    const isMyst = rarity.key === 'mystisch';
+    document.getElementById('cardViewEl').innerHTML = `
+      <div class="hatch-card" style="border-color:${rarity.color};box-shadow:0 0 30px ${rarity.color}66,0 0 60px ${rarity.color}22;background:${rarity.bg}">
+        <div class="hatch-card-glow" style="background:${rarity.color}"></div>
+        <img src="${src}" style="width:100%;height:100%;object-fit:contain;padding:8px;position:relative;z-index:1;">
+        <div class="rarity-badge-h ${isMyst?'mystisch':''}"
+          style="${isMyst?'':` background:${rarity.color}20;color:${rarity.color};border:1px solid ${rarity.color}44`}">
+          ${rarity.name}</div>
+      </div>`;
+    document.getElementById('cardViewOverlay').classList.add('visible');
+  }
+  document.getElementById('cardViewOverlay')?.addEventListener('click', () => {
+    document.getElementById('cardViewOverlay').classList.remove('visible');
+  });
+  function toggleEggDeck() {
+    eggDeckOpen = !eggDeckOpen;
+    document.getElementById('deckContent')?.classList.toggle('open', eggDeckOpen);
+    const btn = document.getElementById('deckBtn');
+    if (btn) btn.textContent = eggDeckOpen ? '▲ zuklappen' : '▼ aufklappen';
+  }
+  document.getElementById('deckToggle')?.addEventListener('click', toggleEggDeck);
+
+  // Level-Up Ei vergeben
+  function awardEgg() {
+    const color = EGG_COLOR_IDS[Math.floor(Math.random() * 4)];
+    const freeIdx = eggInventory.findIndex(e => e === null);
+    if (freeIdx !== -1) eggInventory[freeIdx] = { id: eggNextId++, color };
+    else                eggInventory[0]        = { id: eggNextId++, color };
+    renderInventory();
+    // TODO Phase 3: UPDATE profiles SET eggs = ...
+  }
+
+  // Init
+  function initEggs() {
+    // Mock-Inventar für Vorschau (Phase 3 ersetzt durch profiles.eggs aus Supabase)
+    eggInventory = [
+      { id: eggNextId++, color:'y' }, { id: eggNextId++, color:'b' },
+      { id: eggNextId++, color:'g' }, { id: eggNextId++, color:'r' },
+      null, null, null, null, null, null,
+    ];
+    renderEggDiamonds();
+    renderInventory();
+    renderIncubator();
+    renderEggDeck(null, false);
+    toggleEggInv(); // Inventar beim Start aufgeklappt
+    applyEggPreview();
+  }
+
+  // ─── Ende Eier & Kartensammlung ───────────────────────────────────────────
+
   loadLabelDurations();
   totalSec = getMin(mode) * 60;
   remaining = totalSec;
@@ -4140,6 +4888,7 @@
   document.getElementById('time-display').style.opacity = '0';
   document.getElementById('watch-svg').style.opacity = '0';
   render();
+  initEggs();
   initAuth();
 })();
 </script>
