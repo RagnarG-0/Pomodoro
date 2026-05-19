@@ -1555,6 +1555,7 @@
     <button class="lb-tab" data-period="week">Letzte Woche</button>
     <button class="lb-tab" data-period="month">Letzter Monat</button>
     <button class="lb-tab lb-tab-alltime active" data-period="alltime">All Time</button>
+    <button class="lb-tab lb-tab-alltime" data-period="wins">🏆 Siege</button>
   </div>
   <div id="lb-list" style="font-family:Georgia,serif;"></div>
   <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
@@ -1612,7 +1613,7 @@
   let currentStatsPeriod = 'alltime';
 
   const CACHE_TTL_LABEL_STATS = 5 * 60 * 1000;
-  const CACHE_TTL_LB = { today: 2 * 60 * 1000, week: 10 * 60 * 1000, month: 10 * 60 * 1000, alltime: 10 * 60 * 1000 };
+  const CACHE_TTL_LB = { today: 2 * 60 * 1000, week: 10 * 60 * 1000, month: 10 * 60 * 1000, alltime: 10 * 60 * 1000, wins: 10 * 60 * 1000 };
 
   function cacheGet(key, ttl) {
     try {
@@ -2949,11 +2950,13 @@
   function renderLeaderboard(list) {
     lastLeaderboardData = list || [];
     const el = document.getElementById('lb-list');
+    const isWins = lbPeriod === 'wins';
     const emptyMsg = {
-      today: 'Noch keine Einträge für heute.',
-      week: 'Noch keine Einträge der letzten Woche.',
-      month: 'Noch keine Einträge des letzten Monats.',
+      today:   'Noch keine Einträge für heute.',
+      week:    'Noch keine Einträge der letzten Woche.',
+      month:   'Noch keine Einträge des letzten Monats.',
       alltime: 'Noch keine Einträge vorhanden.',
+      wins:    'Noch keine Tagessiege seit dem 04. Mai 2026.',
     }[lbPeriod] || 'Keine Einträge.';
 
     if (!list || !list.length) {
@@ -2962,11 +2965,13 @@
       return;
     }
 
-    // Assign dense ranks: same minutes = same rank, next rank skips
+    // Assign dense ranks: same value = same rank, next rank skips
     const medals = ['🥇','🥈','🥉'];
     let rank = 1;
     const ranked = list.map((entry, i) => {
-      if (i > 0 && entry.minutes !== list[i-1].minutes) rank = i + 1;
+      const val  = isWins ? entry.wins  : entry.minutes;
+      const prev = isWins ? list[i-1]?.wins : list[i-1]?.minutes;
+      if (i > 0 && val !== prev) rank = i + 1;
       return { ...entry, rank };
     });
 
@@ -2975,21 +2980,21 @@
       const medal = entry.rank <= 3
         ? medals[entry.rank - 1]
         : `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${entry.rank}</span>`;
-      const mins = entry.minutes ?? 0;
-      const display = minutesToDisplay(mins);
-      // Always use alltime_minutes for level calculation
-      const alltimeMins = entry.alltime_minutes ?? mins;
+      const display = isWins
+        ? `${entry.wins} Siege`
+        : minutesToDisplay(entry.minutes ?? 0);
+      const alltimeMins = entry.alltime_minutes ?? 0;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
       const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})</span>`;
       const avatarHtml = entry.avatar_url
         ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
-      const isYesterdayWinner = entry.name === yesterdayWinner;
+      const isYesterdayWinner = !isWins && entry.name === yesterdayWinner;
       const borderStyle = isYesterdayWinner ? 'border: 1.5px solid #c9a227;' : '';
       const winnerLabel = isYesterdayWinner
         ? `<span style="font-size:10px;color:#c9a227;margin-left:4px;white-space:nowrap;">Tagessieger</span>`
         : '';
-      const timerDot = entry.timer_active
+      const timerDot = (!isWins && entry.timer_active)
         ? `<span title="Fokus läuft" style="width:8px;height:8px;border-radius:50%;background:#4caf50;flex-shrink:0;display:inline-block;box-shadow:0 0 4px #4caf5088;"></span>`
         : `<span style="width:8px;flex-shrink:0;display:inline-block;"></span>`;
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}${borderStyle}">
@@ -3038,6 +3043,12 @@
       let list;
       if (lbPeriod === 'today') {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_today`, {
+          method: 'POST', headers, body: JSON.stringify({}),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + await res.text());
+        list = await res.json();
+      } else if (lbPeriod === 'wins') {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_wins`, {
           method: 'POST', headers, body: JSON.stringify({}),
         });
         if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + await res.text());
@@ -4410,7 +4421,7 @@
         body: JSON.stringify({ p_user_id: userId }),
       });
       if (res.ok) {
-        ['today', 'week', 'month', 'alltime'].forEach(p => cacheDel(`pomo_lb_cache_${p}`));
+        ['today', 'week', 'month', 'alltime', 'wins'].forEach(p => cacheDel(`pomo_lb_cache_${p}`));
         cacheDel('pomo_lb_winner');
         loadLeaderboard(lbPeriod, true);
       }
