@@ -4427,6 +4427,7 @@
   load();
   // ─── Eier & Kartensammlung ────────────────────────────────────────────────
 
+  const CDN          = 'https://cdn.jsdelivr.net/gh/RagnarG-0/Pomodoro@main';
   const EGG_TOTAL_MIN = 600;
   const EGG_BUY_COST  = 12;
   const EGG_COLOR_IDS = ['y','b','g','r'];
@@ -4441,10 +4442,10 @@
     r: { name:'Rot',  light:'#F07272', dark:'#6A0A0A', glow:'#F44336' },
   };
   const EGG_STAGES = {
-    y: ['Eier/yellow/Stadium_1.png','Eier/yellow/Stadium_2.png','Eier/yellow/Stadium_3.png','Eier/yellow/Stadium_4.png'],
-    b: ['Eier/blue/Stadium_1.png',  'Eier/blue/Stadium_2.png',  'Eier/blue/Stadium_3.png',  'Eier/blue/Stadium_4.png'],
-    g: ['Eier/green/Stadium_1.png', 'Eier/green/Stadium_2.png', 'Eier/green/Stadium_3.png', 'Eier/green/Stadium_4.png'],
-    r: ['Eier/red/Stadium_1.png',   'Eier/red/Stadium_2.png',   'Eier/red/Stadium_3.png',   'Eier/red/Stadium_4.png'],
+    y: [`${CDN}/Eier/yellow/Stadium_1.png`,`${CDN}/Eier/yellow/Stadium_2.png`,`${CDN}/Eier/yellow/Stadium_3.png`,`${CDN}/Eier/yellow/Stadium_4.png`],
+    b: [`${CDN}/Eier/blue/Stadium_1.png`,  `${CDN}/Eier/blue/Stadium_2.png`,  `${CDN}/Eier/blue/Stadium_3.png`,  `${CDN}/Eier/blue/Stadium_4.png`],
+    g: [`${CDN}/Eier/green/Stadium_1.png`, `${CDN}/Eier/green/Stadium_2.png`, `${CDN}/Eier/green/Stadium_3.png`, `${CDN}/Eier/green/Stadium_4.png`],
+    r: [`${CDN}/Eier/red/Stadium_1.png`,   `${CDN}/Eier/red/Stadium_2.png`,   `${CDN}/Eier/red/Stadium_3.png`,   `${CDN}/Eier/red/Stadium_4.png`],
   };
   const EGG_RARITIES = [
     { name:'Normal',   key:'normal',    folder:'common',    color:'#aaa',    bg:'#28282a', weight:40 },
@@ -4762,7 +4763,7 @@
       if (typeof cardId === 'number') {
         const entry  = CARD_CATALOG.find(c => c.id === cardId);
         const rarity = entry && EGG_RARITIES.find(r => r.folder === entry.rarity);
-        if (entry && rarity) eggCurrentCard = { ...entry, src: encodeURI(`Karten/${entry.folder}/${entry.name}.png`), rarity };
+        if (entry && rarity) eggCurrentCard = { ...entry, src: encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`), rarity };
         else { const r = rollEggRarity(); eggCurrentCard = rollEggCard(r); }
       } else {
         const r = rollEggRarity(); eggCurrentCard = rollEggCard(r);
@@ -4793,7 +4794,7 @@
   function rollEggCard(rarity) {
     const pool  = CARD_CATALOG.filter(c => c.folder === rarity.folder);
     const entry = pool[Math.floor(Math.random() * pool.length)];
-    return { ...entry, src: encodeURI(`Karten/${entry.folder}/${entry.name}.png`), rarity };
+    return { ...entry, src: encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`), rarity };
   }
   function showHatchOverlay(card) {
     const { rarity, src } = card;
@@ -4945,7 +4946,7 @@
           if (!entry) continue;
           const rarity = EGG_RARITIES.find(r => r.folder === entry.rarity);
           if (!rarity) continue;
-          const card = { ...entry, src: encodeURI(`Karten/${entry.folder}/${entry.name}.png`), rarity };
+          const card = { ...entry, src: encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`), rarity };
           const ex = eggDeck.find(c => c.id === card.id);
           if (ex) ex.count++;
           else eggDeck.push({ ...card, count: 1 });
