@@ -1029,6 +1029,43 @@
     font-family: -apple-system, sans-serif; font-size: 11px;
     color: rgba(255,255,255,0.35); letter-spacing: 0.14em; text-transform: uppercase;
   }
+
+  /* ── Leaderboard Deck-Button ── */
+  .lb-deck-btn {
+    background: none; border: none; cursor: pointer; padding: 0 2px;
+    font-size: 13px; opacity: 0.4; flex-shrink: 0;
+    transition: opacity 0.15s, transform 0.1s; line-height: 1;
+  }
+  .lb-deck-btn:hover  { opacity: 1; transform: scale(1.15); }
+
+  /* ── Member-Deck-Overlay ── */
+  #memberDeckOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+    display: none; align-items: center; justify-content: center;
+    z-index: 920; padding: 20px; animation: hatchFadeIn 0.2s ease;
+  }
+  #memberDeckOverlay.visible { display: flex; }
+  .member-deck-modal {
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 18px; padding: 20px 20px 16px;
+    max-width: 400px; width: 100%; max-height: 78vh;
+    display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  }
+  .member-deck-header {
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .member-deck-title {
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: normal;
+  }
+  .member-deck-close {
+    background: none; border: none; cursor: pointer; color: var(--text-muted);
+    font-size: 18px; padding: 0; line-height: 1; opacity: 0.6; transition: opacity 0.15s;
+  }
+  .member-deck-close:hover { opacity: 1; }
+  .member-deck-grid-wrap { overflow-y: auto; flex: 1; }
+  .member-deck-grid { display: flex; flex-wrap: wrap; gap: 10px; padding-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -1494,6 +1531,17 @@
   <div class="card-view-hint">Tippen zum Schließen</div>
 </div>
 
+<div id="memberDeckOverlay">
+  <div class="member-deck-modal">
+    <div class="member-deck-header">
+      <span class="member-deck-title" id="memberDeckTitle">🃏 Karten</span>
+      <button class="member-deck-close" id="memberDeckClose">✕</button>
+    </div>
+    <div class="member-deck-grid-wrap">
+      <div class="member-deck-grid" id="memberDeckGrid"></div>
+    </div>
+  </div>
+</div>
 
 <!-- Leaderboard card -->
 <div class="card" id="leaderboard-card" style="display:none;">
@@ -2948,6 +2996,7 @@
         <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
         ${avatarHtml}
         <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}${winnerLabel}</span>
+        <button class="lb-deck-btn" data-username="${entry.name}" title="Kartendeck ansehen">🃏</button>
         ${timerDot}
         <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${display}</span>
       </div>`;
@@ -4918,6 +4967,88 @@
     if (btn) btn.textContent = eggDeckOpen ? '▲ zuklappen' : '▼ aufklappen';
   }
   document.getElementById('deckToggle')?.addEventListener('click', toggleEggDeck);
+
+  // ── Member-Deck-Overlay ──────────────────────────────────────────────────
+  let memberDeckCache = {};
+
+  document.getElementById('lb-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.lb-deck-btn');
+    if (btn) showMemberDeck(btn.dataset.username);
+  });
+  document.getElementById('memberDeckClose')?.addEventListener('click', () => {
+    document.getElementById('memberDeckOverlay').classList.remove('visible');
+  });
+  document.getElementById('memberDeckOverlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
+  });
+
+  async function showMemberDeck(username) {
+    const overlay = document.getElementById('memberDeckOverlay');
+    const title   = document.getElementById('memberDeckTitle');
+    const grid    = document.getElementById('memberDeckGrid');
+    title.textContent = `🃏 Karten von ${username}`;
+    grid.innerHTML = '<div style="font-family:-apple-system,sans-serif;font-size:13px;color:var(--text-muted);padding:8px 0;">Laden…</div>';
+    overlay.classList.add('visible');
+
+    if (memberDeckCache[username]) {
+      renderMemberDeckGrid(grid, memberDeckCache[username]);
+      return;
+    }
+
+    if (username === userName) {
+      memberDeckCache[username] = eggDeck;
+      renderMemberDeckGrid(grid, eggDeck);
+      return;
+    }
+
+    try {
+      const token = await getValidToken();
+      const res   = await fetch(`${SB}/rest/v1/rpc/get_member_cards`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_username: username })
+      });
+      const rows = await res.json();
+      const deck = [];
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          const entry  = CARD_CATALOG.find(c => c.id === row.card_id);
+          if (!entry) continue;
+          const rarity = EGG_RARITIES.find(r => r.folder === entry.rarity);
+          if (!rarity) continue;
+          const card = { ...entry, src: encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`), rarity };
+          const ex = deck.find(c => c.id === card.id);
+          if (ex) ex.count++;
+          else deck.push({ ...card, count: 1 });
+        }
+        deck.sort((a, b) => a.rarity.weight - b.rarity.weight);
+      }
+      memberDeckCache[username] = deck;
+      renderMemberDeckGrid(grid, deck);
+    } catch(e) {
+      grid.innerHTML = '<div style="font-family:-apple-system,sans-serif;font-size:13px;color:var(--text-muted);padding:8px 0;">Fehler beim Laden.</div>';
+    }
+  }
+
+  function renderMemberDeckGrid(grid, deck) {
+    if (!deck.length) {
+      grid.innerHTML = '<div class="deck-empty">Noch keine Karten</div>';
+      return;
+    }
+    grid.innerHTML = '';
+    deck.forEach(({ id, src, rarity, count }) => {
+      const stackClass = count >= 3 ? 'stack-2 stack-3' : count === 2 ? 'stack-2' : '';
+      const wrap = document.createElement('div');
+      wrap.className = 'deck-card-wrap';
+      wrap.innerHTML = `
+        <div class="deck-card ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
+          ${count > 1 ? `<div class="deck-count-badge">×${count}</div>` : ''}
+          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+        </div>`;
+      grid.appendChild(wrap);
+      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ src, rarity }));
+    });
+  }
 
   // Ei-String <→ Inventar
   function eggsFromProfileString(str) {
