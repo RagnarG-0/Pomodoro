@@ -2989,7 +2989,7 @@
         ? medals[entry.rank - 1]
         : `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${entry.rank}</span>`;
       const display = isWins
-        ? `${entry.wins} Siege`
+        ? `${entry.wins} 🏆`
         : minutesToDisplay(entry.minutes ?? 0);
       const alltimeMins = entry.alltime_minutes ?? 0;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
