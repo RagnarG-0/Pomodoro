@@ -792,6 +792,14 @@
   }
   .detail-label-row-2col:last-child { border-bottom: none; }
   .detail-label-row-2col:hover .label-edit-btn { opacity: 1; }
+  .detail-label-row-alltime {
+    display: grid; grid-template-columns: 1fr 76px 44px 52px;
+    gap: 6px; align-items: center;
+    padding: 7px 0; border-bottom: 0.5px solid var(--border);
+    font-family: 'Georgia', serif;
+  }
+  .detail-label-row-alltime:last-child { border-bottom: none; }
+  .detail-label-row-alltime:hover .label-edit-btn { opacity: 1; }
   .pie-dot {
     flex-shrink: 0; width: 8px; height: 8px;
     border-radius: 50%; display: inline-block;
@@ -3965,19 +3973,27 @@
     if (!sorted.length) {
       tableHtml = `<div class="pie-no-data">Keine Daten für diesen Zeitraum.</div>`;
     } else {
-      const colLabel = PERIOD_LABELS[currentStatsPeriod];
-      const header = `<div class="detail-label-row-2col" style="border-bottom:0.5px solid var(--border-strong);padding-bottom:6px;margin-bottom:2px;">
+      const isAlltime   = currentStatsPeriod === 'alltime';
+      const rowClass    = isAlltime ? 'detail-label-row-alltime' : 'detail-label-row-2col';
+      const colLabel    = PERIOD_LABELS[currentStatsPeriod];
+      const activeDays  = isAlltime ? Object.values(days).filter(m => m > 0).length : 0;
+      const avgHeader   = isAlltime ? `<div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">⌀/Tag</div>` : '';
+      const header = `<div class="${rowClass}" style="border-bottom:0.5px solid var(--border-strong);padding-bottom:6px;margin-bottom:2px;">
         <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Label</div>
         <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">${colLabel}</div>
         <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;text-align:right;">%</div>
+        ${avgHeader}
       </div>`;
       const periodTotal = sorted.reduce((sum, s) => sum + s._min, 0);
       const rows = sorted.map(s => {
-        const safe = enc(s.label);
-        const dot = colorMap[s.label];
-        const val = s._min > 0 ? minutesToDisplay(s._min) : '—';
-        const pct = periodTotal > 0 ? Math.round(s._min / periodTotal * 100) + '%' : '—';
-        return `<div class="detail-label-row-2col">
+        const safe    = enc(s.label);
+        const dot     = colorMap[s.label];
+        const val     = s._min > 0 ? minutesToDisplay(s._min) : '—';
+        const pct     = periodTotal > 0 ? Math.round(s._min / periodTotal * 100) + '%' : '—';
+        const avgCell = isAlltime
+          ? `<div style="font-size:12px;color:var(--text-muted);text-align:right;">${activeDays > 0 ? minutesToDisplay(Math.round(s._min / activeDays)) : '—'}</div>`
+          : '';
+        return `<div class="${rowClass}">
           <div class="label-name-cell">
             <span class="pie-dot" style="background:${dot};"></span>
             <span class="label-name-text" title="${safe}">${safe}</span>
@@ -3985,6 +4001,7 @@
           </div>
           <div style="font-size:12px;color:var(--accent);text-align:right;">${val}</div>
           <div style="font-size:12px;color:var(--text-muted);text-align:right;">${pct}</div>
+          ${avgCell}
         </div>`;
       }).join('');
       tableHtml = header + rows;
