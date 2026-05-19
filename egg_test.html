@@ -260,9 +260,53 @@ body {
   font-family: -apple-system, sans-serif; font-size: 11px;
   color: rgba(255,255,255,0.35); letter-spacing: 0.14em; text-transform: uppercase;
 }
+
+/* ── Update-Banner ── */
+#updateBannerOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 950; padding: 20px; animation: overlayFadeIn 0.3s ease;
+}
+#updateBannerOverlay.hidden { display: none; }
+.update-banner-card {
+  background: var(--surface); border: 0.5px solid var(--border-strong);
+  border-radius: 18px; padding: 28px 26px 24px;
+  max-width: 380px; width: 100%;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+}
+.update-banner-title {
+  font-size: 18px; letter-spacing: 0.04em; color: var(--text);
+  margin-bottom: 16px; line-height: 1.35;
+}
+.update-banner-body {
+  font-family: -apple-system, sans-serif; font-size: 13.5px;
+  color: var(--text-muted); line-height: 1.65; margin-bottom: 22px;
+}
+.update-banner-btn {
+  width: 100%; padding: 13px; border-radius: 11px; border: none;
+  background: var(--accent); color: #fff;
+  font-family: 'Georgia', serif; font-size: 15px; letter-spacing: 0.04em;
+  cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+}
+.update-banner-btn:hover  { opacity: 0.88; }
+.update-banner-btn:active { transform: scale(0.98); }
 </style>
 </head>
 <body>
+
+<!-- Update-Banner -->
+<div id="updateBannerOverlay">
+  <div class="update-banner-card">
+    <div class="update-banner-title">Das große neue Eier-Update ist da!</div>
+    <div class="update-banner-body">
+      ⬆️ Ein Level-up → du bekommst ein Ei 🥚. Leg es in den Brutkasten 🔥, lerne 10 Stunden, und sieh zu wie es schlüpft 🐣. In den Eiern befinden sich coole Spielkarten zum sammeln 🃏.<br><br>
+      ⏩ 10 Stunden sind dir zu lange? Verringere die Wartezeit mit deinen Diamanten 💎!<br><br>
+      🛒 Du hast alle Eier ausgebrütet? Mit deinen Diamanten 💎 kannst du dir wieder neue Eier kaufen!<br><br>
+      💸 Du schaffst es nicht unter die Top 3 des Tages und bekommst einfach keine Diamanten? Kaufe dir welche nach: 10 Diamanten für nur 0,99 Euro.
+    </div>
+    <button class="update-banner-btn" id="updateBannerBtn">Los geht's</button>
+  </div>
+</div>
 
 <div class="test-banner">🧪 Testmodus — Brutzeit: 10 Sekunden (1 Sek = 1 Stunde)</div>
 
@@ -829,6 +873,11 @@ function toggleDeck() {
   document.getElementById('deckBtn').textContent = deckOpen ? '▲ zuklappen' : '▼ aufklappen';
 }
 document.getElementById('deckToggle').addEventListener('click', toggleDeck);
+
+// ── Update-Banner ──────────────────────────────────────────────────────────
+document.getElementById('updateBannerBtn').addEventListener('click', () => {
+  document.getElementById('updateBannerOverlay').classList.add('hidden');
+});
 
 // ── Init ───────────────────────────────────────────────────────────────────
 renderDiamonds();
