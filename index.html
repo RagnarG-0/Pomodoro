@@ -3314,6 +3314,8 @@
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
       userDiamonds  = profile.diamonds || 0;
+      if (profile.eggs) eggsFromProfileString(profile.eggs);
+      renderEggDiamonds(); renderInventory();
       displayUnit = profile.display_unit || 'pomodoros';
       clanId   = profile.clan_id   || null;
       clanRole = profile.clan_role || null;
@@ -3369,6 +3371,7 @@
     initLeaderboard();
     // Restore timer if it was running before page reload
     await restoreTimerState();
+    await loadEggData(token);
 
   }
 
@@ -4575,7 +4578,7 @@
     userDiamonds -= EGG_BUY_COST;
     eggInventory[freeIdx] = { id: eggNextId++, color: EGG_COLOR_IDS[Math.floor(Math.random() * 4)] };
     renderEggDiamonds(); renderInventory();
-    // TODO Phase 3: UPDATE profiles SET diamonds = diamonds - 12, eggs = ...
+    saveEggProfile({ diamonds: userDiamonds, eggs: eggsToProfileString() });
   }
   function toggleEggInv() {
     eggInvOpen = !eggInvOpen;
@@ -4639,7 +4642,19 @@
     userDiamonds -= 1;
     incubatorData.bonusMin = Math.min((incubatorData.bonusMin || 0) + 60, EGG_TOTAL_MIN);
     renderEggDiamonds(); renderIncubator();
-    // TODO Phase 3: UPDATE incubator SET focus_minutes_at_placement -= 60 + UPDATE profiles SET diamonds -= 1
+    (async () => {
+      const token = await getValidToken();
+      if (!token || !currentUser || !incubatorData) return;
+      const newFmap = incubatorData.focus_minutes_at_placement - incubatorData.bonusMin;
+      await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ focus_minutes_at_placement: newFmap })
+      });
+      await saveEggProfile({ diamonds: userDiamonds });
+      incubatorData.focus_minutes_at_placement = newFmap;
+      incubatorData.bonusMin = 0;
+    })();
   });
   document.getElementById('btnSkip')?.addEventListener('click', () => {
     if (!incubatorData) return;
@@ -4650,7 +4665,20 @@
     userDiamonds -= cost;
     incubatorData.bonusMin = EGG_TOTAL_MIN;
     renderEggDiamonds(); renderIncubator();
-    // TODO Phase 3: UPDATE incubator + UPDATE profiles SET diamonds
+    (async () => {
+      const token = await getValidToken();
+      if (!token || !currentUser || !incubatorData) return;
+      const totalMins = Object.values(days).reduce((s, m) => s + m, 0);
+      const newFmap   = totalMins - EGG_TOTAL_MIN;
+      await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ focus_minutes_at_placement: newFmap })
+      });
+      await saveEggProfile({ diamonds: userDiamonds });
+      incubatorData.focus_minutes_at_placement = newFmap;
+      incubatorData.bonusMin = 0;
+    })();
   });
 
   // Drag & Drop → Brutkasten
@@ -4675,7 +4703,16 @@
     eggDraggedId = null;
     preloadEggImgs(egg.color);
     renderInventory(); renderIncubator();
-    // TODO Phase 3: INSERT incubator + UPDATE profiles SET eggs
+    (async () => {
+      const token = await getValidToken();
+      if (!token || !currentUser) return;
+      await fetch(`${SB}/rest/v1/incubator`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUser.id, egg_color: egg.color, placed_at: new Date().toISOString(), focus_minutes_at_placement: totalMins })
+      });
+      await saveEggProfile({ eggs: eggsToProfileString() });
+    })();
   });
   function preloadEggImgs(colorId) {
     const old = document.getElementById('eggPreload');
@@ -4710,11 +4747,26 @@
     const lh = makeHalf(EGG_BREAK_L, -88, -60, -48);
     const rh = makeHalf(EGG_BREAK_R,  88, -54,  48);
     wrapEl.style.visibility = 'hidden';
-    setTimeout(() => {
+    setTimeout(async () => {
       lh.remove(); rh.remove();
-      // TODO Phase 3: ersetzen durch await supabase.rpc('draw_card') → card_id → CARD_CATALOG
-      const rarity = rollEggRarity();
-      eggCurrentCard = rollEggCard(rarity);
+      let cardId;
+      try {
+        const token = await getValidToken();
+        const res = await fetch(`${SB}/rest/v1/rpc/draw_card`, {
+          method: 'POST',
+          headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        cardId = await res.json();
+      } catch(e) { console.warn('draw_card error, local fallback:', e); }
+      if (typeof cardId === 'number') {
+        const entry  = CARD_CATALOG.find(c => c.id === cardId);
+        const rarity = entry && EGG_RARITIES.find(r => r.folder === entry.rarity);
+        if (entry && rarity) eggCurrentCard = { ...entry, src: encodeURI(`Karten/${entry.folder}/${entry.name}.png`), rarity };
+        else { const r = rollEggRarity(); eggCurrentCard = rollEggCard(r); }
+      } else {
+        const r = rollEggRarity(); eggCurrentCard = rollEggCard(r);
+      }
       showHatchOverlay(eggCurrentCard);
     }, 540);
   }
@@ -4788,7 +4840,14 @@
       eggCurrentCard = null; incubatorData = null;
       renderInventory(); renderIncubator();
       deckBox?.scrollIntoView({ behavior:'smooth', block:'nearest' });
-      // TODO Phase 3: DELETE FROM incubator WHERE user_id = auth.uid()
+      (async () => {
+        const token = await getValidToken();
+        if (!token || !currentUser) return;
+        await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}`, {
+          method: 'DELETE',
+          headers: { ...authHeaders(token), 'Prefer': 'return=minimal' }
+        });
+      })();
     };
   });
 
@@ -4850,6 +4909,66 @@
   }
   document.getElementById('deckToggle')?.addEventListener('click', toggleEggDeck);
 
+  // Ei-String <→ Inventar
+  function eggsFromProfileString(str) {
+    const parts = (str || '').split('-');
+    eggInventory = parts.map(p => (p && p !== '0') ? { id: eggNextId++, color: p } : null);
+    while (eggInventory.length < 10) eggInventory.push(null);
+    eggInventory = eggInventory.slice(0, 10);
+  }
+  function eggsToProfileString() {
+    return eggInventory.map(e => e ? e.color : '0').join('-');
+  }
+
+  // Supabase-Daten laden (nach Login)
+  async function loadEggData(token) {
+    if (!currentUser) return;
+    // Brutkasten
+    try {
+      const res  = await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}&select=*`, { headers: authHeaders(token) });
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows[0]) {
+        incubatorData = { color: rows[0].egg_color, focus_minutes_at_placement: rows[0].focus_minutes_at_placement, bonusMin: 0 };
+      } else {
+        incubatorData = null;
+      }
+    } catch(e) { console.warn('loadIncubator error:', e); }
+
+    // Karten-Deck
+    try {
+      const res  = await fetch(`${SB}/rest/v1/user_cards?user_id=eq.${currentUser.id}&select=card_id&order=obtained_at`, { headers: authHeaders(token) });
+      const rows = await res.json();
+      eggDeck = [];
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          const entry  = CARD_CATALOG.find(c => c.id === row.card_id);
+          if (!entry) continue;
+          const rarity = EGG_RARITIES.find(r => r.folder === entry.rarity);
+          if (!rarity) continue;
+          const card = { ...entry, src: encodeURI(`Karten/${entry.folder}/${entry.name}.png`), rarity };
+          const ex = eggDeck.find(c => c.id === card.id);
+          if (ex) ex.count++;
+          else eggDeck.push({ ...card, count: 1 });
+        }
+        eggDeck.sort((a, b) => a.rarity.weight - b.rarity.weight);
+      }
+    } catch(e) { console.warn('loadUserCards error:', e); }
+
+    renderIncubator();
+    renderEggDeck(null, false);
+  }
+
+  // Supabase: Profile-Felder schreiben (eggs + diamonds)
+  async function saveEggProfile(fields) {
+    const token = await getValidToken();
+    if (!token || !currentUser) return;
+    await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}`, {
+      method: 'PATCH',
+      headers: { ...authHeaders(token), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+  }
+
   // Level-Up Ei vergeben
   function awardEgg() {
     const color = EGG_COLOR_IDS[Math.floor(Math.random() * 4)];
@@ -4857,7 +4976,7 @@
     if (freeIdx !== -1) eggInventory[freeIdx] = { id: eggNextId++, color };
     else                eggInventory[0]        = { id: eggNextId++, color };
     renderInventory();
-    // TODO Phase 3: UPDATE profiles SET eggs = ...
+    saveEggProfile({ eggs: eggsToProfileString() });
   }
 
   // Init
