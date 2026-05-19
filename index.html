@@ -4982,12 +4982,7 @@
 
   // Init
   function initEggs() {
-    // Mock-Inventar für Vorschau (Phase 3 ersetzt durch profiles.eggs aus Supabase)
-    eggInventory = [
-      { id: eggNextId++, color:'y' }, { id: eggNextId++, color:'b' },
-      { id: eggNextId++, color:'g' }, { id: eggNextId++, color:'r' },
-      null, null, null, null, null, null,
-    ];
+    eggInventory = Array(10).fill(null);
     renderEggDiamonds();
     renderInventory();
     renderIncubator();
