@@ -812,23 +812,37 @@
 
   /* ─── Ei-Box & Karten-Deck ───────────────────────────────────────────────── */
 
-  #egg-section-wrapper { width: 100%; max-width: 680px; position: relative; }
+  #egg-section-wrapper { width: 100%; max-width: 680px; }
 
-  #egg-placeholder-overlay {
-    position: absolute; inset: -4px; z-index: 20;
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border-radius: 20px;
+  /* ── Update-Banner ── */
+  #updateBannerOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.72);
     display: flex; align-items: center; justify-content: center;
-    pointer-events: all; transition: opacity 0.4s ease;
+    z-index: 950; padding: 20px; animation: hatchFadeIn 0.3s ease;
   }
-  #egg-placeholder-overlay.hidden { opacity: 0; pointer-events: none; }
-  .egg-placeholder-inner {
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
-    font-family: Georgia, serif; color: var(--text-muted); text-align: center;
+  #updateBannerOverlay.hidden { display: none; }
+  .update-banner-card {
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    border-radius: 18px; padding: 28px 26px 24px;
+    max-width: 380px; width: 100%;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.35);
   }
-  .egg-placeholder-title { font-size: 18px; letter-spacing: 0.08em; }
-  .egg-placeholder-sub   { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.6; }
+  .update-banner-title {
+    font-size: 18px; letter-spacing: 0.04em; color: var(--text);
+    margin-bottom: 16px; line-height: 1.35;
+  }
+  .update-banner-body {
+    font-family: -apple-system, sans-serif; font-size: 13.5px;
+    color: var(--text-muted); line-height: 1.65; margin-bottom: 22px;
+  }
+  .update-banner-btn {
+    width: 100%; padding: 13px; border-radius: 11px; border: none;
+    background: var(--accent); color: #fff;
+    font-family: Georgia, serif; font-size: 15px; letter-spacing: 0.04em;
+    cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+  }
+  .update-banner-btn:hover  { opacity: 0.88; }
+  .update-banner-btn:active { transform: scale(0.98); }
 
   .diamond-error-banner {
     width: 100%; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
@@ -1255,11 +1269,6 @@
       <div id="clan-member-list" style="display:none;margin-top:0.4rem;"></div>
       <button id="save-clan-settings-btn" style="width:100%;margin-top:0.5rem;padding:8px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Clan-Einstellungen speichern</button>
       <div id="clan-settings-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
-      <div class="panel-divider" style="margin:0.5rem 0;"></div>
-      <div class="panel-row">
-        <label style="font-size:12px;">Eier-Vorschau</label>
-        <button id="egg-preview-toggle" style="font-size:11px;padding:5px 12px;border:0.5px solid var(--border-strong);border-radius:7px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:-apple-system,sans-serif;">🔍 aktivieren</button>
-      </div>
     </div>
 
     <button id="save-settings-btn" style="width:100%;margin-top:0.5rem;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;transition:background 0.12s;">Einstellungen speichern</button>
@@ -1408,13 +1417,20 @@
 
 
 <!-- Ei-Box + Deck-Box (durch Platzhalter verdeckt; Leader-Toggle in Einstellungen) -->
-<div id="egg-section-wrapper">
-
-  <div id="egg-placeholder-overlay">
-    <div class="egg-placeholder-inner">
-      <div class="egg-placeholder-title">Coming soon</div>
+<div id="updateBannerOverlay" class="hidden">
+  <div class="update-banner-card">
+    <div class="update-banner-title">Das große neue Eier-Update ist da!</div>
+    <div class="update-banner-body">
+      ⬆️ Ein Level-up → du bekommst ein Ei 🥚. Leg es in den Brutkasten 🔥, lerne 10 Stunden, und sieh zu wie es schlüpft 🐣. In den Eiern befinden sich coole Spielkarten zum sammeln 🃏.<br><br>
+      ⏩ 10 Stunden sind dir zu lange? Verringere die Wartezeit mit deinen Diamanten 💎!<br><br>
+      🛒 Du hast alle Eier ausgebrütet? Mit deinen Diamanten 💎 kannst du dir wieder neue Eier kaufen!<br><br>
+      💸 Du schaffst es nicht unter die Top 3 des Tages und bekommst einfach keine Diamanten? Kaufe dir welche nach: 10 Diamanten für nur 0,99 Euro.
     </div>
+    <button class="update-banner-btn" id="updateBannerBtn">Los geht's</button>
   </div>
+</div>
+
+<div id="egg-section-wrapper">
 
   <div id="diamondBanner" class="diamond-error-banner"></div>
 
@@ -4489,22 +4505,15 @@
   let eggNextId      = 1;
   let eggBannerTimer = null;
 
-  const EGG_PREVIEW_KEY = 'pomo_egg_preview';
+  const EGG_BANNER_KEY = 'pomo_egg_banner_v1';
 
-  function isEggPreviewActive() {
-    return localStorage.getItem(EGG_PREVIEW_KEY) === '1';
+  function maybeShowEggBanner() {
+    if (localStorage.getItem(EGG_BANNER_KEY) === 'seen') return;
+    document.getElementById('updateBannerOverlay')?.classList.remove('hidden');
   }
-  function applyEggPreview() {
-    const overlay = document.getElementById('egg-placeholder-overlay');
-    const btn     = document.getElementById('egg-preview-toggle');
-    if (!overlay) return;
-    overlay.classList.toggle('hidden', isEggPreviewActive());
-    if (btn) btn.textContent = isEggPreviewActive() ? '🔍 deaktivieren' : '🔍 aktivieren';
-  }
-  document.getElementById('egg-preview-toggle')?.addEventListener('click', () => {
-    if (clanRole !== 'leader') return;
-    localStorage.setItem(EGG_PREVIEW_KEY, isEggPreviewActive() ? '0' : '1');
-    applyEggPreview();
+  document.getElementById('updateBannerBtn')?.addEventListener('click', () => {
+    localStorage.setItem(EGG_BANNER_KEY, 'seen');
+    document.getElementById('updateBannerOverlay').classList.add('hidden');
   });
 
   // Hilfsfunktionen
@@ -4988,7 +4997,7 @@
     renderIncubator();
     renderEggDeck(null, false);
     toggleEggInv(); // Inventar beim Start aufgeklappt
-    applyEggPreview();
+    maybeShowEggBanner();
   }
 
   // ─── Ende Eier & Kartensammlung ───────────────────────────────────────────
