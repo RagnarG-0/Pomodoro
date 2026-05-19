@@ -2974,23 +2974,20 @@
     }
 
     // Assign dense ranks: same value = same rank, next rank skips
-    const medals = ['🥇','🥈','🥉'];
+    const medalEmojis = ['🥇','🥈','🥉'];
     let rank = 1;
     const ranked = list.map((entry, i) => {
-      const val  = isWins ? entry.wins  : entry.minutes;
-      const prev = isWins ? list[i-1]?.wins : list[i-1]?.minutes;
+      const val  = isWins ? entry.gold    : entry.minutes;
+      const prev = isWins ? list[i-1]?.gold : list[i-1]?.minutes;
       if (i > 0 && val !== prev) rank = i + 1;
       return { ...entry, rank };
     });
 
     el.innerHTML = ranked.map((entry) => {
       const isMe = entry.name === userName;
-      const medal = entry.rank <= 3
-        ? medals[entry.rank - 1]
+      const rankBadge = entry.rank <= 3
+        ? medalEmojis[entry.rank - 1]
         : `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${entry.rank}</span>`;
-      const display = isWins
-        ? `${entry.wins} 🏆`
-        : minutesToDisplay(entry.minutes ?? 0);
       const alltimeMins = entry.alltime_minutes ?? 0;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
       const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})</span>`;
@@ -3002,16 +2999,28 @@
       const winnerLabel = isYesterdayWinner
         ? `<span style="font-size:10px;color:#c9a227;margin-left:4px;white-space:nowrap;">Tagessieger</span>`
         : '';
-      const timerDot = (!isWins && entry.timer_active)
+
+      if (isWins) {
+        return `<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
+          <span style="width:26px;text-align:center;flex-shrink:0;">${rankBadge}</span>
+          ${avatarHtml}
+          <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;min-width:0;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
+          <button class="lb-deck-btn" data-username="${entry.name}" title="Kartendeck ansehen">🃏</button>
+          <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;white-space:nowrap;letter-spacing:0.01em;">🥇<b style="color:var(--text)">${entry.gold ?? 0}</b> 🥈<b style="color:var(--text)">${entry.silver ?? 0}</b> 🥉<b style="color:var(--text)">${entry.bronze ?? 0}</b></span>
+          <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;min-width:20px;text-align:right;">${entry.total ?? 0}</span>
+        </div>`;
+      }
+
+      const timerDot = entry.timer_active
         ? `<span title="Fokus läuft" style="width:8px;height:8px;border-radius:50%;background:#4caf50;flex-shrink:0;display:inline-block;box-shadow:0 0 4px #4caf5088;"></span>`
         : `<span style="width:8px;flex-shrink:0;display:inline-block;"></span>`;
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}${borderStyle}">
-        <span style="width:26px;text-align:center;flex-shrink:0;">${medal}</span>
+        <span style="width:26px;text-align:center;flex-shrink:0;">${rankBadge}</span>
         ${avatarHtml}
         <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}${winnerLabel}</span>
         <button class="lb-deck-btn" data-username="${entry.name}" title="Kartendeck ansehen">🃏</button>
         ${timerDot}
-        <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${display}</span>
+        <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${minutesToDisplay(entry.minutes ?? 0)}</span>
       </div>`;
     }).join('');
     document.getElementById('lb-status').textContent =
