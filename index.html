@@ -5044,9 +5044,15 @@
     document.getElementById('cardViewOverlay').classList.add('visible');
   }
   async function sellCard(cardId, reward) {
-    const { data: newDiamonds, error } = await supabase.rpc('sell_card', { p_card_id: cardId });
-    if (error) { console.error('sell_card RPC error:', error); return false; }
-    userDiamonds = newDiamonds ?? userDiamonds;
+    const token = await getValidToken();
+    const res = await fetch(`${SB}/rest/v1/rpc/sell_card`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ p_card_id: cardId }),
+    });
+    if (!res.ok) { console.error('sell_card error:', await res.text()); return false; }
+    const newDiamonds = await res.json();
+    userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
     renderEggDiamonds();
     const entry = eggDeck.find(c => c.id === cardId);
     if (entry) {
