@@ -1037,6 +1037,16 @@
     font-family: -apple-system, sans-serif; font-size: 11px;
     color: rgba(255,255,255,0.35); letter-spacing: 0.14em; text-transform: uppercase;
   }
+  .card-sell-btn {
+    font-family: -apple-system, sans-serif; font-size: 13px;
+    padding: 8px 20px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75);
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .card-sell-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .card-sell-btn.confirm {
+    border-color: #ffd700; color: #ffd700; background: rgba(255,215,0,0.12);
+  }
 
   /* ── Leaderboard Deck-Button ── */
   .lb-deck-btn {
@@ -4977,7 +4987,7 @@
           <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
         </div>`;
       grid.appendChild(wrap);
-      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ src, rarity }));
+      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ id, src, rarity, count }));
       if (highlightId===id && !isDuplicate) {
         const dc=document.getElementById(`dc_${safeId}`);
         if(dc) dc.style.animation='hatchCardPop 0.38s cubic-bezier(0.34,1.56,0.64,1) both';
@@ -4987,9 +4997,14 @@
       }
     });
   }
-  function showEggCardView(card) {
-    const { rarity, src } = card;
+  const CARD_SELL_REWARDS = { normal: 2, selten: 4, episch: 6, legendaer: 8, mystisch: 10 };
+  let cardSellConfirmPending = false;
+
+  function showEggCardView({ id, src, rarity, count = 1 }) {
+    cardSellConfirmPending = false;
     const isMyst = rarity.key === 'mystisch';
+    const canSell = count > 1;
+    const reward  = CARD_SELL_REWARDS[rarity.key] ?? 0;
     document.getElementById('cardViewEl').innerHTML = `
       <div class="hatch-card" style="border-color:${rarity.color};box-shadow:0 0 30px ${rarity.color}66,0 0 60px ${rarity.color}22;background:${rarity.bg}">
         <div class="hatch-card-glow" style="background:${rarity.color}"></div>
@@ -4997,10 +5012,38 @@
         <div class="rarity-badge-h ${isMyst?'mystisch':''}"
           style="${isMyst?'':` background:${rarity.color}20;color:${rarity.color};border:1px solid ${rarity.color}44`}">
           ${rarity.name}</div>
-      </div>`;
+      </div>
+      ${canSell ? `<button class="card-sell-btn" id="cardSellBtn">Duplikat verkaufen &nbsp;💎${reward}</button>` : ''}`;
+    if (canSell) {
+      document.getElementById('cardSellBtn').addEventListener('click', async e => {
+        e.stopPropagation();
+        if (!cardSellConfirmPending) {
+          cardSellConfirmPending = true;
+          e.currentTarget.textContent = 'Wirklich verkaufen?';
+          e.currentTarget.classList.add('confirm');
+        } else {
+          await sellCard(id, reward);
+          document.getElementById('cardViewOverlay').classList.remove('visible');
+        }
+      });
+    }
     document.getElementById('cardViewOverlay').classList.add('visible');
   }
+  async function sellCard(cardId, reward) {
+    const { data: newDiamonds, error } = await supabase.rpc('sell_card', { p_card_id: cardId });
+    if (error) { toast('Fehler beim Verkaufen – bitte erneut versuchen'); return; }
+    userDiamonds = newDiamonds;
+    renderEggDiamonds();
+    const entry = eggDeck.find(c => c.id === cardId);
+    if (entry) {
+      entry.count--;
+      if (entry.count <= 0) eggDeck = eggDeck.filter(c => c.id !== cardId);
+    }
+    renderEggDeck(null, false);
+    toast(`Karte verkauft! +💎${reward}`);
+  }
   document.getElementById('cardViewOverlay')?.addEventListener('click', () => {
+    cardSellConfirmPending = false;
     document.getElementById('cardViewOverlay').classList.remove('visible');
   });
   function toggleEggDeck() {

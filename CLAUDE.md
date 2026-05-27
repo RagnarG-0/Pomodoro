@@ -48,6 +48,7 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `leaderboard_aggregated(date_from)` | Rangliste ab Datum |
 | `get_yesterday_winner()` | Name des gestrigen Tagesersten |
 | `draw_card()` | Würfelt Rarität (40/30/18/9/3 %), wählt Karte, schreibt in `user_cards`, gibt `card_id int` zurück |
+| `sell_card(p_card_id)` | Löscht älteste Kopie aus `user_cards`, schreibt Diamanten gut, gibt neuen Diamanten-Stand zurück. Wirft Fehler wenn < 2 Kopien vorhanden |
 | `respond_to_clan_request(p_request_id, p_accept)` | Leader bestätigt/lehnt Beitrittsanfrage ab; updated `profiles` bei Accept |
 | `remove_clan_member(p_user_id)` | Leader entfernt Mitglied (SECURITY DEFINER) |
 | `submit_join_request()` | Neue Nutzer: findet Clan automatisch, legt pending Request an |
@@ -312,3 +313,4 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 - **Schlüpfen**: `draw_card()` RPC (serverseitig) → INSERT `user_cards`; bei Fehler lokaler Fallback
 - **Karte ins Deck**: DELETE `incubator`
 - **Level-Up-Ei**: PATCH `profiles.eggs` via `saveEggProfile()`
+- **Duplikat verkaufen**: `sell_card(p_card_id)` RPC (atomar: DELETE `user_cards` + UPDATE `profiles.diamonds`); nur möglich wenn `count > 1`; Belohnung: common 2 / rare 4 / epic 6 / legendary 8 / mystic 10 💎
