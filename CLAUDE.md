@@ -298,12 +298,12 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 - `add_study_minutes` ist nicht idempotent → nur über das Claim-Mutex in `clearTimerState` aufrufen
 - Winner-Cache (`pomo_lb_winner`) ist bewusst vom Listen-Cache getrennt, damit ein fehlgeschlagener Winner-Fetch nicht die Liste blockiert
 - `offWeekdays` speichert JS-Wochentagnummern (0=Sonntag), nicht ISO (1=Montag)
-- `finishEarly()` überschreibt `totalSec` mit der tatsächlich verstrichenen Zeit, bevor `completePomo()` aufgerufen wird — so wird die reale Dauer gespeichert, nicht die geplante
+- `finishEarly()` überschreibt `totalSec` mit der verstrichenen Zeit **abgerundet auf volle Minuten** (`Math.floor(elapsedSec / 60) * 60`), bevor `completePomo()` aufgerufen wird — so werden keine Sekunden in Supabase gespeichert
 - `showTimerConfirmBanner(msg, onYes)` ist ein wiederverwendbares Bestätigungs-Modal (`#timer-confirm-banner`); Buttons werden per `cloneNode` ausgetauscht, um Event-Listener-Leaks zu vermeiden
 
 ### Bestätigungs-Dialoge (Timer-Card)
 - **Reset im Fokus-Modus** (nur wenn `running`): zeigt Bestätigungs-Banner vor `reset()`
-- **„✓ Jetzt"-Button**: erscheint nur bei `mode === 'work' && running && elapsedSec >= 25*60`; Bestätigungs-Banner vor `finishEarly()`
+- **„✓ Jetzt"-Button**: erscheint bei `mode === 'work' && running && elapsedSec >= 60` (ab der ersten vollen Minute); Bestätigungs-Banner vor `finishEarly()`
 
 ### Eier & Kartensammlung — Supabase-Schreibpfade
 - **Ei kaufen**: PATCH `profiles` (diamonds + eggs)

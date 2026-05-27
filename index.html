@@ -1978,7 +1978,7 @@
     add5Btn.style.display = isBreak ? 'none' : 'inline-flex';
     skipBtn.disabled = !isBreak;
     const elapsedSec = totalSec - remaining;
-    finishEarlyBtn.style.display = (!isBreak && remaining < totalSec && elapsedSec >= 25 * 60) ? 'inline-flex' : 'none';
+    finishEarlyBtn.style.display = (!isBreak && running && elapsedSec >= 60) ? 'inline-flex' : 'none';
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
   }
 
@@ -2786,7 +2786,7 @@
     clearInterval(tid); running = false; startedAt = null;
     swSend({ type: 'TIMER_RESET' });
     await clearTimerState();
-    totalSec = elapsedSec;
+    totalSec = Math.floor(elapsedSec / 60) * 60;
     completePomo();
     const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
     setTimeout(() => switchTo(next, false), 1400);
@@ -2829,7 +2829,7 @@
   });
   document.getElementById('btn-skip').addEventListener('click', skip);
   document.getElementById('btn-finish-early').addEventListener('click', () => {
-    const elapsedMin = Math.round((totalSec - remaining) / 60);
+    const elapsedMin = Math.floor((totalSec - remaining) / 60);
     showTimerConfirmBanner(`${elapsedMin} Minuten als Pomodoro speichern und Fokus-Session beenden?`, finishEarly);
   });
   document.getElementById('btn-add5').addEventListener('mousedown', e => {
@@ -4574,10 +4574,16 @@
     { id: 15, name:'TomS',                   rarity:'legendary', folder:'legendary' },
     { id: 16, name:'Bibliothek-Schläfer',    rarity:'epic',      folder:'epic'      },
     { id: 17, name:'FreundausHarvard',       rarity:'epic',      folder:'epic'      },
-    { id: 18, name:'glasn',                  rarity:'epic',      folder:'epic'      },
     { id: 19, name:'Mediraggy',              rarity:'epic',      folder:'epic'      },
     { id: 20, name:'Neurotutor',             rarity:'epic',      folder:'epic'      },
     { id: 21, name:'Penig-BG',              rarity:'mystic',    folder:'mystic'    },
+    { id: 22, name:'Ersti',                 rarity:'common',    folder:'common'    },
+    { id: 23, name:'Bubbletrinker',         rarity:'rare',      folder:'rare'      },
+    { id: 24, name:'Juri-Gänger',           rarity:'rare',      folder:'rare'      },
+    { id: 25, name:'Party-Löwe',            rarity:'rare',      folder:'rare'      },
+    { id: 26, name:'Performative Male',     rarity:'rare',      folder:'rare'      },
+    { id: 27, name:'Sozialist',             rarity:'rare',      folder:'rare'      },
+    { id: 28, name:'Team-Leader',           rarity:'rare',      folder:'rare'      },
   ];
 
   // State
