@@ -20,17 +20,23 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 
 | Tabelle | Inhalt |
 |---|---|
-| `profiles` | username, public, avatar_url, diamonds, eggs, focus_min, short_min, long_min, long_after, display_unit, off_weekdays, sound |
+| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, long_min, long_after, display_unit, off_weekdays, sound |
 | `study_days` | user_id, date, minutes, off |
 | `pomodoro_sessions` | user_id, date, label, duration_minutes |
 | `timer_state` | user_id, end_at, total_sec, mode, paused_remaining, pomoday |
 | `incubator` | user_id (PK), egg_color char(1), placed_at, focus_minutes_at_placement |
 | `cards` | id int (PK), name, rarity |
 | `user_cards` | id uuid (PK), user_id, card_id, obtained_at |
+| `clans` | id, name, leader_id, min_focus_min, max_focus_min, level_config (JSONB), created_at |
+| `clan_requests` | id, clan_id, user_id, status (`pending`/`accepted`/`rejected`), created_at |
 
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
+`profiles.clan_role` ist `'leader'` | `'member'` | null.
+
 `incubator` hat max. 1 Zeile pro Nutzer. Brut-Fortschritt = `sum(study_days.minutes) − focus_minutes_at_placement`, Ziel = 600.
+
+`clans.level_config` ist ein JSONB-Array mit 25 Einträgen `{ name, icon, minMinutes }`.
 
 ### RPCs
 
@@ -42,6 +48,13 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `leaderboard_aggregated(date_from)` | Rangliste ab Datum |
 | `get_yesterday_winner()` | Name des gestrigen Tagesersten |
 | `draw_card()` | Würfelt Rarität (40/30/18/9/3 %), wählt Karte, schreibt in `user_cards`, gibt `card_id int` zurück |
+| `respond_to_clan_request(p_request_id, p_accept)` | Leader bestätigt/lehnt Beitrittsanfrage ab; updated `profiles` bei Accept |
+| `remove_clan_member(p_user_id)` | Leader entfernt Mitglied (SECURITY DEFINER) |
+| `submit_join_request()` | Neue Nutzer: findet Clan automatisch, legt pending Request an |
+| `submit_join_request_to(p_clan_id)` | Anfrage an spezifischen Clan senden |
+| `create_clan(p_name)` | Neuen Clan erstellen, Ersteller wird Leader (SECURITY DEFINER) |
+| `get_clan_members()` | Gibt Mitglieder des eigenen Clans zurück (SECURITY DEFINER) |
+| `my_clan_id()` | Hilfsfunktion für RLS-Policy (SECURITY DEFINER, kein direkter Aufruf) |
 
 ---
 
@@ -62,6 +75,9 @@ userDiamonds  // number — aktueller Diamanten-Stand (aus profiles.diamonds)
 eggInventory  // Array[10] — null | { id, color } — lokale Kopie aus profiles.eggs
 incubatorData // null | { color, focus_minutes_at_placement, bonusMin } — aus incubator-Tabelle
 eggDeck       // Array von { id, name, rarity, src, count } — aus user_cards
+clanRole      // 'leader' | 'member' | null — aus profiles.clan_role
+clanId        // uuid | null — aus profiles.clan_id
+clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
 ```
 
 ---
@@ -115,7 +131,7 @@ eggDeck       // Array von { id, name, rarity, src, count } — aus user_cards
 3. **Stats-Card** — Level (25 Stufen), Streak, Bester Tag, Wochenschnitt; „mehr Infos" öffnet Label-Stats-Overlay (inset, gleiche Card)
 4. **Ei-Box** (`#eggBox`) — Diamanten-Anzeige, Brutkasten (1 Slot), -1h/Skip-Buttons, aufklappbares 10-Slot-Inventar; hinter Placeholder versteckt (`#egg-placeholder-overlay`)
 5. **Deck-Box** (`#deckBox`) — aufklappbares Karten-Grid, nach Rarität sortiert, Stapel-Optik bei Duplikaten; hinter demselben Placeholder
-6. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border; Live-Timer-Dot (grün)
+6. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border; Live-Timer-Dot (grün)
 
 ### Eier & Kartensammlung — Schlüsseldetails
 
@@ -123,6 +139,136 @@ eggDeck       // Array von { id, name, rarity, src, count } — aus user_cards
 - **Bilder**: serviert via jsDelivr (`CDN`-Konstante). Eier: `CDN/Eier/<farbe>/Stadium_<1-4>.png`. Karten: `CDN/Karten/<rarität>/<name>.png`.
 - **`draw_card()` RPC**: serverseitig, `SECURITY DEFINER`, schreibt in `user_cards` und gibt `card_id` zurück. Client schlägt Karte in `CARD_CATALOG` nach.
 - **`bonusMin`**: lokales Offset auf `focus_minutes_at_placement` für optimistische -1h/Skip-Updates. Wird nach Supabase-Write auf 0 normalisiert.
+
+---
+
+## Clan-System
+
+### Datenbank
+- **`clans`**: id, name, leader_id, min_focus_min, max_focus_min, level_config (JSONB-Array mit 25 Stufen), created_at
+- **`clan_requests`**: id, clan_id, user_id, status (`pending`/`accepted`/`rejected`), created_at
+- **`profiles`** erweitert um `clan_id` und `clan_role` (`'leader'`|`'member'`|null)
+- RLS: `profiles_read_own` (eigenes Profil) + `profiles_read_clan_peers` (via `my_clan_id()` SECURITY DEFINER)
+- **Wichtig**: Subqueries in RLS-Policies auf `profiles` müssen SECURITY DEFINER-Funktionen nutzen — sonst rekursiver Loop → Profil nicht lesbar → Auto-Reset
+
+### UI
+- **Header**: Glocken-Icon (nur Leader) mit Badge + Dropdown für offene Beitrittsanfragen
+- **Header**: „Clan"-Button (Nutzer ohne Clan) mit zwei Tabs: „Clan suchen" und „Neuen Clan erstellen"
+- **Clan suchen**: listet alle aktiven Clans, Anfrage geht an spezifischen Clan
+- **Neuen Clan erstellen**: Namenseingabe, Ersteller wird automatisch Leader
+- **Leader-Einstellungen**: Clan-Name, Min./Max. Fokuszeit, Level-Namen-Editor, Mitgliederliste mit Entfernen-Button
+- **Timer**: `+5 min` wird auf `clanMaxFocus` geclampt
+- **Neue Nutzer**: `submitJoinRequest()` wird automatisch nach Registrierung aufgerufen; Registrierungsflow bietet Clan gründen / beitreten / überspringen
+
+### Registrierter Clan
+- Clan „Schwitzende Verbindung Halle" — alle `public = true`-Profile als Member
+
+---
+
+## Level-System
+
+25 Stufen, konfiguriert in `clans.level_config`. Schwellen in Fokusminuten:
+
+| Level | Name (Default) | Icon | Ab (Min) |
+|---|---|---|---|
+| 1 | Erkaltete Tastatur | 🧊 | 0 |
+| 2 | Morgenmuffel | 🧊 | 300 |
+| 3 | Notizzettelsammler | 🧊 | 600 |
+| 4 | Koffeinabhängiger | 🧊 | 900 |
+| 5 | Halbherziger Held | 🧊 | 1.500 |
+| 6 | Sofagelehrter | 🛋️ | 2.100 |
+| 7 | Bücherstapelturmer | 🛋️ | 3.000 |
+| 8 | Pausensnacker | 🛋️ | 3.900 |
+| 9 | Gemütlicher Grübler | 🛋️ | 4.800 |
+| 10 | Pflichterfüller | 🛋️ | 6.000 |
+| 11 | Entflammter | 🔥 | 7.800 |
+| 12 | Nachtschwarmer | 🔥 | 9.600 |
+| 13 | Karteikartenkönig | 🔥 | 12.000 |
+| 14 | Zeitfresser | 🔥 | 14.400 |
+| 15 | Leuchtendes Beispiel | 🔥 | 17.400 |
+| 16 | Schreibtischkämpfer | 🦁 | 21.000 |
+| 17 | Geduldiger Riese | 🦁 | 25.200 |
+| 18 | Stirnrunzler | 🦁 | 30.000 |
+| 19 | Schlafloser Denker | 🦁 | 35.400 |
+| 20 | Unaufhaltsamer | 🦁 | 41.400 |
+| 21 | Zeitsouverän | 👑 | 45.000 |
+| 22 | Chronos-Bezwinger | 👑 | 49.200 |
+| 23 | Erleuchteter | 👑 | 54.000 |
+| 24 | Pomodoro-Legende | 👑 | 58.800 |
+| 25 | Pomodoro-Gott | 👑 | 63.000 |
+
+Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem Inventar wird ältestes Ei ersetzt).
+
+---
+
+## Karten-Katalog (28 Karten)
+
+`CARD_CATALOG` hardcoded im JS. Bildpfad: `CDN/Karten/<rarity>/<name>.png`.
+
+| ID | Name | Rarität |
+|---|---|---|
+| 1 | FSr-Mitglied | common |
+| 2 | Glutenboykottierer | common |
+| 3 | Histotutor | common |
+| 4 | M1Schwitzer | common |
+| 5 | Skillslabschauspieler | common |
+| 6 | Soziologiestudent-in | common |
+| 7 | Warmduscher | common |
+| 8 | Anki-Controler-User | rare |
+| 9 | Biochemietrader | rare |
+| 10 | Mensafrau | rare |
+| 11 | Schwesterrabiata | rare |
+| 12 | gym10duscher | rare |
+| 13 | Medienny | legendary |
+| 14 | STHebungsüberseher | legendary |
+| 15 | TomS | legendary |
+| 16 | Bibliothek-Schläfer | epic |
+| 17 | FreundausHarvard | epic |
+| 18 | glasn | epic |
+| 19 | Mediraggy | epic |
+| 20 | Neurotutor | epic |
+| 21 | Penig-BG | mystic |
+| 22 | Ersti | common |
+| 23 | Bubbletrinker | rare |
+| 24 | Juri-Gänger | rare |
+| 25 | Party-Löwe | rare |
+| 26 | Performative Male | rare |
+| 27 | Sozialist | rare |
+| 28 | Team-Leader | rare |
+
+Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legendary 9 %, mystic 3 %.
+
+---
+
+## Eier-System
+
+### Farben & Bilder
+4 Ei-Farben: `y` (gelb), `b` (blau), `g` (grün), `r` (rot). Bilder: `CDN/Eier/<farbe>/Stadium_<1-4>.png`.
+
+### Brut-Stadien (Ziel = 600 Fokusminuten)
+| Fortschritt | Stadium | Bild |
+|---|---|---|
+| 0–209 min | 0 | Stadium_1 |
+| 210–419 min | 1 | Stadium_2 |
+| 420–599 min | 2 | Stadium_3 |
+| 600+ min | Schlüpfbereit | pulsierender Glow |
+
+Schwellen = `600 × [0.35, 0.70, 1.0]`.
+
+### Schlüpf-Animation
+- Ei wackelt (shake-Keyframe, 480 ms)
+- 8–12 Schalensplitter fliegen mit zufälligem Winkel/Rotation heraus
+- Zwei gezackte Hälften (clip-path Zickzack) fliegen nach links/rechts oben
+- Nach 540 ms: `draw_card()` RPC → Karten-Overlay
+
+### Diamanten-Kosten
+| Aktion | Kosten |
+|---|---|
+| Neues Ei kaufen | 12 💎 |
+| Brutzeit −1h | 1 💎 |
+| Brutzeit überspringen | ⌈verbleibende Stunden⌉ 💎 |
+
+Fehler-Banner bei zu wenig Diamanten: „Du bist wohl gesetzlich versichert. Verdiene mehr Diamanten und probiere es nochmal!"
 
 ---
 
