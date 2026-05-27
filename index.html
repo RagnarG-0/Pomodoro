@@ -4998,11 +4998,9 @@
     });
   }
   const CARD_SELL_REWARDS = { normal: 2, selten: 4, episch: 6, legendaer: 8, mystisch: 10 };
-  let cardSellConfirmPending = false;
 
   function showEggCardView({ id, src, rarity, count = 1 }) {
-    cardSellConfirmPending = false;
-    const isMyst = rarity.key === 'mystisch';
+    const isMyst  = rarity.key === 'mystisch';
     const canSell = count > 1;
     const reward  = CARD_SELL_REWARDS[rarity.key] ?? 0;
     document.getElementById('cardViewEl').innerHTML = `
@@ -5013,18 +5011,32 @@
           style="${isMyst?'':` background:${rarity.color}20;color:${rarity.color};border:1px solid ${rarity.color}44`}">
           ${rarity.name}</div>
       </div>
-      ${canSell ? `<button class="card-sell-btn" id="cardSellBtn">Duplikat verkaufen &nbsp;💎${reward}</button>` : ''}`;
+      ${canSell ? `
+        <button class="card-sell-btn" id="cardSellBtn">Duplikat verkaufen &nbsp;💎${reward}</button>
+        <div id="cardSellConfirmRow" style="display:none;flex-direction:row;gap:8px;">
+          <button class="card-sell-btn confirm" id="cardSellYes">Ja, verkaufen &nbsp;💎${reward}</button>
+          <button class="card-sell-btn" id="cardSellNo">Abbrechen</button>
+        </div>` : ''}`;
     if (canSell) {
-      document.getElementById('cardSellBtn').addEventListener('click', async e => {
+      const btnSell    = document.getElementById('cardSellBtn');
+      const confirmRow = document.getElementById('cardSellConfirmRow');
+      const btnYes     = document.getElementById('cardSellYes');
+      const btnNo      = document.getElementById('cardSellNo');
+      btnSell.addEventListener('click', e => {
         e.stopPropagation();
-        if (!cardSellConfirmPending) {
-          cardSellConfirmPending = true;
-          e.currentTarget.textContent = 'Wirklich verkaufen?';
-          e.currentTarget.classList.add('confirm');
-        } else {
-          await sellCard(id, reward);
-          document.getElementById('cardViewOverlay').classList.remove('visible');
-        }
+        btnSell.style.display = 'none';
+        confirmRow.style.display = 'flex';
+      });
+      btnNo.addEventListener('click', e => {
+        e.stopPropagation();
+        confirmRow.style.display = 'none';
+        btnSell.style.display = '';
+      });
+      btnYes.addEventListener('click', async e => {
+        e.stopPropagation();
+        btnYes.disabled = true;
+        await sellCard(id, reward);
+        document.getElementById('cardViewOverlay').classList.remove('visible');
       });
     }
     document.getElementById('cardViewOverlay').classList.add('visible');
@@ -5043,7 +5055,6 @@
     toast(`Karte verkauft! +💎${reward}`);
   }
   document.getElementById('cardViewOverlay')?.addEventListener('click', () => {
-    cardSellConfirmPending = false;
     document.getElementById('cardViewOverlay').classList.remove('visible');
   });
   function toggleEggDeck() {
