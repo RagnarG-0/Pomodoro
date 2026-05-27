@@ -5,6 +5,8 @@
 Single-file PWA: `index.html` (~4500 Zeilen) + `sw.js`. Kein Build-System, kein Framework.
 Backend: Supabase (Postgres + Auth + Storage).
 
+**Kein Supabase JS SDK.** Alle API-Calls laufen über direktes `fetch` mit `getValidToken()` + `authHeaders(token)`. Niemals `supabase.rpc(...)` oder `supabase.from(...)` verwenden — diese Variablen existieren nicht.
+
 Alles JS läuft in einer einzigen IIFE am Ende von `index.html`.
 
 ---
