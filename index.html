@@ -1988,7 +1988,7 @@
     add5Btn.style.display = isBreak ? 'none' : 'inline-flex';
     skipBtn.disabled = !isBreak;
     const elapsedSec = totalSec - remaining;
-    finishEarlyBtn.style.display = (!isBreak && running && elapsedSec >= 60) ? 'inline-flex' : 'none';
+    finishEarlyBtn.style.display = (!isBreak && elapsedSec >= 60) ? 'inline-flex' : 'none';
     document.title = fmt(remaining) + ' — ' + modeLabels[mode];
   }
 
