@@ -4104,18 +4104,22 @@
     const token = await getValidToken();
     if (!token) return;
 
+    const FROM_DATE = '2026-05-10';
     const berlinNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
     if (berlinNow.getHours() < 4) berlinNow.setDate(berlinNow.getDate() - 1);
+    const todayStr = `${berlinNow.getFullYear()}-${String(berlinNow.getMonth()+1).padStart(2,'0')}-${String(berlinNow.getDate()).padStart(2,'0')}`;
+
     const dateKeys = [];
-    for (let i = 9; i >= 0; i--) {
-      const d = new Date(berlinNow);
-      d.setDate(d.getDate() - i);
-      dateKeys.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+    const cur = new Date(FROM_DATE);
+    const end = new Date(todayStr);
+    while (cur <= end) {
+      dateKeys.push(`${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`);
+      cur.setDate(cur.getDate() + 1);
     }
 
     try {
       const res = await fetch(
-        `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${dateKeys[0]}&select=date,label,duration_minutes&order=date.asc`,
+        `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${FROM_DATE}&select=date,label,duration_minutes&order=date.asc`,
         { headers: authHeaders(token) }
       );
       if (!res.ok) throw new Error(res.status);
@@ -4141,23 +4145,35 @@
     const labelTotals = {};
     sessions.forEach(s => { labelTotals[s.label] = (labelTotals[s.label] || 0) + (+s.duration_minutes || 0); });
     const labels = Object.entries(labelTotals).sort((a, b) => b[1] - a[1]).map(([l]) => l);
-
     const colorMap = {};
     labels.forEach((l, i) => { colorMap[l] = PIE_COLORS[i % PIE_COLORS.length]; });
 
-    const maxMin = Math.max(...dateKeys.map(k => Object.values(byDate[k]).reduce((s, v) => s + v, 0)), 1);
+    const maxMin = Math.max(...dateKeys.map(k => Object.values(byDate[k]).reduce((s, v) => s + v, 0)), 60);
+    const maxHours = Math.ceil(maxMin / 60);
+    const scaleMax = maxHours * 60; // snap Y axis to whole hours
 
-    const svgW = 560, svgH = 170;
-    const barW = 44, gap = 12, bottomPad = 22, topPad = 6;
-    const chartH = svgH - bottomPad - topPad;
-    const totalSlotW = barW + gap;
-    const startX = (svgW - (dateKeys.length * totalSlotW - gap)) / 2;
+    // Layout
+    const leftPad = 26, rightPad = 6, bottomPad = 22, topPad = 8;
+    const svgH = 180;
+    const chartH = svgH - topPad - bottomPad;
+    const barW = 30, gap = 8, slotW = barW + gap;
+    const svgW = leftPad + dateKeys.length * slotW - gap + rightPad;
+
     const DE_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
     const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
 
+    // Y-axis grid lines and labels
+    let grid = '';
+    for (let hr = 0; hr <= maxHours; hr++) {
+      const gy = (topPad + chartH - (hr / maxHours) * chartH).toFixed(1);
+      grid += `<line x1="${leftPad}" y1="${gy}" x2="${svgW - rightPad}" y2="${gy}" stroke="var(--border)" stroke-width="0.5"/>`;
+      grid += `<text x="${leftPad - 4}" y="${(+gy + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${hr}h</text>`;
+    }
+
+    // Bars
     let bars = '';
     dateKeys.forEach((key, i) => {
-      const x = startX + i * totalSlotW;
+      const x = leftPad + i * slotW;
       const [yr, mo, dy] = key.split('-');
       const dow = DE_DAYS[new Date(+yr, +mo - 1, +dy).getDay()];
       bars += `<text x="${(x + barW/2).toFixed(1)}" y="${svgH - 4}" text-anchor="middle" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${dow} ${+dy}</text>`;
@@ -4170,7 +4186,7 @@
       labels.forEach(label => {
         const m = dayData[label] || 0;
         if (!m) return;
-        const h = Math.max((m / maxMin) * chartH, 2);
+        const h = Math.max((m / scaleMax) * chartH, 1);
         const barY = (topPad + chartH - yOff - h).toFixed(1);
         bars += `<rect x="${x}" y="${barY}" width="${barW}" height="${h.toFixed(1)}" fill="${colorMap[label]}" rx="2"><title>${enc(label)}: ${minutesToDisplay(m)}</title></rect>`;
         yOff += h;
@@ -4184,8 +4200,8 @@
     ).join('');
 
     content.innerHTML = `
-      <div style="overflow-x:auto;">
-        <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:auto;display:block;">${bars}</svg>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <svg viewBox="0 0 ${svgW} ${svgH}" style="width:${svgW}px;height:auto;display:block;">${grid}${bars}</svg>
       </div>
       <div style="display:flex;flex-wrap:wrap;margin-top:8px;padding:0 2px;">${legendHtml}</div>`;
   }
