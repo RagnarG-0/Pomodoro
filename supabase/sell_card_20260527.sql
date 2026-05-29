@@ -19,11 +19,11 @@ BEGIN
 
   -- Belohnung je Rarität
   v_reward := CASE v_rarity
-    WHEN 'common'    THEN 2
-    WHEN 'rare'      THEN 4
-    WHEN 'epic'      THEN 6
-    WHEN 'legendary' THEN 8
-    WHEN 'mystic'    THEN 10
+    WHEN 'common'    THEN 4
+    WHEN 'rare'      THEN 8
+    WHEN 'epic'      THEN 12
+    WHEN 'legendary' THEN 16
+    WHEN 'mystic'    THEN 20
     ELSE 0
   END;
 
