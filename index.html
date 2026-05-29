@@ -2111,9 +2111,13 @@
   }
   function computeCurrentStreak() {
     let streak = 0;
+    // Use Berlin timezone with 4 AM cutoff to match days[] keys (same logic as todayKey)
+    const berlinBase = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+    if (berlinBase.getHours() < 4) berlinBase.setDate(berlinBase.getDate() - 1);
     for (let i = 0; i <= 365; i++) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const d = new Date(berlinBase);
+      d.setDate(berlinBase.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       if (isOff(d, key)) continue;
       if ((days[key] || 0) > 0) { streak++; }
       else if (i === 0) { /* today empty, check earlier */ }
@@ -2137,7 +2141,7 @@
         let gapAllOff = true;
         for (let j = 1; j < diff; j++) {
           const mid = new Date(prev); mid.setDate(prev.getDate() + j);
-          const midKey = mid.toISOString().slice(0, 10);
+          const midKey = `${mid.getFullYear()}-${String(mid.getMonth()+1).padStart(2,'0')}-${String(mid.getDate()).padStart(2,'0')}`;
           if (!isOff(mid, midKey)) { gapAllOff = false; break; }
         }
         current = gapAllOff ? current + 1 : 1;
