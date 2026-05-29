@@ -4141,7 +4141,7 @@
     document.getElementById('stats-detail-content').addEventListener('click', async function(e) {
       const btn = e.target.closest('.label-edit-btn');
       if (!btn) return;
-      const row = btn.closest('.detail-label-row, .detail-label-row-2col');
+      const row = btn.closest('.detail-label-row, .detail-label-row-2col, .detail-label-row-alltime');
       const nameCell = row.querySelector('.label-name-cell');
       const labelName = btn.dataset.label; // already decoded by browser
       const dotColor = btn.dataset.color || '';
