@@ -633,30 +633,27 @@
   }
   .label-option:hover { background: var(--surface2); }
 
-  /* ── Stats Detail Overlay ── */
-  #stats-more-btn {
-    font-size: 11px; padding: 3px 10px;
-    border: 0.5px solid var(--border-strong); border-radius: 12px;
-    background: transparent; color: var(--text-muted);
-    cursor: pointer; font-family: Georgia, serif;
-    transition: background 0.12s;
+  /* ── Stats Page Dots ── */
+  .stats-page-dots {
+    display: flex; gap: 7px; align-items: center;
   }
-  #stats-more-btn:hover { background: var(--surface2); color: var(--text); }
-  #stats-detail-panel {
+  .stats-page-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--border-strong); cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+    flex-shrink: 0;
+  }
+  .stats-page-dot.active { background: var(--accent); transform: scale(1.25); }
+  .stats-page-dot:hover:not(.active) { background: var(--text-muted); }
+
+  /* ── Stats Detail Overlay ── */
+  #stats-detail-panel, #stats-bar-panel {
     display: none; position: absolute; inset: 0;
     background: var(--surface); border-radius: 16px;
     padding: 2rem 1.5rem 1.5rem; z-index: 10;
     overflow-y: auto;
   }
-  #stats-detail-panel.open { display: block; }
-  #stats-detail-back {
-    font-size: 11px; padding: 3px 10px;
-    border: 0.5px solid var(--border-strong); border-radius: 12px;
-    background: transparent; color: var(--text-muted);
-    cursor: pointer; font-family: Georgia, serif;
-    transition: background 0.12s;
-  }
-  #stats-detail-back:hover { background: var(--surface2); }
+  #stats-detail-panel.open, #stats-bar-panel.open { display: block; }
   .detail-label-row {
     display: grid;
     grid-template-columns: 1fr 68px 68px 72px;
@@ -1423,7 +1420,11 @@
 <div class="card" style="position:relative;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
     <div class="hmap-label">Statistik</div>
-    <button id="stats-more-btn">mehr Infos</button>
+    <div class="stats-page-dots">
+      <div class="stats-page-dot active" data-page="1"></div>
+      <div class="stats-page-dot" data-page="2"></div>
+      <div class="stats-page-dot" data-page="3"></div>
+    </div>
   </div>
   <div class="stats-row">
     <div class="stat-box" id="level-box">
@@ -1458,13 +1459,32 @@
     </div>
   </div>
 
-  <!-- Label Stats Detail Overlay -->
+  <!-- Label Stats Detail Overlay (page 2) -->
   <div id="stats-detail-panel">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
       <div class="hmap-label">Lernzeit nach Label</div>
-      <button id="stats-detail-back">zurück</button>
+      <div class="stats-page-dots">
+        <div class="stats-page-dot" data-page="1"></div>
+        <div class="stats-page-dot active" data-page="2"></div>
+        <div class="stats-page-dot" data-page="3"></div>
+      </div>
     </div>
     <div id="stats-detail-content">
+      <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>
+    </div>
+  </div>
+
+  <!-- Bar Chart Overlay (page 3) -->
+  <div id="stats-bar-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+      <div class="hmap-label">Letzte 10 Tage</div>
+      <div class="stats-page-dots">
+        <div class="stats-page-dot" data-page="1"></div>
+        <div class="stats-page-dot" data-page="2"></div>
+        <div class="stats-page-dot active" data-page="3"></div>
+      </div>
+    </div>
+    <div id="stats-bar-content">
       <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>
     </div>
   </div>
@@ -4073,6 +4093,103 @@
     return `<svg viewBox="0 0 140 140" class="pie-svg" role="img">${inner}</svg>`;
   }
 
+  /* ── Bar Chart (last 10 days) ── */
+  async function loadBarChart() {
+    const content = document.getElementById('stats-bar-content');
+    if (!currentUser) {
+      content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Bitte anmelden.</div>';
+      return;
+    }
+    content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>';
+    const token = await getValidToken();
+    if (!token) return;
+
+    const berlinNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+    if (berlinNow.getHours() < 4) berlinNow.setDate(berlinNow.getDate() - 1);
+    const dateKeys = [];
+    for (let i = 9; i >= 0; i--) {
+      const d = new Date(berlinNow);
+      d.setDate(d.getDate() - i);
+      dateKeys.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+    }
+
+    try {
+      const res = await fetch(
+        `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${dateKeys[0]}&select=date,label,duration_minutes&order=date.asc`,
+        { headers: authHeaders(token) }
+      );
+      if (!res.ok) throw new Error(res.status);
+      renderBarChart(await res.json(), dateKeys);
+    } catch(e) {
+      content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Konnte nicht geladen werden.</div>';
+      console.warn('loadBarChart error:', e);
+    }
+  }
+
+  function renderBarChart(sessions, dateKeys) {
+    const content = document.getElementById('stats-bar-content');
+
+    // Group by date and label
+    const byDate = {};
+    dateKeys.forEach(k => { byDate[k] = {}; });
+    sessions.forEach(s => {
+      if (!byDate[s.date]) return;
+      byDate[s.date][s.label] = (byDate[s.date][s.label] || 0) + (+s.duration_minutes || 0);
+    });
+
+    // Labels sorted by total minutes desc
+    const labelTotals = {};
+    sessions.forEach(s => { labelTotals[s.label] = (labelTotals[s.label] || 0) + (+s.duration_minutes || 0); });
+    const labels = Object.entries(labelTotals).sort((a, b) => b[1] - a[1]).map(([l]) => l);
+
+    const colorMap = {};
+    labels.forEach((l, i) => { colorMap[l] = PIE_COLORS[i % PIE_COLORS.length]; });
+
+    const maxMin = Math.max(...dateKeys.map(k => Object.values(byDate[k]).reduce((s, v) => s + v, 0)), 1);
+
+    const svgW = 560, svgH = 170;
+    const barW = 44, gap = 12, bottomPad = 22, topPad = 6;
+    const chartH = svgH - bottomPad - topPad;
+    const totalSlotW = barW + gap;
+    const startX = (svgW - (dateKeys.length * totalSlotW - gap)) / 2;
+    const DE_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+    let bars = '';
+    dateKeys.forEach((key, i) => {
+      const x = startX + i * totalSlotW;
+      const [yr, mo, dy] = key.split('-');
+      const dow = DE_DAYS[new Date(+yr, +mo - 1, +dy).getDay()];
+      bars += `<text x="${(x + barW/2).toFixed(1)}" y="${svgH - 4}" text-anchor="middle" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${dow} ${+dy}</text>`;
+
+      const dayData = byDate[key];
+      const total = Object.values(dayData).reduce((s, v) => s + v, 0);
+      if (!total) return;
+
+      let yOff = 0;
+      labels.forEach(label => {
+        const m = dayData[label] || 0;
+        if (!m) return;
+        const h = Math.max((m / maxMin) * chartH, 2);
+        const barY = (topPad + chartH - yOff - h).toFixed(1);
+        bars += `<rect x="${x}" y="${barY}" width="${barW}" height="${h.toFixed(1)}" fill="${colorMap[label]}" rx="2"><title>${enc(label)}: ${minutesToDisplay(m)}</title></rect>`;
+        yOff += h;
+      });
+    });
+
+    const legendHtml = labels.slice(0, 10).map(l =>
+      `<span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${colorMap[l]};flex-shrink:0;"></span>${enc(l)}
+      </span>`
+    ).join('');
+
+    content.innerHTML = `
+      <div style="overflow-x:auto;">
+        <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:auto;display:block;">${bars}</svg>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;margin-top:8px;padding:0 2px;">${legendHtml}</div>`;
+  }
+
   async function renameLabelInDb(oldLabel, newLabel) {
     if (!currentUser) return false;
     const token = await getValidToken();
@@ -4126,13 +4243,19 @@
     newNo.addEventListener('click',  () => { banner.classList.remove('open'); onNo(); });
   }
 
-  function initStatsDetail() {
-    document.getElementById('stats-more-btn').addEventListener('click', () => {
-      document.getElementById('stats-detail-panel').classList.add('open');
-      loadLabelStats();
+  function setStatsPage(n) {
+    document.getElementById('stats-detail-panel').classList.toggle('open', n === 2);
+    document.getElementById('stats-bar-panel').classList.toggle('open', n === 3);
+    document.querySelectorAll('.stats-page-dot').forEach(d => {
+      d.classList.toggle('active', +d.dataset.page === n);
     });
-    document.getElementById('stats-detail-back').addEventListener('click', () => {
-      document.getElementById('stats-detail-panel').classList.remove('open');
+    if (n === 2) loadLabelStats();
+    if (n === 3) loadBarChart();
+  }
+
+  function initStatsDetail() {
+    document.querySelectorAll('.stats-page-dot').forEach(d => {
+      d.addEventListener('click', () => setStatsPage(+d.dataset.page));
     });
 
     const pencilSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
