@@ -3015,9 +3015,11 @@
     const medalEmojis = ['🥇','🥈','🥉'];
     let rank = 1;
     const ranked = list.map((entry, i) => {
-      const val  = isWins ? entry.gold    : entry.minutes;
-      const prev = isWins ? list[i-1]?.gold : list[i-1]?.minutes;
-      if (i > 0 && val !== prev) rank = i + 1;
+      const prev = list[i-1];
+      const sameAsPrev = isWins
+        ? i > 0 && entry.gold === prev.gold && entry.silver === prev.silver && entry.bronze === prev.bronze
+        : i > 0 && entry.minutes === prev?.minutes;
+      if (i > 0 && !sameAsPrev) rank = i + 1;
       return { ...entry, rank };
     });
 
