@@ -2255,7 +2255,11 @@
     const idx = offWeekdays.indexOf(dow);
     if (idx >= 0) offWeekdays.splice(idx, 1);
     else offWeekdays.push(dow);
-    save(); syncWdBtns(); renderHeatmap();
+    save(); syncWdBtns(); renderHeatmap(); renderStats();
+    if (currentUser) {
+      const session = getToken();
+      if (session) saveProfile(session.access_token, { off_weekdays: offWeekdays });
+    }
   });
 
   /* ── Toast ── */
