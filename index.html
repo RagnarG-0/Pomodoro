@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; object-src 'none'; base-uri 'self';">
 <title>Pomodoro</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1629,6 +1630,15 @@
 
 <script>
 (function () {
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   const KEY = 'pomo_heatmap_v3';
   const LABELS_KEY = 'pomo_labels_v1';
   const CIRC = 2 * Math.PI * 68;
@@ -3030,9 +3040,10 @@
         : `<span style="font-size:11px;color:var(--text-muted);width:20px;display:inline-block;text-align:right;">${entry.rank}</span>`;
       const alltimeMins = entry.alltime_minutes ?? 0;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
-      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${entryLevel.label})</span>`;
-      const avatarHtml = entry.avatar_url
-        ? `<img src="${entry.avatar_url}" class="lb-avatar" onerror="this.style.display='none'">`
+      const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${esc(entryLevel.label)})</span>`;
+      const safeAvatar = (entry.avatar_url && entry.avatar_url.startsWith('https://')) ? entry.avatar_url : null;
+      const avatarHtml = safeAvatar
+        ? `<img src="${esc(safeAvatar)}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
       const isYesterdayWinner = !isWins && entry.name === yesterdayWinner;
       const borderStyle = isYesterdayWinner ? 'border: 1.5px solid #c9a227;' : '';
@@ -3044,8 +3055,8 @@
         return `<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}">
           <span style="width:26px;text-align:center;flex-shrink:0;">${rankBadge}</span>
           ${avatarHtml}
-          <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;min-width:0;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
-          <button class="lb-deck-btn" data-username="${entry.name}" title="Kartendeck ansehen">🃏</button>
+          <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;min-width:0;">${esc(entry.name)}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}</span>
+          <button class="lb-deck-btn" data-username="${esc(entry.name)}" title="Kartendeck ansehen">🃏</button>
           <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;white-space:nowrap;letter-spacing:0.01em;">🥇<b style="color:var(--text)">${entry.gold ?? 0}</b> 🥈<b style="color:var(--text)">${entry.silver ?? 0}</b> 🥉<b style="color:var(--text)">${entry.bronze ?? 0}</b></span>
           <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;min-width:20px;text-align:right;">${entry.total ?? 0}</span>
         </div>`;
@@ -3057,8 +3068,8 @@
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}${borderStyle}">
         <span style="width:26px;text-align:center;flex-shrink:0;">${rankBadge}</span>
         ${avatarHtml}
-        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${entry.name}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}${winnerLabel}</span>
-        <button class="lb-deck-btn" data-username="${entry.name}" title="Kartendeck ansehen">🃏</button>
+        <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${esc(entry.name)}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}${winnerLabel}</span>
+        <button class="lb-deck-btn" data-username="${esc(entry.name)}" title="Kartendeck ansehen">🃏</button>
         ${timerDot}
         <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">${minutesToDisplay(entry.minutes ?? 0)}</span>
       </div>`;
@@ -3896,7 +3907,7 @@
         : all;
       if (!items.length) { dropdown.classList.remove('open'); return; }
       dropdown.innerHTML = items.map(l =>
-        `<div class="label-option">${l.replace(/</g, '&lt;')}</div>`
+        `<div class="label-option">${esc(l)}</div>`
       ).join('');
       dropdown.classList.add('open');
       dropdown.querySelectorAll('.label-option').forEach(opt => {
@@ -4391,7 +4402,7 @@
     el.innerHTML = clans.map(c => {
       const isPending = pendingIds.has(c.id);
       return `<div class="clan-join-row">
-        <span class="clan-join-name">${c.name.replace(/</g,'&lt;')}</span>
+        <span class="clan-join-name">${esc(c.name)}</span>
         ${isPending
           ? '<span class="clan-join-pending">Anfrage gesendet</span>'
           : `<button class="clan-join-request-btn" data-id="${c.id}">Anfragen</button>`}
@@ -4541,7 +4552,7 @@
     badge.textContent = requests.length;
     list.innerHTML = requests.map(r => `
       <div class="bell-request-row">
-        <span>${(nameMap[r.user_id] || 'Unbekannt').replace(/</g,'&lt;')}</span>
+        <span>${esc(nameMap[r.user_id] || 'Unbekannt')}</span>
         <div class="bell-req-btns">
           <button class="bell-req-accept" data-id="${r.id}">✓</button>
           <button class="bell-req-reject" data-id="${r.id}">✕</button>
@@ -4582,9 +4593,9 @@
     if (!members.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Keine Mitglieder</div>'; return; }
     el.innerHTML = members.map(m => `
       <div class="clan-member-row">
-        <span>${m.username.replace(/</g,'&lt;')}${m.clan_role === 'leader' ? ' 👑' : ''}</span>
+        <span>${esc(m.username)}${m.clan_role === 'leader' ? ' 👑' : ''}</span>
         ${m.id !== currentUser?.id
-          ? `<button class="clan-member-remove" data-id="${m.id}" data-name="${m.username.replace(/"/g,'&quot;')}">Entfernen</button>`
+          ? `<button class="clan-member-remove" data-id="${m.id}" data-name="${esc(m.username)}">Entfernen</button>`
           : ''}
       </div>`).join('');
     el.querySelectorAll('.clan-member-remove').forEach(btn =>
