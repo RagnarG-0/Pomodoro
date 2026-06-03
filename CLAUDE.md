@@ -238,6 +238,10 @@ Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem In
 | 26 | Performative Male | rare |
 | 27 | Sozialist | rare |
 | 28 | Team-Leader | rare |
+| 29 | urosono | epic |
+| 30 | Adminpomodoro | mystic |
+| 31 | Sono-Patient | rare |
+| 32 | StravaGold | rare |
 
 Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legendary 9 %, mystic 3 %.
 
