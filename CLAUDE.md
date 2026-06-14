@@ -124,6 +124,7 @@ clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
 | `pomo_lb_winner` | Gestriger Tagessieger (Name) | 1h |
 | `pomo_label_stats_<userId>` | Label-Stats-Array | 5 min |
 | `pomo_egg_preview` | `'1'` wenn Clan-Leader den Placeholder deaktiviert hat | — |
+| `pomo_export_last_<userId>` | Zeitstempel des letzten CSV-Exports (Cooldown) | 12h |
 
 ---
 
@@ -285,6 +286,16 @@ Fehler-Banner bei zu wenig Diamanten: „Du bist wohl gesetzlich versichert. Ver
 - 2-Spalten-Tabelle + SVG-Pie-Chart
 - Inline-Rename: PATCH auf `pomodoro_sessions` — wenn Ziel-Label bereits existiert → Merge-Dialog
 - PIE_COLORS: 20 Grün-Töne (Array, Index = Rang)
+
+---
+
+## CSV-Export (Settings → „Datenexport")
+
+- Nutzer wählt Zeitraum (`#export-from`/`#export-to`, Default = letzte 30 Tage bis heute via `todayKey()`), Klick auf `#export-csv-btn` → `exportSessionsCSV(from, to)`
+- `fetchAllSessions()` lädt `pomodoro_sessions` (`select=date,label,duration_minutes`, Filter `date=gte/lte`) paginiert in 1000er-Schritten (`limit`/`offset`)
+- `downloadCSV()` baut CSV (`Datum,Label,Minuten`, Felder mit `csvField()` escaped) und triggert Download via `Blob` + temporärem `<a download>`
+- **Rate-Limit**: 12h-Cooldown pro Nutzer über `pomo_export_last_<userId>` (`cacheSet`/localStorage), um Supabase-Egress zu begrenzen. Wird nur bei erfolgreichem Export mit Treffern gesetzt — leere Zeiträume zählen nicht
+- Fehlerfälle: kein Login → „Bitte anmelden.", ungültiger Zeitraum (`from > to`) → Validierungsfehler ohne Request, aktiver Cooldown → Restzeit-Anzeige (`Xh Ymin`)
 
 ---
 
