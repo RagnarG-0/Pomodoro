@@ -1302,6 +1302,19 @@
     <div id="username-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-bottom:0.5rem;"></div>
     <div id="privacy-feedback" style="font-size:11px;color:var(--accent);min-height:14px;text-align:center;margin-top:4px;"></div>
 
+    <div class="panel-divider"></div>
+    <div class="panel-section">Datenexport</div>
+    <div class="panel-row">
+      <label for="export-from">Zeitraum</label>
+      <div class="inp-wrap" style="gap:6px;">
+        <input type="date" id="export-from" style="width:120px;font-size:12px;padding:4px 8px;border:0.5px solid var(--border-strong);border-radius:6px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;">
+        <span style="color:var(--text-muted);font-size:12px;">–</span>
+        <input type="date" id="export-to" style="width:120px;font-size:12px;padding:4px 8px;border:0.5px solid var(--border-strong);border-radius:6px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;">
+      </div>
+    </div>
+    <button id="export-csv-btn" style="width:100%;margin-top:0.25rem;padding:8px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Als CSV exportieren</button>
+    <div id="export-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
+
     <div id="clan-leader-section">
       <div class="panel-divider"></div>
       <div class="panel-section">Clan-Verwaltung</div>
@@ -2933,6 +2946,14 @@
       if (unField && userName) unField.value = userName;
       const uf = document.getElementById('username-feedback');
       if (uf) uf.textContent = '';
+      const exportTo = document.getElementById('export-to');
+      const exportFrom = document.getElementById('export-from');
+      if (exportTo && !exportTo.value) exportTo.value = todayKey();
+      if (exportFrom && !exportFrom.value) {
+        const d = new Date(todayKey());
+        d.setDate(d.getDate() - 30);
+        exportFrom.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      }
     }
   }
   gearBtn.addEventListener('click',e=>{ e.stopPropagation(); toggleOverlay(); });
@@ -3629,6 +3650,97 @@
       if (method === 'POST') return null;
     }
     return null;
+  }
+
+  /* ── CSV-Export der eigenen pomodoro_sessions ── */
+  const EXPORT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
+  function exportRateLimitKey() {
+    return `pomo_export_last_${currentUser.id}`;
+  }
+
+  function getExportCooldownRemaining() {
+    const raw = localStorage.getItem(exportRateLimitKey());
+    if (!raw) return 0;
+    try {
+      const { ts } = JSON.parse(raw);
+      const remaining = EXPORT_COOLDOWN_MS - (Date.now() - ts);
+      return remaining > 0 ? remaining : 0;
+    } catch(e) { return 0; }
+  }
+
+  async function fetchAllSessions(token, fromDate, toDate) {
+    const all = [];
+    let offset = 0;
+    const PAGE = 1000;
+    while (true) {
+      const res = await fetch(
+        `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}` +
+        `&date=gte.${fromDate}&date=lte.${toDate}` +
+        `&select=date,label,duration_minutes&order=date.asc` +
+        `&limit=${PAGE}&offset=${offset}`,
+        { headers: authHeaders(token) }
+      );
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const page = await res.json();
+      all.push(...page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
+
+  function csvField(v) {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function downloadCSV(rows, filename) {
+    const header = 'Datum,Label,Minuten';
+    const body = rows.map(r => [r.date, csvField(r.label), r.duration_minutes].join(',')).join('\n');
+    const csv = header + '\n' + body;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function exportSessionsCSV(fromDate, toDate) {
+    const feedback = document.getElementById('export-feedback');
+    if (!currentUser) {
+      feedback.textContent = 'Bitte anmelden.';
+      return;
+    }
+    if (!fromDate || !toDate || fromDate > toDate) {
+      feedback.textContent = 'Bitte gültigen Zeitraum wählen.';
+      return;
+    }
+    const remaining = getExportCooldownRemaining();
+    if (remaining > 0) {
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.ceil((remaining % 3600000) / 60000);
+      feedback.textContent = `Export erst wieder in ${h}h ${m}min möglich.`;
+      return;
+    }
+
+    feedback.textContent = 'Wird exportiert…';
+    try {
+      const token = await getValidToken();
+      const sessions = await fetchAllSessions(token, fromDate, toDate);
+      if (!sessions.length) {
+        feedback.textContent = 'Keine Daten im gewählten Zeitraum.';
+        return;
+      }
+      downloadCSV(sessions, `pomodoro_export_${fromDate}_${toDate}.csv`);
+      cacheSet(exportRateLimitKey(), true);
+      feedback.textContent = '✓ Export gestartet';
+      setTimeout(() => { feedback.textContent = ''; }, 2500);
+    } catch(e) {
+      feedback.textContent = 'Export fehlgeschlagen.';
+      console.warn('exportSessionsCSV error:', e);
+    }
   }
 
   function initAvatarUpload() {
@@ -4683,6 +4795,13 @@
   });
 
   document.getElementById('save-clan-settings-btn').addEventListener('click', saveClanSettings);
+
+  document.getElementById('export-csv-btn').addEventListener('click', () => {
+    exportSessionsCSV(
+      document.getElementById('export-from').value,
+      document.getElementById('export-to').value
+    );
+  });
 
   /* ── Init ── */
   registerSW();
