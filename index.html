@@ -18,6 +18,7 @@
     --text-muted: #6b6b66;
     --accent: #1D9E75;
     --accent-dark: #0F6E56;
+    --balloon-string: rgba(0,0,0,0.28);
   }
 
   @media (prefers-color-scheme: dark) {
@@ -31,6 +32,7 @@
       --text-muted: #8a8a82;
       --accent: #1D9E75;
       --accent-dark: #5DCAA5;
+      --balloon-string: rgba(255,255,255,0.32);
     }
   }
 
@@ -586,6 +588,30 @@
   .lb-tab-alltime.active { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
 
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
+  #balloon-layer { position: fixed; inset: 0; pointer-events: none; z-index: 150; overflow: hidden; }
+  .balloon {
+    position: absolute;
+    bottom: -140px;
+    border-radius: 50% 50% 50% 50% / 58% 58% 42% 42%;
+    box-shadow:
+      inset -6px -8px 14px rgba(0,0,0,0.18),
+      inset 6px 8px 14px rgba(255,255,255,0.25);
+  }
+  .balloon::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    width: 1px;
+    height: 38px;
+    background: var(--balloon-string);
+    transform: translateX(-50%);
+  }
+  @keyframes balloon-rise {
+    0%   { transform: translateY(0) translateX(0) rotate(0deg); }
+    50%  { transform: translateY(-62vh) translateX(var(--sway)) rotate(var(--rot)); }
+    100% { transform: translateY(-130vh) translateX(calc(var(--sway) * 1.6)) rotate(0deg); }
+  }
 
   @media (max-width: 520px) {
     #time-display { font-size: 62px; }
@@ -1618,6 +1644,7 @@
 
 <div class="notif-bar" id="notif"></div>
 <canvas id="confetti-canvas"></canvas>
+<div id="balloon-layer"></div>
 
 <!-- Timer action confirmation banner -->
 <div id="timer-confirm-banner">
@@ -2326,6 +2353,104 @@
     setTimeout(()=>{ done=true; cancelAnimationFrame(frame); ctx.clearRect(0,0,canvas.width,canvas.height); },4500);
   }
 
+  function celebRand(min, max) { return min + Math.random() * (max - min); }
+  function celebPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  /* ── Feuerwerk ── */
+  function launchFireworks() {
+    const canvas = document.getElementById('confetti-canvas');
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    const colors = ['#FF6B6B','#FFD93D','#6BCB77','#4D96FF','#FF9F45','#C780FA','#ffffff'];
+    let rockets = [], particles = [], done = false, frame;
+
+    function spawnRocket() {
+      rockets.push({
+        x: celebRand(canvas.width*0.12, canvas.width*0.88),
+        y: canvas.height + 10,
+        targetY: celebRand(canvas.height*0.14, canvas.height*0.48),
+        vy: -celebRand(10,14),
+        color: celebPick(colors),
+        trail: []
+      });
+    }
+    for (let i=0;i<9;i++) setTimeout(spawnRocket, i*340 + celebRand(0,160));
+
+    function explode(r) {
+      const count = 70;
+      for (let i=0;i<count;i++) {
+        const angle = (Math.PI*2*i)/count + celebRand(-0.06,0.06);
+        const speed = celebRand(2.2,6.2);
+        particles.push({
+          x:r.x, y:r.y, vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed,
+          color:r.color, life:1, decay: celebRand(0.012,0.02)
+        });
+      }
+    }
+
+    function loop() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      rockets.forEach(r => {
+        r.trail.push({x:r.x,y:r.y});
+        if (r.trail.length > 6) r.trail.shift();
+        r.y += r.vy;
+        ctx.strokeStyle = r.color; ctx.lineWidth = 2; ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        r.trail.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+      rockets = rockets.filter(r => {
+        if (r.y <= r.targetY) { explode(r); return false; }
+        return true;
+      });
+
+      particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.045; p.vx *= 0.985; p.life -= p.decay;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x,p.y,2.6,0,Math.PI*2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      particles = particles.filter(p => p.life > 0);
+
+      if (!done) frame = requestAnimationFrame(loop);
+      else ctx.clearRect(0,0,canvas.width,canvas.height);
+    }
+    frame = requestAnimationFrame(loop);
+    setTimeout(() => { done = true; cancelAnimationFrame(frame); ctx.clearRect(0,0,canvas.width,canvas.height); }, 5800);
+  }
+
+  /* ── Ballons ── */
+  function spawnBalloon(opts) {
+    const el = document.createElement('div');
+    el.className = 'balloon';
+    el.style.left = opts.left + '%';
+    el.style.width = opts.size + 'px';
+    el.style.height = (opts.size * 1.18) + 'px';
+    el.style.background = opts.bg;
+    el.style.setProperty('--sway', opts.sway + 'px');
+    el.style.setProperty('--rot', opts.rot + 'deg');
+    el.style.animation = 'balloon-rise ' + opts.dur + 's linear ' + opts.delay + 's forwards';
+    document.getElementById('balloon-layer').appendChild(el);
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+    return el;
+  }
+
+  function launchBalloons() {
+    const palette = ['#FF6B6B','#4D96FF','#FFD93D','#6BCB77','#C780FA','#FF9F45'];
+    for (let i = 0; i < 14; i++) {
+      const size = celebRand(36, 56);
+      spawnBalloon({
+        left: celebRand(3, 92), size,
+        bg: `radial-gradient(circle at 32% 26%, rgba(255,255,255,0.55), ${celebPick(palette)} 72%)`,
+        sway: celebRand(-70, 70), rot: celebRand(-12, 12),
+        dur: celebRand(3.6, 4.8), delay: celebRand(0, 0.8)
+      });
+    }
+  }
+
   /* ── Mode ── */
   function syncModeBtns() {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode===mode));
@@ -2352,7 +2477,7 @@
     if (currentUser) {
       writeOrQueueCredit(key, mins, label);
     }
-    launchConfetti();
+    celebPick([launchConfetti, launchFireworks, launchBalloons])();
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
     toast('Pomodoro #' + totalPomodoros + ' geschafft! ' + todayPomos + ' heute');
