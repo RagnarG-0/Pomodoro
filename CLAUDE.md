@@ -2,8 +2,8 @@
 
 ## Architektur
 
-Single-file PWA: `index.html` (~4500 Zeilen) + `sw.js`. Kein Build-System, kein Framework.
-Backend: Supabase (Postgres + Auth + Storage).
+Single-file [[PWA]]: `index.html` (~4500 Zeilen) + `sw.js` ([[Service Worker]]). Kein Build-System, kein Framework.
+Backend: [[Supabase]] (Postgres + Auth + Storage).
 
 **Kein Supabase JS SDK.** Alle API-Calls laufen über direktes `fetch` mit `getValidToken()` + `authHeaders(token)`. Niemals `supabase.rpc(...)` oder `supabase.from(...)` verwenden — diese Variablen existieren nicht.
 
@@ -110,7 +110,7 @@ clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
 
 ---
 
-## localStorage Keys
+## [[localStorage]] Keys
 
 | Key | Inhalt | TTL |
 |---|---|---|
@@ -205,7 +205,7 @@ Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem In
 
 ---
 
-## Karten-Katalog (28 Karten)
+## Karten-Katalog (32 Karten)
 
 `CARD_CATALOG` hardcoded im JS. Bildpfad: `CDN/Karten/<rarity>/<name>.png`.
 
@@ -228,7 +228,6 @@ Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem In
 | 15 | TomS | legendary |
 | 16 | Bibliothek-Schläfer | epic |
 | 17 | FreundausHarvard | epic |
-| 18 | glasn | epic |
 | 19 | Mediraggy | epic |
 | 20 | Neurotutor | epic |
 | 21 | Penig-BG | mystic |
@@ -243,6 +242,7 @@ Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem In
 | 30 | Adminpomodoro | mystic |
 | 31 | Sono-Patient | rare |
 | 32 | StravaGold | rare |
+| 33 | Gilbert-Syndrom | rare |
 
 Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legendary 9 %, mystic 3 %.
 
@@ -307,7 +307,7 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 
 ## Sound Engine
 
-Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime, soft, bowl, marimba, ping, harp, drum, none.
+[[Web Audio API]], synthetisiert — kein externes Asset. Sounds: bell, ding, chime, soft, bowl, marimba, ping, harp, drum, none.
 
 ---
 
@@ -331,3 +331,10 @@ Web Audio API, synthetisiert — kein externes Asset. Sounds: bell, ding, chime,
 - **Karte ins Deck**: DELETE `incubator`
 - **Level-Up-Ei**: PATCH `profiles.eggs` via `saveEggProfile()`
 - **Duplikat verkaufen**: `sell_card(p_card_id)` RPC (atomar: DELETE `user_cards` + UPDATE `profiles.diamonds`); nur möglich wenn `count > 1`; Belohnung: common 2 / rare 4 / epic 6 / legendary 8 / mystic 10 💎
+
+---
+
+## Siehe auch
+
+- [[Lernkalender/README|Lernkalender]] — liest `pomodoro_sessions` für sein Statistik-Overlay und erkennt die `pomo_session` wieder
+- [[FocusFM/README|FocusFM]] — eigenständiges Projekt, nutzt ebenfalls die [[Web Audio API]] für synthetisierten Sound
