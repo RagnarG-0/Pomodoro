@@ -289,8 +289,7 @@ select cron.schedule(
       select
         p.id as user_id, p.username,
         sum(s.minutes)::integer as minutes,
-        row_number() over (order by sum(s.minutes) desc, random()) as rn,
-        count(*) over () as total_users
+        row_number() over (order by sum(s.minutes) desc, random()) as rn
       from study_days s
       join profiles p on p.id = s.user_id
       cross join today_de
@@ -300,22 +299,15 @@ select cron.schedule(
         and s.minutes > 0
       group by p.id, p.username
     ),
-    winners as (
-      select user_id, username, minutes, rn as rank from ranked where rn <= 3
-      union all
-      -- Klorolle: nur wenn letzter Platz > Rang 3 (Top-3-Schutz)
-      select user_id, username, minutes, 99 as rank
-      from ranked where rn = total_users and total_users > 3
-    ),
     inserted as (
       insert into daily_winners (date, rank, user_id, username, minutes)
-      select (select d from today_de), rank, user_id, username, minutes from winners
+      select (select d from today_de), rn, user_id, username, minutes
+      from ranked where rn <= 3
       on conflict (date, rank) do nothing
       returning user_id, rank
     )
     update profiles p set
-      diamonds    = diamonds    + case when i.rank in (1,2,3) then case i.rank when 1 then 3 when 2 then 2 when 3 then 1 end else 0 end,
-      awards_last = awards_last + case when i.rank = 99 then 1 else 0 end
+      diamonds = diamonds + case i.rank when 1 then 3 when 2 then 2 when 3 then 1 end
     from inserted i
     where p.id = i.user_id
       and (select d from today_de) >= '2026-05-04';
