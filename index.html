@@ -1717,11 +1717,17 @@
   }
   function cacheDel(key) { try { localStorage.removeItem(key); } catch(e) {} }
 
-  function lbRanksGet(period) {
-    try { return JSON.parse(localStorage.getItem(`pomo_lb_ranks_${period}`) || 'null'); } catch(e) { return null; }
+  function lbRanksRefGet(period) {
+    try { return JSON.parse(localStorage.getItem(`pomo_lb_ranks_ref_${period}`) || 'null'); } catch(e) { return null; }
   }
-  function lbRanksSet(period, ranks) {
-    try { localStorage.setItem(`pomo_lb_ranks_${period}`, JSON.stringify(ranks)); } catch(e) {}
+  function lbRanksRefSet(period, ranks) {
+    try { localStorage.setItem(`pomo_lb_ranks_ref_${period}`, JSON.stringify(ranks)); } catch(e) {}
+  }
+  function lbRanksCurGet(period) {
+    try { return JSON.parse(localStorage.getItem(`pomo_lb_ranks_cur_${period}`) || 'null'); } catch(e) { return null; }
+  }
+  function lbRanksCurSet(period, ranks) {
+    try { localStorage.setItem(`pomo_lb_ranks_cur_${period}`, JSON.stringify(ranks)); } catch(e) {}
   }
   function computeRanks(list, isWins) {
     const result = {};
@@ -3323,8 +3329,16 @@
         if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + await res.text());
         list = await res.json();
       }
-      const prevRanks = lbRanksGet(lbPeriod);
-      renderLeaderboard(list, prevRanks);
+      const newRanks = computeRanks(list, lbPeriod === 'wins');
+      const curRanks = lbRanksCurGet(lbPeriod);
+      let refRanks = lbRanksRefGet(lbPeriod);
+      if (curRanks && JSON.stringify(newRanks) !== JSON.stringify(curRanks)) {
+        // ranks changed since last fetch → advance reference to previous state
+        refRanks = curRanks;
+        lbRanksRefSet(lbPeriod, refRanks);
+      }
+      lbRanksCurSet(lbPeriod, newRanks);
+      renderLeaderboard(list, refRanks);
       // Fetch yesterday's winner for gold border highlight
       try {
         const ywRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_yesterday_winner`, {
@@ -3335,12 +3349,11 @@
           if (w) {
             yesterdayWinner = w;
             cacheSet(winnerCacheKey, w);
-            renderLeaderboard(list, prevRanks);
+            renderLeaderboard(list, refRanks);
           }
         }
       } catch(e) { console.warn('get_yesterday_winner error', e); }
       cacheSet(cacheKey, { list });
-      lbRanksSet(lbPeriod, computeRanks(list, lbPeriod === 'wins'));
       status.textContent = '';
     } catch(e) {
       status.textContent = 'Rangliste konnte nicht geladen werden.';
