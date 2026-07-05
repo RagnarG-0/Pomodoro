@@ -206,7 +206,7 @@ Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem In
 
 ---
 
-## Karten-Katalog (32 Karten)
+## Karten-Katalog (33 Karten)
 
 `CARD_CATALOG` hardcoded im JS. Bildpfad: `CDN/Karten/<rarity>/<name>.png`.
 
@@ -244,6 +244,7 @@ Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem In
 | 31 | Sono-Patient | rare |
 | 32 | StravaGold | rare |
 | 33 | Gilbert-Syndrom | rare |
+| 34 | UKH-Transport | rare |
 
 Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legendary 9 %, mystic 3 %.
 
