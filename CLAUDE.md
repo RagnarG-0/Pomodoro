@@ -104,6 +104,7 @@ limitlessCreditedMin // number — bereits per Zwischenkredit gutgeschriebene Mi
 - `finishEarly()` kreditiert bei Limitless-Sessions nur den seit dem letzten Checkpoint noch offenen Rest (`totalElapsedMin - limitlessCreditedMin`), nicht die gesamte Sessiondauer
 - `+5 min`-Button ist im Limitless-Modus ausgeblendet (kein sinnvolles Ziel, gegen das addiert werden könnte)
 - `updateWatch()` zeigt im Limitless-Modus den Fortschritt zum nächsten Checkpoint (nicht zur Gesamtdauer)
+- **Stolperstein**: mehrere Stellen berechnen `totalSec`/`remaining` bei Idle-Zustand neu aus `getMin(mode) * 60` (Boot vor `initAuth()`, `save-settings-btn`, Logout, `loadClanSettings()`, Label speichern/auswählen) — jede davon muss zuerst auf `mode === 'work' && limitless` prüfen und in diesem Fall `0`/`0` setzen, sonst zeigt die Stoppuhr nach Neuladen/Speichern fälschlich die normale Fokusdauer (z. B. „01:00:00" bei 60-Min-Fokuseinstellung) statt „00:00:00"
 
 ### Timer State Persistence (Supabase)
 - Laufender Countdown-Timer: `end_at` gesetzt, `limitless = false`

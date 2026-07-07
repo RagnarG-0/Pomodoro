@@ -3262,7 +3262,9 @@
     }
     // Apply new timer duration if not running
     if (!running) {
-      totalSec = getMin(mode) * 60; remaining = totalSec; renderTimer();
+      if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
+      else { totalSec = getMin(mode) * 60; remaining = totalSec; }
+      renderTimer();
       window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
     }
     feedback.textContent = '✓ Gespeichert';
@@ -4266,7 +4268,8 @@
       setToken(null);
       currentUser = null; userName = null; userPublic = false; avatarUrl = null;
       load(); loadSettings();
-      totalSec = getMin(mode) * 60; remaining = totalSec;
+      if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
+      else { totalSec = getMin(mode) * 60; remaining = totalSec; }
       updateUserChip();
       document.getElementById('leaderboard-card').style.display = 'none';
       render();
@@ -4330,7 +4333,7 @@
           e.preventDefault(); // prevent blur before click
           input.value = opt.textContent;
           currentLabel = opt.textContent;
-          if (!running && remaining === totalSec && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
+          if (!running && remaining === totalSec && mode === 'work' && !limitless) { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
           dropdown.classList.remove('open');
           saveBtn.classList.add('saved');
           setTimeout(() => saveBtn.classList.remove('saved'), 1500);
@@ -4350,7 +4353,7 @@
     saveBtn.addEventListener('click', () => {
       const val = input.value.trim();
       currentLabel = val;
-      if (!running && remaining === totalSec && mode === 'work') { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
+      if (!running && remaining === totalSec && mode === 'work' && !limitless) { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
       if (val) storeLabel(val);
       saveBtn.classList.add('saved');
       setTimeout(() => saveBtn.classList.remove('saved'), 1500);
@@ -4927,7 +4930,11 @@
       const cur = parseInt(workInput.value) || 25;
       if (cur < clanMinFocus) workInput.value = clanMinFocus;
       if (cur > clanMaxFocus) workInput.value = clanMaxFocus;
-      if (!running) { totalSec = getMin(mode) * 60; remaining = totalSec; renderTimer(); }
+      if (!running) {
+        if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
+        else { totalSec = getMin(mode) * 60; remaining = totalSec; }
+        renderTimer();
+      }
       if (clanRole === 'leader') {
         document.getElementById('clan-name-input').value = rows[0].name || '';
         document.getElementById('clan-min-focus').value = clanMinFocus;
@@ -5115,8 +5122,6 @@
   initDisplayUnit();
   initSound();
   initLimitlessSetting();
-  limitless = limitlessSetting;
-  if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; } else { totalSec = getMin(mode) * 60; remaining = totalSec; }
   initPrivacyToggle();
   initAvatarUpload();
   initLabelInput();
@@ -5830,8 +5835,8 @@
   // ─── Ende Eier & Kartensammlung ───────────────────────────────────────────
 
   loadLabelDurations();
-  totalSec = getMin(mode) * 60;
-  remaining = totalSec;
+  limitless = limitlessSetting;
+  if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; } else { totalSec = getMin(mode) * 60; remaining = totalSec; }
   syncWdBtns();
   // Hide timer until session is restored to avoid flash of default value
   document.getElementById('time-display').style.opacity = '0';
