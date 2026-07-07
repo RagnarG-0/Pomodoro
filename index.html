@@ -1260,6 +1260,13 @@
       <label for="set-longafter">Lange Pause nach</label>
       <div class="inp-wrap"><input type="number" id="set-longafter" value="4" min="1" max="12" style="width:44px;"> Pomodoros</div>
     </div>
+    <div class="panel-row">
+      <label for="set-limitless">Unbegrenzt (Stoppuhr)</label>
+      <input type="checkbox" id="set-limitless" style="accent-color:var(--accent);width:18px;height:18px;cursor:pointer;">
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
+      Fokus zählt hoch statt runter. Beenden nur über „✓ Jetzt"; alle 20 Minuten wird automatisch gespeichert.
+    </p>
 
     <div class="panel-divider"></div>
     <div class="panel-section">Benachrichtigungston</div>
@@ -1684,6 +1691,7 @@
   const CIRC = 2 * Math.PI * 68;
   const ROWS = 7;
   const DAYS = 100;
+  const LIMITLESS_CHECKPOINT_SEC = 20 * 60; // Intervall für stillen Zwischenkredit; für manuelles Testen temporär verkleinerbar
 
   // User profile
   let userName = null;
@@ -1757,6 +1765,12 @@
   let tid = null;
   let startedAt = null; // wall-clock ms when current run started (adjusted for elapsed)
   let pomoDay = null;   // todayKey() captured at timer start — ensures pomo is credited to correct day
+  let limitlessSetting = false;   // persistierte Checkbox-Präferenz (localStorage)
+  let limitless = false;          // true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
+  let limitlessCreditedMin = 0;   // bereits per Zwischenkredit gutgeschriebene Minuten dieser Session
+
+  function elapsedSec() { return (mode === 'work' && limitless) ? remaining : totalSec - remaining; }
+  function hasProgress() { return (mode === 'work' && limitless) ? remaining > 0 : remaining < totalSec; }
 
   // Persisted data
   let days = {};          // { 'YYYY-MM-DD': minutes } — fokussierte Minuten pro Tag
@@ -1891,6 +1905,15 @@
   }
 
   function updateWatch() {
+    if (mode === 'work' && limitless) {
+      const frac = (remaining % LIMITLESS_CHECKPOINT_SEC) / LIMITLESS_CHECKPOINT_SEC; // Fortschritt zum nächsten Zwischenkredit
+      document.getElementById('watch-arc').setAttribute('stroke-dashoffset', (CIRC*(1-frac)).toFixed(2));
+      const rad = (frac*360-90)*Math.PI/180;
+      const len = 52;
+      document.getElementById('watch-hand').setAttribute('x2', (80+len*Math.cos(rad)).toFixed(2));
+      document.getElementById('watch-hand').setAttribute('y2', (80+len*Math.sin(rad)).toFixed(2));
+      return;
+    }
     const frac = totalSec > 0 ? remaining/totalSec : 0;
     document.getElementById('watch-arc').setAttribute('stroke-dashoffset', (CIRC*(1-frac)).toFixed(2));
     const rad = ((totalSec-remaining)/totalSec*360-90)*Math.PI/180;
@@ -2062,8 +2085,14 @@
 
   const modeLabels = {work:'Fokus', short:'Kurze Pause', long:'Lange Pause'};
 
+  function fmtElapsed(s) {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+  }
+
   function renderTimer() {
-    document.getElementById('time-display').textContent = fmt(remaining);
+    const showElapsed = mode === 'work' && limitless;
+    document.getElementById('time-display').textContent = showElapsed ? fmtElapsed(remaining) : fmt(remaining);
     document.getElementById('mode-label').textContent = modeLabels[mode];
     updateWatch();
     const btn = document.getElementById('btn-start');
@@ -2081,11 +2110,10 @@
     const finishEarlyBtn = document.getElementById('btn-finish-early');
     const isBreak = mode === 'short' || mode === 'long';
     skipBtn.style.display = isBreak ? 'inline-flex' : 'none';
-    add5Btn.style.display = isBreak ? 'none' : 'inline-flex';
+    add5Btn.style.display = (isBreak || showElapsed) ? 'none' : 'inline-flex';
     skipBtn.disabled = !isBreak;
-    const elapsedSec = totalSec - remaining;
-    finishEarlyBtn.style.display = (!isBreak && elapsedSec >= 60) ? 'inline-flex' : 'none';
-    document.title = fmt(remaining) + ' — ' + modeLabels[mode];
+    finishEarlyBtn.style.display = (!isBreak && elapsedSec() >= 60) ? 'inline-flex' : 'none';
+    document.title = (showElapsed ? fmtElapsed(remaining) : fmt(remaining)) + ' — ' + modeLabels[mode];
   }
 
   function render() { renderTimer(); renderTomatoes(); renderHeatmap(); renderStats(); }
@@ -2484,8 +2512,10 @@
 
   function switchTo(m, autoStart) {
     mode=m; syncModeBtns();
-    clearInterval(tid); running=false; startedAt=null;
-    totalSec=getMin(m)*60; remaining=totalSec;
+    clearInterval(tid); running=false; startedAt=null; pomoDay=null;
+    if (m === 'work') { limitless = limitlessSetting; limitlessCreditedMin = 0; }
+    if (m === 'work' && limitless) { totalSec=0; remaining=0; }
+    else { totalSec=getMin(m)*60; remaining=totalSec; }
     renderTimer();
     window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
   }
@@ -2500,7 +2530,7 @@
     save();
     const label = currentLabel.trim() || 'not specified';
     if (currentLabel.trim()) storeLabel(currentLabel.trim());
-    if (currentUser) {
+    if (currentUser && mins > 0) {
       writeOrQueueCredit(key, mins, label);
     }
     celebPick([launchConfetti, launchFireworks, launchBalloons])();
@@ -2514,6 +2544,32 @@
     if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
     // Brutkasten-Fortschritt neu berechnen
     if (incubatorData) renderIncubator();
+  }
+
+  function checkLimitlessCheckpoint() {
+    const elapsedMin = Math.floor(remaining / 60); // remaining == verstrichene Sekunden im Limitless-Modus
+    const cycleMin = LIMITLESS_CHECKPOINT_SEC / 60;
+    const targetCredited = Math.floor(elapsedMin / cycleMin) * cycleMin;
+    if (targetCredited <= limitlessCreditedMin) return;
+
+    const delta = targetCredited - limitlessCreditedMin;
+    limitlessCreditedMin = targetCredited;
+    const key = pomoDay || todayKey();
+    const label = currentLabel.trim() || 'not specified';
+
+    const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
+    days[key] = (days[key] || 0) + delta;
+    save();
+    if (currentUser) writeOrQueueCredit(key, delta, label);
+    const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
+    const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
+    const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
+    if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
+    if (incubatorData) renderIncubator();
+    renderTomatoes(); renderHeatmap(); renderStats();
+
+    // credited_min auf dem Server nachführen, damit ein Reload/zweites Gerät nicht doppelt kreditiert
+    if (currentUser) saveTimerState({ credited_min: limitlessCreditedMin });
   }
 
   async function addStudyMinutes(date, delta) {
@@ -2580,14 +2636,22 @@
   function tick() {
     if (!startedAt) return;
     const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-    remaining = Math.max(0, totalSec - elapsed);
+    if (mode === 'work' && limitless) {
+      remaining = elapsed; // zählt hoch
+    } else {
+      remaining = Math.max(0, totalSec - elapsed);
+    }
     renderTimer();
     // Throttle tray updates to 1×/sec
     if (remaining !== _lastTraySecond) {
       _lastTraySecond = remaining;
       window.electronAPI?.sendState({ running, mode, remaining, label: currentLabel });
     }
-    if (remaining <= 0) onTimerEnd();
+    if (mode === 'work' && limitless) {
+      checkLimitlessCheckpoint();
+    } else if (remaining <= 0) {
+      onTimerEnd();
+    }
   }
 
   /* ── Display unit toggle ── */
@@ -2836,6 +2900,17 @@
     });
   }
 
+  function initLimitlessSetting() {
+    limitlessSetting = localStorage.getItem('pomo_limitless_v1') === '1';
+    const cb = document.getElementById('set-limitless');
+    cb.checked = limitlessSetting;
+    cb.addEventListener('change', () => {
+      limitlessSetting = cb.checked;
+      localStorage.setItem('pomo_limitless_v1', limitlessSetting ? '1' : '0');
+      if (mode === 'work') reset(); // reset() liest limitlessSetting neu ein
+    });
+  }
+
   /* ── Service Worker ── */
   let swReg = null;
 
@@ -2914,6 +2989,29 @@
     const state = await loadTimerState();
     if (!state) return;
 
+    if (state.limitless) {
+      mode = state.mode || 'work';
+      limitless = true;
+      syncModeBtns();
+      limitlessCreditedMin = state.credited_min || 0;
+      pomoDay = state.pomoday || todayKey(); // Fix: pomoday statt pomoDay lesen
+      if (state.started_at) {
+        const startMs = new Date(state.started_at).getTime();
+        startedAt = startMs;
+        remaining = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        totalSec = 0; running = true;
+        tid = setInterval(tick, 250);
+        renderTimer();
+        checkLimitlessCheckpoint(); // sofort nachholen, falls viel Zeit vergangen ist
+        toast('Timer wird fortgesetzt…');
+      } else if (state.paused_remaining != null) {
+        totalSec = 0; remaining = state.paused_remaining; running = false;
+        renderTimer();
+      }
+      return;
+    }
+
+    limitless = false;
     if (state.end_at) {
       // Timer was running — check if still in the future
       const endAt = new Date(state.end_at).getTime();
@@ -2926,7 +3024,7 @@
         totalSec  = state.total_sec;
         remaining = Math.round((endAt - nowMs) / 1000);
         startedAt = nowMs - (totalSec - remaining) * 1000;
-        if (mode === 'work') pomoDay = state.pomoDay || todayKey();
+        if (mode === 'work') pomoDay = state.pomoday || todayKey();
         running = true;
         tid = setInterval(tick, 250);
         swSend({ type: 'TIMER_START', endAt, mode });
@@ -2955,16 +3053,32 @@
     if (running) {
       clearInterval(tid); running=false; startedAt=null;
       swSend({ type: 'TIMER_PAUSE' });
-      saveTimerState({ end_at: null, total_sec: totalSec, mode, paused_remaining: remaining });
+      saveTimerState({
+        end_at: null, total_sec: limitless ? null : totalSec, mode, paused_remaining: remaining,
+        limitless, started_at: null, credited_min: limitlessCreditedMin,
+        pomoday: mode === 'work' ? pomoDay : null,
+      });
     } else {
-      startedAt = Date.now() - (totalSec - remaining) * 1000;
+      startedAt = Date.now() - elapsedSec() * 1000;
       running=true; tid=setInterval(tick, 250);
       // Capture the day at start so completePomo credits the right day even after midnight
-      if (mode === 'work') pomoDay = todayKey();
+      if (mode === 'work' && pomoDay == null) pomoDay = todayKey(); // Fix: nicht bei jedem Resume überschreiben
       if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
-      const endAt = startedAt + totalSec * 1000;
-      swSend({ type: 'TIMER_START', endAt, mode });
-      saveTimerState({ end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null, pomoday: mode === 'work' ? pomoDay : null });
+      if (mode === 'work' && limitless) {
+        // Kein swSend TIMER_START — es gibt kein festes endAt, das der SW terminieren könnte.
+        saveTimerState({
+          end_at: null, total_sec: null, mode, paused_remaining: null,
+          limitless: true, started_at: new Date(startedAt).toISOString(),
+          credited_min: limitlessCreditedMin, pomoday: pomoDay,
+        });
+      } else {
+        const endAt = startedAt + totalSec * 1000;
+        swSend({ type: 'TIMER_START', endAt, mode });
+        saveTimerState({
+          end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null,
+          limitless: false, started_at: null, pomoday: mode === 'work' ? pomoDay : null,
+        });
+      }
     }
     renderTimer();
     window.electronAPI?.sendState({ running, mode, remaining, label: currentLabel });
@@ -2985,8 +3099,10 @@
   }
 
   function reset() {
-    clearInterval(tid); running=false; startedAt=null;
-    totalSec=getMin(mode)*60; remaining=totalSec;
+    clearInterval(tid); running=false; startedAt=null; pomoDay=null;
+    if (mode === 'work') { limitless = limitlessSetting; limitlessCreditedMin = 0; }
+    if (mode === 'work' && limitless) { totalSec=0; remaining=0; }
+    else { totalSec=getMin(mode)*60; remaining=totalSec; }
     swSend({ type: 'TIMER_RESET' });
     clearTimerState();
     render();
@@ -2994,11 +3110,15 @@
   }
 
   async function finishEarly() {
-    const elapsedSec = totalSec - remaining;
+    const wasLimitless = mode === 'work' && limitless;
+    const totalElapsedMin = Math.floor(elapsedSec() / 60);
     clearInterval(tid); running = false; startedAt = null;
     swSend({ type: 'TIMER_RESET' });
     await clearTimerState();
-    totalSec = Math.floor(elapsedSec / 60) * 60;
+    totalSec = wasLimitless
+      ? Math.max(0, totalElapsedMin - limitlessCreditedMin) * 60   // nur der noch nicht kreditierte Rest
+      : totalElapsedMin * 60;
+    limitlessCreditedMin = 0;
     completePomo();
     const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
     setTimeout(() => switchTo(next, false), 1400);
@@ -3025,7 +3145,7 @@
 
   document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
     const target = b.dataset.mode;
-    if (target !== 'work' && mode === 'work' && remaining < totalSec) {
+    if (target !== 'work' && mode === 'work' && hasProgress()) {
       showTimerConfirmBanner('Fokus-Timer abbrechen? Der aktuelle Fortschritt geht verloren.', () => { mode = target; syncModeBtns(); reset(); });
     } else {
       mode = target; syncModeBtns(); reset();
@@ -3033,7 +3153,7 @@
   }));
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
   document.getElementById('btn-reset').addEventListener('click', () => {
-    if (mode === 'work' && remaining < totalSec) {
+    if (mode === 'work' && hasProgress()) {
       showTimerConfirmBanner('Timer wirklich zurücksetzen? Der aktuelle Fokus-Fortschritt geht verloren.', reset);
     } else {
       reset();
@@ -3041,12 +3161,17 @@
   });
   document.getElementById('btn-skip').addEventListener('click', skip);
   document.getElementById('btn-finish-early').addEventListener('click', () => {
-    const elapsedMin = Math.floor((totalSec - remaining) / 60);
-    showTimerConfirmBanner(`${elapsedMin} Minuten als Pomodoro speichern und Fokus-Session beenden?`, finishEarly);
+    const totalElapsedMin = Math.floor(elapsedSec() / 60);
+    const wasLimitless = mode === 'work' && limitless;
+    const leftoverMin = wasLimitless ? Math.max(0, totalElapsedMin - limitlessCreditedMin) : totalElapsedMin;
+    const msg = wasLimitless
+      ? `Fokus-Session beenden? ${leftoverMin} weitere Minute(n) werden gespeichert (insgesamt ${totalElapsedMin} min).`
+      : `${leftoverMin} Minuten als Pomodoro speichern und Fokus-Session beenden?`;
+    showTimerConfirmBanner(msg, finishEarly);
   });
   document.getElementById('btn-add5').addEventListener('mousedown', e => {
     e.preventDefault();
-    if (mode !== 'work') return;
+    if (mode !== 'work' || limitless) return;
     if (totalSec >= clanMaxFocus * 60) return;
     const add = Math.min(5 * 60, clanMaxFocus * 60 - totalSec);
     totalSec  += add;
@@ -3679,8 +3804,8 @@
         saveLabelDurations();
       }
       // Recalculate timer with loaded settings
-      totalSec = getMin(mode) * 60;
-      remaining = totalSec;
+      if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
+      else { totalSec = getMin(mode) * 60; remaining = totalSec; }
     }
 
     if (clanId) await loadClanSettings(token);
@@ -4989,6 +5114,9 @@
   initTooltip();
   initDisplayUnit();
   initSound();
+  initLimitlessSetting();
+  limitless = limitlessSetting;
+  if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; } else { totalSec = getMin(mode) * 60; remaining = totalSec; }
   initPrivacyToggle();
   initAvatarUpload();
   initLabelInput();

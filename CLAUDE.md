@@ -25,7 +25,7 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, long_min, long_after, display_unit, off_weekdays, sound |
 | `study_days` | user_id, date, minutes, off |
 | `pomodoro_sessions` | user_id, date, label, duration_minutes |
-| `timer_state` | user_id, end_at, total_sec, mode, paused_remaining, pomoday |
+| `timer_state` | user_id, end_at, total_sec, mode, paused_remaining, pomoday, limitless, started_at, credited_min |
 | `incubator` | user_id (PK), egg_color char(1), placed_at, focus_minutes_at_placement |
 | `cards` | id int (PK), name, rarity |
 | `user_cards` | id uuid (PK), user_id, card_id, obtained_at |
@@ -81,6 +81,9 @@ eggDeck       // Array von { id, name, rarity, src, count } — aus user_cards
 clanRole      // 'leader' | 'member' | null — aus profiles.clan_role
 clanId        // uuid | null — aus profiles.clan_id
 clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
+limitlessSetting     // boolean — persistierte Checkbox-Präferenz „Unbegrenzt (Stoppuhr)"
+limitless            // boolean — true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
+limitlessCreditedMin // number — bereits per Zwischenkredit gutgeschriebene Minuten der laufenden Limitless-Session
 ```
 
 ---
@@ -91,11 +94,24 @@ clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
 - `onTimerEnd()` — **async**, claimed die `timer_state`-Zeile via DELETE+`return=representation`
 - Nur das Gerät, das die Zeile wirklich löscht (`deleted.length > 0`), ruft `completePomo()` auf → verhindert Doppel-Credits bei mehreren gleichzeitig offenen Tabs
 - SW (`sw.js`) hält den Timer via `setTimeout` am Laufen wenn der Tab eingefroren ist, schickt `TIMER_DONE`-Message
+- `elapsedSec()` / `hasProgress()` sind die zentralen Helper für „wie viel Zeit ist vergangen" bzw. „gibt es Fortschritt, der bei Reset/Moduswechsel verloren geht" — beide zweigen auf `limitless` ab (siehe unten), alle Stellen, die früher direkt `totalSec - remaining` bzw. `remaining < totalSec` verglichen haben, nutzen jetzt diese Funktionen
+
+### Limitless (Stoppuhr-)Fokus-Modus
+- Über Settings-Checkbox „Unbegrenzt (Stoppuhr)" aktivierbar (`limitlessSetting`, `localStorage` Key `pomo_limitless_v1`, geräte-lokal, nicht mit `profiles` synchronisiert)
+- Bei aktivem `limitless` zählt der Fokus-Timer ab `00:00:00` hoch (`remaining` = verstrichene Sekunden, `totalSec = 0`) statt von einer festen Dauer herunter; Anzeige über `fmtElapsed()` (hh:mm:ss)
+- Beendet wird eine Limitless-Session ausschließlich manuell über „✓ Jetzt" (`finishEarly()`) — der reguläre Countdown-Abschluss (`onTimerEnd()`) greift hier nie
+- Alle `LIMITLESS_CHECKPOINT_SEC` (20 min) wird der bisherige Fortschritt still (kein Sound/Konfetti/Toast) über `checkLimitlessCheckpoint()` kreditiert — analog `completePomo()`, nur ohne die Feier-Elemente; `limitlessCreditedMin` verhindert Doppelkredit, wird in `timer_state.credited_min` gespiegelt
+- `finishEarly()` kreditiert bei Limitless-Sessions nur den seit dem letzten Checkpoint noch offenen Rest (`totalElapsedMin - limitlessCreditedMin`), nicht die gesamte Sessiondauer
+- `+5 min`-Button ist im Limitless-Modus ausgeblendet (kein sinnvolles Ziel, gegen das addiert werden könnte)
+- `updateWatch()` zeigt im Limitless-Modus den Fortschritt zum nächsten Checkpoint (nicht zur Gesamtdauer)
 
 ### Timer State Persistence (Supabase)
-- Laufender Timer: `end_at` gesetzt
-- Pausierter Timer: `end_at = null`, `paused_remaining` gesetzt
-- Bei Seitenaufruf: `restoreTimerState()` liest den State und setzt fort oder krediert abgelaufene Pomodoros
+- Laufender Countdown-Timer: `end_at` gesetzt, `limitless = false`
+- Laufende Limitless-Session: `started_at` gesetzt (Pendant zu `end_at`), `end_at = null`, `limitless = true`, `credited_min` = zuletzt kreditierter Stand
+- Pausierter Timer: `end_at = null` (bzw. `started_at = null` bei Limitless), `paused_remaining` gesetzt
+- Bei Seitenaufruf: `restoreTimerState()` liest den State und setzt fort (Countdown oder Stoppuhr) oder krediert abgelaufene Pomodoros
+- **Spalte heißt `pomoday` (Kleinschreibung)**, nicht `pomoDay` — ein früherer Bug las sie beim Restore fälschlich als `state.pomoDay` (immer `undefined`); beide Restore-Zweige lesen jetzt korrekt `state.pomoday`
+- `start()` überschreibt `pomoDay` beim Fortsetzen nach Pause **nicht** mehr (nur `if (pomoDay == null)`) — verhindert, dass ein Pause-Resume kurz vor 4 Uhr den Kredit-Tag verschiebt
 
 ---
 
@@ -126,6 +142,7 @@ clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
 | `pomo_label_stats_<userId>` | Label-Stats-Array | 5 min |
 | `pomo_egg_preview` | `'1'` wenn Clan-Leader den Placeholder deaktiviert hat | — |
 | `pomo_export_last_<userId>` | Zeitstempel des letzten CSV-Exports (Cooldown) | 12h |
+| `pomo_limitless_v1` | `'1'`/`'0'` — Präferenz „Unbegrenzt (Stoppuhr)"-Modus, geräte-lokal | — |
 
 ---
 
@@ -174,33 +191,33 @@ clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
 
 25 Stufen, konfiguriert in `clans.level_config`. Schwellen in Fokusminuten:
 
-| Level | Name (Default) | Icon | Ab (Min) |
-|---|---|---|---|
-| 1 | Erkaltete Tastatur | 🧊 | 0 |
-| 2 | Morgenmuffel | 🧊 | 300 |
-| 3 | Notizzettelsammler | 🧊 | 600 |
-| 4 | Koffeinabhängiger | 🧊 | 900 |
-| 5 | Halbherziger Held | 🧊 | 1.500 |
-| 6 | Sofagelehrter | 🛋️ | 2.100 |
-| 7 | Bücherstapelturmer | 🛋️ | 3.000 |
-| 8 | Pausensnacker | 🛋️ | 3.900 |
-| 9 | Gemütlicher Grübler | 🛋️ | 4.800 |
-| 10 | Pflichterfüller | 🛋️ | 6.000 |
-| 11 | Entflammter | 🔥 | 7.800 |
-| 12 | Nachtschwarmer | 🔥 | 9.600 |
-| 13 | Karteikartenkönig | 🔥 | 12.000 |
-| 14 | Zeitfresser | 🔥 | 14.400 |
-| 15 | Leuchtendes Beispiel | 🔥 | 17.400 |
-| 16 | Schreibtischkämpfer | 🦁 | 21.000 |
-| 17 | Geduldiger Riese | 🦁 | 25.200 |
-| 18 | Stirnrunzler | 🦁 | 30.000 |
-| 19 | Schlafloser Denker | 🦁 | 35.400 |
-| 20 | Unaufhaltsamer | 🦁 | 41.400 |
-| 21 | Zeitsouverän | 👑 | 45.000 |
-| 22 | Chronos-Bezwinger | 👑 | 49.200 |
-| 23 | Erleuchteter | 👑 | 54.000 |
-| 24 | Pomodoro-Legende | 👑 | 58.800 |
-| 25 | Pomodoro-Gott | 👑 | 63.000 |
+| Level | Name (Default)       | Icon | Ab (Min) |
+| ----- | -------------------- | ---- | -------- |
+| 1     | Erkaltete Tastatur   | 🧊   | 0        |
+| 2     | Morgenmuffel         | 🧊   | 300      |
+| 3     | Notizzettelsammler   | 🧊   | 600      |
+| 4     | Koffeinabhängiger    | 🧊   | 900      |
+| 5     | Halbherziger Held    | 🧊   | 1.500    |
+| 6     | Sofagelehrter        | 🛋️  | 2.100    |
+| 7     | Bücherstapelturmer   | 🛋️  | 3.000    |
+| 8     | Pausensnacker        | 🛋️  | 3.900    |
+| 9     | Gemütlicher Grübler  | 🛋️  | 4.800    |
+| 10    | Pflichterfüller      | 🛋️  | 6.000    |
+| 11    | Entflammter          | 🔥   | 7.800    |
+| 12    | Nachtschwarmer       | 🔥   | 9.600    |
+| 13    | Karteikartenkönig    | 🔥   | 12.000   |
+| 14    | Zeitfresser          | 🔥   | 14.400   |
+| 15    | Leuchtendes Beispiel | 🔥   | 17.400   |
+| 16    | Schreibtischkämpfer  | 🦁   | 21.000   |
+| 17    | Geduldiger Riese     | 🦁   | 25.200   |
+| 18    | Stirnrunzler         | 🦁   | 30.000   |
+| 19    | Schlafloser Denker   | 🦁   | 35.400   |
+| 20    | Unaufhaltsamer       | 🦁   | 41.400   |
+| 21    | Zeitsouverän         | 👑   | 45.000   |
+| 22    | Chronos-Bezwinger    | 👑   | 49.200   |
+| 23    | Erleuchteter         | 👑   | 54.000   |
+| 24    | Pomodoro-Legende     | 👑   | 58.800   |
+| 25    | Pomodoro-Gott        | 👑   | 63.000   |
 
 Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem Inventar wird ältestes Ei ersetzt).
 
@@ -318,12 +335,13 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 - `add_study_minutes` ist nicht idempotent → nur über das Claim-Mutex in `clearTimerState` aufrufen
 - Winner-Cache (`pomo_lb_winner`) ist bewusst vom Listen-Cache getrennt, damit ein fehlgeschlagener Winner-Fetch nicht die Liste blockiert
 - `offWeekdays` speichert JS-Wochentagnummern (0=Sonntag), nicht ISO (1=Montag)
-- `finishEarly()` überschreibt `totalSec` mit der verstrichenen Zeit **abgerundet auf volle Minuten** (`Math.floor(elapsedSec / 60) * 60`), bevor `completePomo()` aufgerufen wird — so werden keine Sekunden in Supabase gespeichert
+- `finishEarly()` überschreibt `totalSec` mit der verstrichenen Zeit **abgerundet auf volle Minuten** (`Math.floor(elapsedSec() / 60) * 60`), bevor `completePomo()` aufgerufen wird — so werden keine Sekunden in Supabase gespeichert. Im Limitless-Modus ist das nur der seit dem letzten Checkpoint noch offene Rest, nicht die gesamte Sessiondauer (siehe „Limitless (Stoppuhr-)Fokus-Modus")
 - `showTimerConfirmBanner(msg, onYes)` ist ein wiederverwendbares Bestätigungs-Modal (`#timer-confirm-banner`); Buttons werden per `cloneNode` ausgetauscht, um Event-Listener-Leaks zu vermeiden
 
 ### Bestätigungs-Dialoge (Timer-Card)
 - **Reset im Fokus-Modus** (nur wenn `running`): zeigt Bestätigungs-Banner vor `reset()`
-- **„✓ Jetzt"-Button**: erscheint bei `mode === 'work' && running && elapsedSec >= 60` (ab der ersten vollen Minute); Bestätigungs-Banner vor `finishEarly()`
+- **„✓ Jetzt"-Button**: erscheint bei `mode === 'work' && running && elapsedSec() >= 60` (ab der ersten vollen Minute); Bestätigungs-Banner vor `finishEarly()`
+- Fortschritt-verwerfen-Bestätigungen (Moduswechsel, Reset) nutzen `hasProgress()` statt eines direkten `remaining < totalSec`-Vergleichs — im Limitless-Modus ist `totalSec` immer `0`, ein direkter Vergleich würde dort nie greifen
 
 ### Eier & Kartensammlung — Supabase-Schreibpfade
 - **Ei kaufen**: PATCH `profiles` (diamonds + eggs)
