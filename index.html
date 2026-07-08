@@ -1836,8 +1836,12 @@
 
   const CHALLENGE_EPOCH_MONDAY = '2024-01-01'; // ist ein Montag
   function getWeekIndex(weekStartKey) {
-    const epoch = new Date(CHALLENGE_EPOCH_MONDAY + 'T00:00:00');
-    const week  = new Date(weekStartKey + 'T00:00:00');
+    // 'Z'-Suffix erzwingt UTC-Parsing — sonst rutscht bei einer Differenz über eine
+    // Sommerzeit-Umstellung hinweg die lokale Zeitzone mit rein (1h Versatz),
+    // was den Tagesabstand knapp unter ein Vielfaches von 7 drücken und den
+    // Wochenindex um 1 verfälschen kann (Client/Server-Rotation liefe auseinander).
+    const epoch = new Date(CHALLENGE_EPOCH_MONDAY + 'T00:00:00Z');
+    const week  = new Date(weekStartKey + 'T00:00:00Z');
     return Math.floor((week - epoch) / (7 * 24 * 60 * 60 * 1000));
   }
 
