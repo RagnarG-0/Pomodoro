@@ -211,7 +211,7 @@
   .limitless-track {
     position: relative; height: 42px; border-radius: 8px;
     background: var(--surface2); border: 0.5px solid var(--border-strong);
-    overflow: hidden;
+    overflow: visible;
   }
   .limitless-track-fill {
     position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
@@ -221,6 +221,12 @@
   .limitless-track-pr {
     position: absolute; top: -3px; bottom: -3px; width: 2px;
     background: var(--accent-dark); left: 0%;
+  }
+  .limitless-track-pr-label {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 9px; white-space: nowrap; pointer-events: none;
+    background: var(--surface); color: var(--text);
+    border: 0.5px solid var(--border-strong); border-radius: 4px; padding: 1px 5px;
   }
   .limitless-track-labels {
     display: flex; justify-content: space-between;
@@ -1430,11 +1436,12 @@
   <div class="limitless-track-wrap" id="limitless-track-wrap" style="display:none;">
     <div class="limitless-track" id="limitless-track">
       <div class="limitless-track-fill" id="limitless-track-fill"></div>
-      <div class="limitless-track-pr" id="limitless-track-pr"></div>
+      <div class="limitless-track-pr" id="limitless-track-pr">
+        <span class="limitless-track-pr-label" id="limitless-track-pr-label"></span>
+      </div>
     </div>
     <div class="limitless-track-labels">
       <span>0h</span>
-      <span id="limitless-track-pr-label"></span>
       <span>12h</span>
     </div>
   </div>
