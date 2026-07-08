@@ -10,6 +10,7 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 // ── Timer state ────────────────────────────────────────────────────────────
 let timerHandle = null;
 let pendingMode = null;
+let pendingAutoResume = false; // true, wenn die gerade endende Pause automatisch in den Fokus zurückführt (siehe onTimerDone)
 
 function clearTimer() {
   if (timerHandle !== null) { clearTimeout(timerHandle); timerHandle = null; }
@@ -55,6 +56,44 @@ function onPRTarget(prMinutes) {
   });
 }
 
+// ── Automatische Pausen (Limitless, Opt-in) ────────────────────────────────
+// Rekurrierend wie Eye-Break (gleiches 20-Min-Intervall, Selbst-Reschedule),
+// aber zusätzlich mit Client-Wake-Postmessage, damit auch ein eingefrorener
+// Tab die eigentliche Pause-Umschaltung nachholen kann (index.html macht die
+// State-Mutation selbst — der SW zeigt nur die Notification und weckt auf).
+// Ersetzt EYE_BREAK_START beim Senden (index.html entscheidet), da eine
+// echte 5-Minuten-Pause die 10-Sekunden-Wegschau-Erinnerung überflüssig macht.
+let autoBreakHandle = null;
+let autoBreakStartedAt = null;
+
+function clearAutoBreak() {
+  if (autoBreakHandle !== null) { clearTimeout(autoBreakHandle); autoBreakHandle = null; }
+  autoBreakStartedAt = null;
+}
+
+function scheduleAutoBreak(startedAt) {
+  clearAutoBreak();
+  autoBreakStartedAt = startedAt;
+  const elapsedMs = Date.now() - startedAt;
+  const nextBoundaryMs = (Math.floor(elapsedMs / EYE_BREAK_INTERVAL_MS) + 1) * EYE_BREAK_INTERVAL_MS;
+  const delay = startedAt + nextBoundaryMs - Date.now();
+  autoBreakHandle = setTimeout(onAutoBreak, Math.max(0, delay));
+}
+
+async function onAutoBreak() {
+  self.registration.showNotification('☕ Automatische Pause', {
+    body: 'Dein Fokus-Timer pausiert für eine kurze Pause und läuft danach automatisch weiter.',
+    icon: 'https://em-content.zobj.net/source/apple/391/tomato_1f345.png',
+    tag: 'pomodoro-auto-break',
+    renotify: true,
+    requireInteraction: false,
+    silent: false,
+  });
+  const clients = await self.clients.matchAll({ type: 'window' });
+  for (const client of clients) client.postMessage({ type: 'AUTO_BREAK_TRIGGER' });
+  if (autoBreakStartedAt !== null) scheduleAutoBreak(autoBreakStartedAt); // nächsten Zyklus planen
+}
+
 function scheduleEyeBreak(startedAt) {
   clearEyeBreak();
   eyeBreakStartedAt = startedAt;
@@ -77,8 +116,14 @@ function onEyeBreak() {
 }
 
 async function onTimerDone() {
-  const title = pendingMode === 'work' ? '🍅 Pomodoro abgeschlossen!' : '⏰ Pause vorbei!';
-  const body  = pendingMode === 'work' ? 'Zeit für eine Pause.' : 'Bereit für den nächsten Fokus?';
+  let title, body;
+  if (pendingMode === 'work') {
+    title = '🍅 Pomodoro abgeschlossen!'; body = 'Zeit für eine Pause.';
+  } else if (pendingAutoResume) {
+    title = '🍅 Pause vorbei'; body = 'Fokus läuft automatisch weiter.';
+  } else {
+    title = '⏰ Pause vorbei!'; body = 'Bereit für den nächsten Fokus?';
+  }
 
   self.registration.showNotification(title, {
     body,
@@ -92,23 +137,27 @@ async function onTimerDone() {
   const clients = await self.clients.matchAll({ type: 'window' });
   for (const client of clients) client.postMessage({ type: 'TIMER_DONE', mode: pendingMode });
 
-  pendingMode = null; timerHandle = null;
+  pendingMode = null; pendingAutoResume = false; timerHandle = null;
 }
 
 // ── Nachrichten von der Seite ──────────────────────────────────────────────
 self.addEventListener('message', e => {
-  const { type, endAt, mode, startedAt, crossAtMs, prMinutes } = e.data || {};
+  const { type, endAt, mode, startedAt, crossAtMs, prMinutes, autoResume } = e.data || {};
   if (type === 'TIMER_START') {
-    clearTimer(); pendingMode = mode;
+    clearTimer(); pendingMode = mode; pendingAutoResume = !!autoResume;
     timerHandle = setTimeout(onTimerDone, Math.max(0, endAt - Date.now()));
   }
   if (type === 'TIMER_PAUSE' || type === 'TIMER_RESET' || type === 'TIMER_SKIP') {
-    clearTimer(); pendingMode = null;
+    clearTimer(); pendingMode = null; pendingAutoResume = false;
     clearEyeBreak();
     clearPRTarget();
+    clearAutoBreak();
   }
   if (type === 'EYE_BREAK_START') {
     scheduleEyeBreak(startedAt);
+  }
+  if (type === 'AUTO_BREAK_SCHEDULE') {
+    scheduleAutoBreak(startedAt);
   }
   if (type === 'PR_TARGET_SCHEDULE') {
     schedulePRTarget(crossAtMs, prMinutes);

@@ -1301,6 +1301,13 @@
     <p style="font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
       Fokus zählt hoch statt runter. Beenden nur über „✓ Jetzt"; alle 20 Minuten wird automatisch gespeichert.
     </p>
+    <div class="panel-row" id="auto-breaks-row" style="display:none;">
+      <label for="set-auto-breaks">Automatische Pausen</label>
+      <input type="checkbox" id="set-auto-breaks" style="accent-color:var(--accent);width:18px;height:18px;cursor:pointer;">
+    </div>
+    <p id="auto-breaks-hint" style="display:none;font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
+      Alle 20 Minuten wechselt der Timer automatisch in eine Pause und danach zurück in den Fokus — an derselben Stelle.
+    </p>
 
     <div class="panel-divider"></div>
     <div class="panel-section">Benachrichtigungston</div>
@@ -1827,6 +1834,8 @@
   let limitlessSetting = false;   // persistierte Checkbox-Präferenz (localStorage)
   let limitless = false;          // true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
   let limitlessCreditedMin = 0;   // bereits per Zwischenkredit gutgeschriebene Minuten dieser Session
+  let autoBreaksSetting = false;  // persistierte Checkbox-Präferenz „Automatische Pausen" (nur bei Limitless wählbar)
+  let workStash = null;           // { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin } | null — pausierter Fokus während einer Pause (nur wenn autoBreaksSetting je aktiv war); bleibt für die gesamte Pausendauer gesetzt, erst switchTo('work',...) konsumiert ihn wieder
   let lastTimerInteractionAt = Date.now(); // für Idle-Suspend des Tagesgrenze-Watchdogs
   function markTimerActivity() { lastTimerInteractionAt = Date.now(); }
 
@@ -2610,14 +2619,56 @@
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode===mode));
   }
 
+  // Gibt true zurück, wenn ein gestashter Fokus-Fortschritt restauriert wurde
+  // (nur möglich, wenn zuvor interruptWorkForBreak() lief — d.h. nur bei
+  // aktiver „Automatische Pausen"-Einstellung; sonst immer false, Verhalten
+  // dann 1:1 wie vor diesem Feature).
   function switchTo(m, autoStart) {
     mode=m; syncModeBtns();
-    clearInterval(tid); running=false; startedAt=null; pomoDay=null;
-    if (m === 'work') { limitless = limitlessSetting; limitlessCreditedMin = 0; }
-    if (m === 'work' && limitless) { totalSec=0; remaining=0; }
-    else { totalSec=getMin(m)*60; remaining=totalSec; }
+    clearInterval(tid); running=false; startedAt=null;
+    swSend({ type: 'TIMER_RESET' }); // zentral hier statt pro Aufrufer; im SW idempotent
+    let resumed = false;
+    if (m === 'work') {
+      if (workStash) {
+        ({ totalSec, remaining, limitless, pomoDay, limitlessCreditedMin } = workStash);
+        workStash = null;
+        resumed = true;
+      } else {
+        pomoDay = null;
+        limitless = limitlessSetting; limitlessCreditedMin = 0;
+        if (limitless) { totalSec=0; remaining=0; } else { totalSec=getMin('work')*60; remaining=totalSec; }
+      }
+    } else {
+      pomoDay = null;
+      totalSec=getMin(m)*60; remaining=totalSec;
+    }
     renderTimer();
     window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
+    return resumed;
+  }
+
+  function stashPayload() {
+    return workStash
+      ? { stash_total_sec: workStash.totalSec, stash_paused_remaining: workStash.remaining,
+          stash_limitless: workStash.limitless, stash_pomoday: workStash.pomoDay,
+          stash_credited_min: workStash.limitlessCreditedMin }
+      : { stash_total_sec: null, stash_paused_remaining: null, stash_limitless: null,
+          stash_pomoday: null, stash_credited_min: null };
+  }
+
+  // Einziger Ort, der workStash befüllt — nur erreichbar, wenn
+  // autoBreaksSetting aktiv ist (Mode-Button-Handler und der 20-Minuten-
+  // Checkpoint-Trigger prüfen das vor dem Aufruf). auto=true: Pause startet
+  // sofort (automatischer Trigger); auto=false: Pause bleibt idle, Nutzer
+  // startet manuell (wie jeder andere Moduswechsel auch).
+  function interruptWorkForBreak(auto) {
+    markTimerActivity();
+    if (hasProgress()) {
+      workStash = { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin };
+    }
+    switchTo('short', false);
+    saveTimerState(stashPayload());
+    if (auto) start();
   }
 
   function completePomo() {
@@ -2670,6 +2721,14 @@
 
     // credited_min auf dem Server nachführen, damit ein Reload/zweites Gerät nicht doppelt kreditiert
     if (currentUser) saveTimerState({ credited_min: limitlessCreditedMin });
+
+    // Automatische Pausen: genau eine neue 20-Minuten-Schwelle wurde gerade
+    // erreicht (sonst wäre die Funktion oben schon returned) — bei aktiver
+    // Einstellung jetzt zur Pause wechseln. Deckt sowohl den normalen Tick
+    // als auch den Restore-Catchup-Aufruf unten ab.
+    if (autoBreaksSetting && mode === 'work' && limitless) {
+      interruptWorkForBreak(true);
+    }
   }
 
   // 4-Uhr-Tagesgrenze: laufende/pausierte Fokus-Sessions werden wie ein
@@ -2677,6 +2736,32 @@
   // clearTimerState() dient als Claim-Mutex gegen den Server-Cron
   // (reset_stale_work_sessions) — wer zuerst die Zeile löscht, kreditiert.
   async function checkDayRollover() {
+    // Randfall: eine automatische Pause lief über die 4-Uhr-Grenze, während
+    // mode==='short' aktiv war (Stash unabhängig vom aktuellen mode geprüft,
+    // sonst würde er hier nie erfasst). Rührt den aktiven Pausen-Timer NICHT
+    // an — nur der veraltete Stash wird kreditiert und geleert.
+    if (workStash && workStash.pomoDay != null && todayKey() !== workStash.pomoDay) {
+      const elapsedMin = workStash.limitless
+        ? Math.max(0, Math.floor(workStash.remaining / 60) - workStash.limitlessCreditedMin)
+        : Math.floor((workStash.totalSec - workStash.remaining) / 60);
+      const key = workStash.pomoDay;
+      workStash = null;
+      if (elapsedMin > 0) {
+        const label = currentLabel.trim() || 'not specified';
+        const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
+        days[key] = (days[key] || 0) + elapsedMin;
+        save();
+        if (currentUser) writeOrQueueCredit(key, elapsedMin, label);
+        const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
+        const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
+        const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
+        if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
+        if (incubatorData) renderIncubator();
+        renderTomatoes(); renderHeatmap(); renderStats();
+      }
+      if (currentUser) saveTimerState(stashPayload()); // löscht nur die stash_*-Spalten, lässt den aktiven Pausen-Timer server-seitig unangetastet
+    }
+
     if (mode !== 'work' || pomoDay == null) return;
     if (!running && !hasProgress()) return;
     if (todayKey() === pomoDay) return;
@@ -2765,7 +2850,7 @@
     } else {
       playSound('break');
       toast('Pause vorbei – bereit für den nächsten Fokus!');
-      setTimeout(()=>switchTo('work', false),1400);
+      setTimeout(()=>{ if (switchTo('work', false)) start(); },1400);
     }
   }
 
@@ -3037,14 +3122,35 @@
     });
   }
 
+  function syncAutoBreaksVisibility() {
+    const show = document.getElementById('set-limitless').checked;
+    document.getElementById('auto-breaks-row').style.display = show ? 'flex' : 'none';
+    document.getElementById('auto-breaks-hint').style.display = show ? 'block' : 'none';
+  }
+
   function initLimitlessSetting() {
     limitlessSetting = localStorage.getItem('pomo_limitless_v1') === '1';
     const cb = document.getElementById('set-limitless');
     cb.checked = limitlessSetting;
+    syncAutoBreaksVisibility();
     cb.addEventListener('change', () => {
       limitlessSetting = cb.checked;
       localStorage.setItem('pomo_limitless_v1', limitlessSetting ? '1' : '0');
+      syncAutoBreaksVisibility();
       if (mode === 'work') reset(); // reset() liest limitlessSetting neu ein
+    });
+  }
+
+  // „Automatische Pausen": geräte-lokale Opt-in-Einstellung, nur wirksam wenn
+  // aktiv gesetzt — Default-Verhalten (Checkbox aus) bleibt unverändert wie
+  // vor diesem Feature (siehe CLAUDE.md „Automatische Pausen").
+  function initAutoBreaksSetting() {
+    autoBreaksSetting = localStorage.getItem('pomo_auto_breaks_v1') === '1';
+    const cb = document.getElementById('set-auto-breaks');
+    cb.checked = autoBreaksSetting;
+    cb.addEventListener('change', () => {
+      autoBreaksSetting = cb.checked;
+      localStorage.setItem('pomo_auto_breaks_v1', autoBreaksSetting ? '1' : '0');
     });
   }
 
@@ -3066,8 +3172,14 @@
           } else {
             playSound('break');
             toast('Pause vorbei – bereit für den nächsten Fokus!');
-            setTimeout(() => switchTo('work', false), 1400);
+            setTimeout(() => { if (switchTo('work', false)) start(); }, 1400);
           }
+        }
+        // Weckt einen eingefrorenen Tab: eigener Tick hat den 20-Min-
+        // Checkpoint evtl. verpasst — nachholen. Idempotent, siehe
+        // checkLimitlessCheckpoint()'s Guard (targetCredited <= limitlessCreditedMin).
+        if (e.data?.type === 'AUTO_BREAK_TRIGGER' && running && mode === 'work' && limitless) {
+          checkLimitlessCheckpoint();
         }
       });
     } catch(err) {
@@ -3134,6 +3246,14 @@
     const state = await loadTimerState();
     if (!state) return;
 
+    if (state.stash_paused_remaining != null) {
+      workStash = {
+        totalSec: state.stash_total_sec, remaining: state.stash_paused_remaining,
+        limitless: state.stash_limitless, pomoDay: state.stash_pomoday,
+        limitlessCreditedMin: state.stash_credited_min || 0,
+      };
+    }
+
     if (state.limitless) {
       mode = state.mode || 'work';
       limitless = true;
@@ -3146,7 +3266,8 @@
         remaining = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         totalSec = 0; running = true;
         tid = setInterval(tick, 250);
-        swSend({ type: 'EYE_BREAK_START', startedAt: startMs });
+        if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt: startMs });
+        else swSend({ type: 'EYE_BREAK_START', startedAt: startMs });
         schedulePRTargetIfPending(startMs);
         renderTimer();
         checkLimitlessCheckpoint(); // sofort nachholen, falls viel Zeit vergangen ist
@@ -3174,7 +3295,7 @@
         if (mode === 'work') pomoDay = state.pomoday || todayKey();
         running = true;
         tid = setInterval(tick, 250);
-        swSend({ type: 'TIMER_START', endAt, mode });
+        swSend({ type: 'TIMER_START', endAt, mode, autoResume: !!workStash });
         renderTimer();
         toast('Timer wird fortgesetzt…');
       } else {
@@ -3215,19 +3336,22 @@
       if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
       if (mode === 'work' && limitless) {
         // Kein swSend TIMER_START — es gibt kein festes endAt, das der SW terminieren könnte.
-        swSend({ type: 'EYE_BREAK_START', startedAt });
+        if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt });
+        else swSend({ type: 'EYE_BREAK_START', startedAt });
         schedulePRTargetIfPending(startedAt);
         saveTimerState({
           end_at: null, total_sec: null, mode, paused_remaining: null,
           limitless: true, started_at: new Date(startedAt).toISOString(),
           credited_min: limitlessCreditedMin, pomoday: pomoDay,
+          ...stashPayload(), // räumt einen ggf. gerade konsumierten Stash serverseitig mit auf
         });
       } else {
         const endAt = startedAt + totalSec * 1000;
-        swSend({ type: 'TIMER_START', endAt, mode });
+        swSend({ type: 'TIMER_START', endAt, mode, autoResume: !!workStash });
         saveTimerState({
           end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null,
           limitless: false, started_at: null, pomoday: mode === 'work' ? pomoDay : null,
+          ...stashPayload(),
         });
       }
     }
@@ -3284,7 +3408,7 @@
     clearTimerState();
     playSound('break');
     toast('Pause vorbei – bereit für den nächsten Fokus!');
-    setTimeout(() => switchTo('work', false), 1400);
+    setTimeout(() => { if (switchTo('work', false)) start(); }, 1400);
   }
 
   window.addEventListener('online', () => { if (currentUser) drainPendingCredits(); });
@@ -3307,11 +3431,16 @@
 
   document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', async () => {
     const target = b.dataset.mode;
+    if (target === mode) return;
     await checkDayRollover(); // stale Session zuerst kreditieren, sonst ginge ihr Fortschritt beim reset() verloren
-    if (target !== 'work' && mode === 'work' && hasProgress()) {
-      showTimerConfirmBanner('Fokus-Timer abbrechen? Der aktuelle Fortschritt geht verloren.', () => { mode = target; syncModeBtns(); reset(); });
-    } else {
-      mode = target; syncModeBtns(); reset();
+    if (target === 'short' && mode === 'work' && hasProgress()) {
+      if (autoBreaksSetting) {
+        interruptWorkForBreak(false); // Einstellung aktiv: Fokus wird pausiert statt verworfen, kein Banner nötig
+      } else {
+        showTimerConfirmBanner('Fokus-Timer abbrechen? Der aktuelle Fortschritt geht verloren.', () => { mode = target; syncModeBtns(); reset(); });
+      }
+    } else if (switchTo(target, false)) {
+      start(); // Stash restauriert (nur möglich, wenn autoBreaksSetting aktiv war) -> sofort weiterlaufen
     }
   }));
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
@@ -3382,6 +3511,7 @@
     gearBtn.classList.toggle('open', open);
     if (open) {
       renderFocusDurationsSettings();
+      syncAutoBreaksVisibility();
       const unField = document.getElementById('change-username');
       if (unField && userName) unField.value = userName;
       const uf = document.getElementById('username-feedback');
@@ -5270,6 +5400,7 @@
   initDisplayUnit();
   initSound();
   initLimitlessSetting();
+  initAutoBreaksSetting();
   initChallengesCard();
   initPrivacyToggle();
   initAvatarUpload();
