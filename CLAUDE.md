@@ -31,6 +31,8 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `user_cards` | id uuid (PK), user_id, card_id, obtained_at |
 | `clans` | id, name, leader_id, min_focus_min, max_focus_min, level_config (JSONB), created_at |
 | `clan_requests` | id, clan_id, user_id, status (`pending`/`accepted`/`rejected`), created_at |
+| `weekly_challenges` | challenge_key (PK), tier, metric_type, param_n, param_h, reward_diamonds, pool_index, label, active |
+| `weekly_challenge_claims` | id uuid (PK), user_id, week_start, challenge_key, reward_diamonds (Snapshot), claimed_at |
 
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
@@ -58,6 +60,8 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `create_clan(p_name)` | Neuen Clan erstellen, Ersteller wird Leader (SECURITY DEFINER) |
 | `get_clan_members()` | Gibt Mitglieder des eigenen Clans zurück (SECURITY DEFINER) |
 | `my_clan_id()` | Hilfsfunktion für RLS-Policy (SECURITY DEFINER, kein direkter Aufruf) |
+| `calc_week_streak(p_week_start, p_user_id)` | Streak innerhalb einer Kalenderwoche, Off-Day-Skip wie `computeCurrentStreak()` (SECURITY DEFINER) |
+| `claim_weekly_challenge(p_challenge_key)` | Prüft Rotation/Schwellenwert serverseitig neu, schreibt Claim + Diamanten gut, gibt neuen Diamanten-Stand zurück |
 
 ---
 
@@ -85,6 +89,8 @@ limitlessSetting     // boolean — persistierte Checkbox-Präferenz „Unbegren
 limitless            // boolean — true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
 limitlessCreditedMin // number — bereits per Zwischenkredit gutgeschriebene Minuten der laufenden Limitless-Session
 lastTimerInteractionAt // ms-Timestamp — für Idle-Suspend des 4-Uhr-Reset-Watchdogs (siehe „4-Uhr-Reset")
+challengesActiveTier // 'leicht' | 'mittel' | 'schwer' — aktiver Tab in der Wochen-Challenges-Karte
+claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der aktuellen Woche
 ```
 
 ---
@@ -160,9 +166,10 @@ lastTimerInteractionAt // ms-Timestamp — für Idle-Suspend des 4-Uhr-Reset-Wat
 1. **Timer-Card** — Analog-Uhr SVG, Modi (Fokus/Kurze Pause/Lange Pause), Label-Input mit Dropdown, +5min, „✓ Jetzt"-Button (frühzeitiger Abschluss), Confetti bei Abschluss
 2. **Heatmap-Card** — 100-Tage-Grid, scrollbar, Klick = Off-Day togglen, DOW-Labels links
 3. **Stats-Card** — Level (25 Stufen), Streak, Bester Tag, Wochenschnitt; „mehr Infos" öffnet Label-Stats-Overlay (inset, gleiche Card)
-4. **Ei-Box** (`#eggBox`) — Diamanten-Anzeige, Brutkasten (1 Slot), -1h/Skip-Buttons, aufklappbares 10-Slot-Inventar; hinter Placeholder versteckt (`#egg-placeholder-overlay`)
-5. **Deck-Box** (`#deckBox`) — aufklappbares Karten-Grid, nach Rarität sortiert, Stapel-Optik bei Duplikaten; hinter demselben Placeholder
-6. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border; Live-Timer-Dot (grün); Rang-Änderungs-Indikator (▲ grün / ▼ rot / ● hellblau für Neue) vor dem 🃏-Button, nur nach echtem Server-Fetch sichtbar
+4. **Wochen-Challenges-Card** (`#challenges-card`) — nur sichtbar für eingeloggte Nutzer (kein Clan-/Public-Gating); Tabs Leicht/Mittel/Schwer, je 3 Progress-Bar-Zeilen mit Belohnungs-Label / „Einlösen"-Button / „✓ eingelöst"
+5. **Ei-Box** (`#eggBox`) — Diamanten-Anzeige, Brutkasten (1 Slot), -1h/Skip-Buttons, aufklappbares 10-Slot-Inventar; hinter Placeholder versteckt (`#egg-placeholder-overlay`)
+6. **Deck-Box** (`#deckBox`) — aufklappbares Karten-Grid, nach Rarität sortiert, Stapel-Optik bei Duplikaten; hinter demselben Placeholder
+7. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border; Live-Timer-Dot (grün); Rang-Änderungs-Indikator (▲ grün / ▼ rot / ● hellblau für Neue) vor dem 🃏-Button, nur nach echtem Server-Fetch sichtbar
 
 ### Eier & Kartensammlung — Schlüsseldetails
 
@@ -170,6 +177,14 @@ lastTimerInteractionAt // ms-Timestamp — für Idle-Suspend des 4-Uhr-Reset-Wat
 - **Bilder**: serviert via jsDelivr (`CDN`-Konstante). Eier: `CDN/Eier/<farbe>/Stadium_<1-4>.png`. Karten: `CDN/Karten/<rarität>/<name>.png`.
 - **`draw_card()` RPC**: serverseitig, `SECURITY DEFINER`, schreibt in `user_cards` und gibt `card_id` zurück. Client schlägt Karte in `CARD_CATALOG` nach.
 - **`bonusMin`**: lokales Offset auf `focus_minutes_at_placement` für optimistische -1h/Skip-Updates. Wird nach Supabase-Write auf 0 normalisiert.
+
+### Wochen-Challenges
+
+- Woche = Montag 4 Uhr Berlin bis Sonntag 4 Uhr Berlin (gleiche Grenze wie `todayKey()`), berechnet über `getWeekStartKey()`
+- 3 Stufen (Leicht 1💎/Mittel 3💎/Schwer 5💎), je 3 aktive Challenges aus einem festen 6er-Pool pro Stufe — deterministische Rotation über `getWeekIndex()` + `CHALLENGE_TIER_OFFSET` (versetzt: leicht=0, mittel=2, schwer=4, damit nicht alle Stufen synchron rotieren), **kein Zufall, keine Server-Speicherung der „aktiven" Auswahl nötig** — `CHALLENGE_POOL` (Client) und die `weekly_challenges`-Tabelle (Server, `pool_index`) müssen synchron gehalten werden, exakt wie `CARD_CATALOG` zu `cards`
+- Fortschritt wird rein aus `study_days` abgeleitet (`total_minutes`, `weekend_minutes` = Sa+So-Summe, `count_days_threshold` = Anzahl Tage mit ≥ `param_h` Minuten, `streak_days` via wochenbegrenzter Streak-Logik) — **"10 Pomodoros" ist ein Minuten-Schwellenwert (250 Min.)**, keine Zeilenanzahl aus `pomodoro_sessions` (die ist durch `+5min`/Limitless-Checkpoints/4-Uhr-Reset ohnehin nicht zuverlässig als "1 Zeile = 1 Pomodoro" auswertbar)
+- **Claim**: manueller „Einlösen"-Button, `claim_weekly_challenge()` RPC berechnet Rotation + Fortschritt serverseitig neu (kein Vertrauen auf Client-Werte), `UNIQUE(user_id, week_start, challenge_key)` verhindert Doppel-Claims
+- Client-Rendering (`renderChallengesCard()`) und Fortschrittsberechnung (`computeChallengeProgress()`) laufen rein lokal aus bereits geladenen `days`/`offDays`/`offWeekdays` — kein zusätzlicher Fetch pro Anzeige, nur `loadWeeklyClaims()` einmal beim Login
 
 ---
 

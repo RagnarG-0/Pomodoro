@@ -915,6 +915,22 @@
   .progress-fill  { height: 100%; border-radius: 6px; background: var(--accent); transition: width 0.9s linear; width: 0%; }
   .progress-text  { font-family: -apple-system, sans-serif; font-size: 11px; color: var(--text-muted); margin-top: 6px; text-align: center; }
 
+  /* ── Wochen-Challenges ── */
+  .chall-row      { padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+  .chall-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .chall-row-top  { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .chall-title    { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--text); }
+  .chall-reward   { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .chall-check    { font-size: 12px; color: var(--accent); white-space: nowrap; }
+  .chall-claim-btn {
+    font-size: 11px; padding: 4px 12px; border-radius: 14px; white-space: nowrap;
+    border: 0.5px solid var(--accent); background: transparent; color: var(--accent);
+    cursor: pointer; font-family: Georgia, serif; transition: background 0.12s, transform 0.1s;
+  }
+  .chall-claim-btn:hover:not(:disabled)  { background: var(--accent); color: #fff; }
+  .chall-claim-btn:active:not(:disabled) { transform: scale(0.96); }
+  .chall-claim-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .incubator-buttons { display: flex; gap: 10px; margin-top: 12px; }
   .btn-incubator {
     flex: 1; padding: 9px 6px; border-radius: 9px; border: 1px solid var(--border-strong);
@@ -1537,6 +1553,19 @@
   </div>
 </div>
 
+<!-- Wochen-Challenges (nur für eingeloggte Nutzer, kein Clan-/Public-Gating) -->
+<div class="card" id="challenges-card" style="display:none;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div class="hmap-label">🎯 Wochen-Challenges</div>
+  </div>
+  <div style="display:flex;gap:5px;margin-bottom:1rem;">
+    <button class="lb-tab active" data-tier="leicht">Leicht</button>
+    <button class="lb-tab" data-tier="mittel">Mittel</button>
+    <button class="lb-tab" data-tier="schwer">Schwer</button>
+  </div>
+  <div id="chall-list"></div>
+</div>
+
 
 <!-- Ei-Box + Deck-Box (durch Platzhalter verdeckt; Leader-Toggle in Einstellungen) -->
 <div id="updateBannerOverlay" class="hidden">
@@ -1790,6 +1819,26 @@
     const m = String(berlinNow.getMonth() + 1).padStart(2, '0');
     const d = String(berlinNow.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
+  }
+
+  // Montag der aktuellen Woche (4-Uhr-Grenze wie todayKey()), als YYYY-MM-DD
+  function getWeekStartKey(dateInput) {
+    const berlinNow = dateInput
+      ? new Date(new Date(dateInput).toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
+      : new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+    if (berlinNow.getHours() < 4) berlinNow.setDate(berlinNow.getDate() - 1);
+    berlinNow.setDate(berlinNow.getDate() - ((berlinNow.getDay() + 6) % 7)); // zurück auf Montag
+    const y = berlinNow.getFullYear();
+    const m = String(berlinNow.getMonth() + 1).padStart(2, '0');
+    const d = String(berlinNow.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const CHALLENGE_EPOCH_MONDAY = '2024-01-01'; // ist ein Montag
+  function getWeekIndex(weekStartKey) {
+    const epoch = new Date(CHALLENGE_EPOCH_MONDAY + 'T00:00:00');
+    const week  = new Date(weekStartKey + 'T00:00:00');
+    return Math.floor((week - epoch) / (7 * 24 * 60 * 60 * 1000));
   }
 
   function load() {
@@ -3898,7 +3947,9 @@
     // Restore timer if it was running before page reload
     await restoreTimerState();
     await loadEggData(token);
-
+    await loadWeeklyClaims(token);
+    document.getElementById('challenges-card').style.display = 'block';
+    renderChallengesCard();
   }
 
   function showMigrationPrompt(session, localDays) {
@@ -5178,6 +5229,7 @@
   initDisplayUnit();
   initSound();
   initLimitlessSetting();
+  initChallengesCard();
   initPrivacyToggle();
   initAvatarUpload();
   initLabelInput();
@@ -5247,6 +5299,192 @@
     { id: 33, name:'Gilbert-Syndrom',       rarity:'rare',      folder:'rare'      },
     { id: 34, name:'UKH-Transport',         rarity:'rare',      folder:'rare'      },
   ];
+
+  // ─── Wöchentliche Challenges ────────────────────────────────────────────
+  // Pool-Reihenfolge = pool_index, muss synchron zur SQL-Seed-Tabelle
+  // (weekly_challenges) gehalten werden — analog CARD_CATALOG <-> cards.
+  const CHALLENGE_TIER_OFFSET = { leicht: 0, mittel: 2, schwer: 4 };
+  const CHALLENGE_REWARD = { leicht: 1, mittel: 3, schwer: 5 };
+  const CHALLENGE_POOL = {
+    leicht: [
+      { key: 'leicht_10pomos', metric: 'total_minutes',        n: 250,        label: '10 Pomodoros diese Woche' },
+      { key: 'leicht_streak3', metric: 'streak_days',          n: 3,          label: '3 Tage Streak' },
+      { key: 'leicht_5h',      metric: 'total_minutes',        n: 300,        label: '5 Stunden Fokuszeit' },
+      { key: 'leicht_8pomos',  metric: 'total_minutes',        n: 200,        label: '8 Pomodoros diese Woche' },
+      { key: 'leicht_2d2h',    metric: 'count_days_threshold', n: 2,  h: 120, label: 'An 2 Tagen je 2 Stunden fokussieren' },
+      { key: 'leicht_streak2', metric: 'streak_days',          n: 2,          label: '2 Tage Streak' },
+    ],
+    mittel: [
+      { key: 'mittel_20h',        metric: 'total_minutes',        n: 1200,        label: '20 Stunden Fokuszeit' },
+      { key: 'mittel_streak5',    metric: 'streak_days',          n: 5,           label: '5 Tage Streak' },
+      { key: 'mittel_3d3h',       metric: 'count_days_threshold', n: 3,   h: 180, label: 'An 3 Tagen je 3 Stunden fokussieren' },
+      { key: 'mittel_15h',        metric: 'total_minutes',        n: 900,         label: '15 Stunden Fokuszeit' },
+      { key: 'mittel_streak4',    metric: 'streak_days',          n: 4,           label: '4 Tage Streak' },
+      { key: 'mittel_weekend6h',  metric: 'weekend_minutes',      n: 360,         label: '6 Stunden am Wochenende' },
+    ],
+    schwer: [
+      { key: 'schwer_3d6h',       metric: 'count_days_threshold', n: 3,   h: 360, label: 'An 3 Tagen je 6 Stunden fokussieren' },
+      { key: 'schwer_35h',        metric: 'total_minutes',        n: 2100,        label: '35 Stunden Fokuszeit' },
+      { key: 'schwer_weekend10h', metric: 'weekend_minutes',      n: 600,         label: '10 Stunden am Wochenende' },
+      { key: 'schwer_streak7',    metric: 'streak_days',          n: 7,           label: '7 Tage Streak' },
+      { key: 'schwer_4d5h',       metric: 'count_days_threshold', n: 4,   h: 300, label: 'An 4 Tagen je 5 Stunden fokussieren' },
+      { key: 'schwer_30h',        metric: 'total_minutes',        n: 1800,        label: '30 Stunden Fokuszeit' },
+    ],
+  };
+
+  function getActiveChallengesForWeek(weekStartKey) {
+    const weekIndex = getWeekIndex(weekStartKey);
+    const result = {};
+    for (const tier of ['leicht', 'mittel', 'schwer']) {
+      const offset = ((weekIndex + CHALLENGE_TIER_OFFSET[tier]) % 6 + 6) % 6;
+      const indices = [offset, (offset + 1) % 6, (offset + 2) % 6];
+      result[tier] = indices.map(i => CHALLENGE_POOL[tier][i]);
+    }
+    return result;
+  }
+
+  let challengesActiveTier = 'leicht';
+  let claimedChallengeKeys = new Set();
+
+  // 7 Tage Mo–So der gegebenen Woche, nutzt die bereits geladenen days/offDays/offWeekdays
+  function getWeekDays(weekStartKey) {
+    const start = new Date(weekStartKey + 'T00:00:00');
+    const result = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      result.push({ date: d, key, minutes: days[key] || 0, off: isOff(d, key) });
+    }
+    return result;
+  }
+
+  function computeWeekTotalMinutes(weekStartKey) {
+    return getWeekDays(weekStartKey).reduce((s, d) => s + d.minutes, 0);
+  }
+
+  function computeWeekWeekendMinutes(weekStartKey) {
+    const wd = getWeekDays(weekStartKey); // Mo(0)..So(6)
+    return wd[5].minutes + wd[6].minutes;
+  }
+
+  function computeWeekCountDaysAtLeast(weekStartKey, hMinutes) {
+    return getWeekDays(weekStartKey).filter(d => d.minutes >= hMinutes).length;
+  }
+
+  // Off-Day-Skip-Logik analog computeCurrentStreak(), auf die Woche begrenzt
+  function computeWeekStreak(weekStartKey) {
+    const today = todayKey();
+    const wd = getWeekDays(weekStartKey);
+    let streak = 0;
+    for (let i = wd.length - 1; i >= 0; i--) {
+      const day = wd[i];
+      if (day.key > today) continue; // Tage nach heute noch nicht erreicht
+      if (day.off) continue;
+      if (day.minutes > 0) { streak++; }
+      else if (day.key === today) { /* heute noch leer, nicht abbrechen */ }
+      else { break; }
+    }
+    return streak;
+  }
+
+  function computeChallengeProgress(challenge, weekStartKey) {
+    switch (challenge.metric) {
+      case 'total_minutes':        return computeWeekTotalMinutes(weekStartKey);
+      case 'weekend_minutes':      return computeWeekWeekendMinutes(weekStartKey);
+      case 'streak_days':          return computeWeekStreak(weekStartKey);
+      case 'count_days_threshold': return computeWeekCountDaysAtLeast(weekStartKey, challenge.h);
+      default:                     return 0;
+    }
+  }
+
+  function formatMinutesShort(mins) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h > 0 ? (m > 0 ? `${h}h ${m}min` : `${h}h`) : `${m}min`;
+  }
+
+  function formatChallengeProgress(challenge, progress) {
+    if (challenge.metric === 'streak_days' || challenge.metric === 'count_days_threshold') {
+      return `${Math.min(progress, challenge.n)} / ${challenge.n} Tage`;
+    }
+    return `${formatMinutesShort(Math.min(progress, challenge.n))} / ${formatMinutesShort(challenge.n)}`;
+  }
+
+  function renderChallengesCard() {
+    const list = document.getElementById('chall-list');
+    if (!list) return;
+    const weekStartKey = getWeekStartKey();
+    const active = getActiveChallengesForWeek(weekStartKey)[challengesActiveTier];
+    const reward = CHALLENGE_REWARD[challengesActiveTier];
+    list.innerHTML = active.map(ch => {
+      const progress = computeChallengeProgress(ch, weekStartKey);
+      const pct = Math.min(100, (progress / ch.n) * 100);
+      const done = progress >= ch.n;
+      const claimed = claimedChallengeKeys.has(ch.key);
+      let action;
+      if (claimed) {
+        action = `<span class="chall-check">✓ eingelöst</span>`;
+      } else if (done) {
+        action = `<button class="chall-claim-btn" data-key="${esc(ch.key)}">Einlösen</button>`;
+      } else {
+        action = `<span class="chall-reward">${reward} 💎</span>`;
+      }
+      return `
+        <div class="chall-row">
+          <div class="chall-row-top">
+            <div class="chall-title">${esc(ch.label)}</div>
+            ${action}
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div class="progress-text">${esc(formatChallengeProgress(ch, progress))}</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Tab-Click-Handler einmal beim Boot binden (nicht bei jedem Login neu wie initLeaderboard())
+  function initChallengesCard() {
+    document.querySelectorAll('#challenges-card .lb-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#challenges-card .lb-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        challengesActiveTier = btn.dataset.tier;
+        renderChallengesCard();
+      });
+    });
+    document.getElementById('chall-list')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.chall-claim-btn');
+      if (btn) claimChallenge(btn.dataset.key);
+    });
+  }
+
+  async function loadWeeklyClaims(token) {
+    if (!currentUser) { claimedChallengeKeys = new Set(); return; }
+    try {
+      const weekStartKey = getWeekStartKey();
+      const res = await fetch(`${SB}/rest/v1/weekly_challenge_claims?user_id=eq.${currentUser.id}&week_start=eq.${weekStartKey}&select=challenge_key`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      claimedChallengeKeys = new Set(Array.isArray(rows) ? rows.map(r => r.challenge_key) : []);
+    } catch(e) { console.warn('loadWeeklyClaims error:', e); claimedChallengeKeys = new Set(); }
+  }
+
+  async function claimChallenge(challengeKey) {
+    const token = await getValidToken();
+    const res = await fetch(`${SB}/rest/v1/rpc/claim_weekly_challenge`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ p_challenge_key: challengeKey }),
+    });
+    if (!res.ok) { console.warn('claim_weekly_challenge error:', await res.text()); return; }
+    const newDiamonds = await res.json();
+    userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
+    renderEggDiamonds();
+    claimedChallengeKeys.add(challengeKey);
+    renderChallengesCard();
+  }
 
   // State
   let eggInventory   = Array(10).fill(null);
