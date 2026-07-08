@@ -3094,6 +3094,7 @@
         remaining = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         totalSec = 0; running = true;
         tid = setInterval(tick, 250);
+        swSend({ type: 'EYE_BREAK_START', startedAt: startMs });
         renderTimer();
         checkLimitlessCheckpoint(); // sofort nachholen, falls viel Zeit vergangen ist
         toast('Timer wird fortgesetzt…');
@@ -3161,6 +3162,7 @@
       if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
       if (mode === 'work' && limitless) {
         // Kein swSend TIMER_START — es gibt kein festes endAt, das der SW terminieren könnte.
+        swSend({ type: 'EYE_BREAK_START', startedAt });
         saveTimerState({
           end_at: null, total_sec: null, mode, paused_remaining: null,
           limitless: true, started_at: new Date(startedAt).toISOString(),
