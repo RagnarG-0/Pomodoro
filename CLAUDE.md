@@ -84,6 +84,7 @@ clanMaxFocus  // number — aus clans.max_focus_min (begrenzt +5min-Button)
 limitlessSetting     // boolean — persistierte Checkbox-Präferenz „Unbegrenzt (Stoppuhr)"
 limitless            // boolean — true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
 limitlessCreditedMin // number — bereits per Zwischenkredit gutgeschriebene Minuten der laufenden Limitless-Session
+lastTimerInteractionAt // ms-Timestamp — für Idle-Suspend des 4-Uhr-Reset-Watchdogs (siehe „4-Uhr-Reset")
 ```
 
 ---
@@ -105,6 +106,13 @@ limitlessCreditedMin // number — bereits per Zwischenkredit gutgeschriebene Mi
 - `+5 min`-Button ist im Limitless-Modus ausgeblendet (kein sinnvolles Ziel, gegen das addiert werden könnte)
 - `updateWatch()` zeigt im Limitless-Modus den Fortschritt zum nächsten Checkpoint (nicht zur Gesamtdauer)
 - **Stolperstein**: mehrere Stellen berechnen `totalSec`/`remaining` bei Idle-Zustand neu aus `getMin(mode) * 60` (Boot vor `initAuth()`, `save-settings-btn`, Logout, `loadClanSettings()`, Label speichern/auswählen) — jede davon muss zuerst auf `mode === 'work' && limitless` prüfen und in diesem Fall `0`/`0` setzen, sonst zeigt die Stoppuhr nach Neuladen/Speichern fälschlich die normale Fokusdauer (z. B. „01:00:00" bei 60-Min-Fokuseinstellung) statt „00:00:00"
+
+### 4-Uhr-Reset laufender/pausierter Fokus-Sessions
+- Um 4 Uhr Berliner Zeit wird jede laufende oder pausierte Fokus-Session (Countdown **und** Limitless) automatisch wie ein „✓ Jetzt" beendet: nur die bis 4 Uhr tatsächlich verstrichene Zeit wird `pomoday` (Vortag) gutgeschrieben, danach Leerlauf — kein automatisches Fortsetzen, kein Toast (still, wie der Zwischenkredit)
+- **Client**: `checkDayRollover()` (index.html, neben `checkLimitlessCheckpoint()`) prüft `todayKey() !== pomoDay`; aufgerufen von `start()` (vor der eigentlichen Start/Pause-Logik, macht den Check unabhängig vom Watchdog-Zustand), den Mode-Button- und `btn-reset`-Klick-Handlern (sonst ginge der Fortschritt beim `reset()` verloren, ohne kreditiert zu werden), dem `visibilitychange`-Handler und einem 60s-Watchdog-`setInterval`
+- Watchdog setzt sich nach 2h Inaktivität (`!running` und `lastTimerInteractionAt` >2h her) selbst aus; `markTimerActivity()` (in `start()`, `reset()`, `finishEarly()`, `skip()`) reaktiviert ihn beim nächsten Timer-Klick synchron innerhalb desselben Aufrufs — nicht erst beim nächsten Watchdog-Tick
+- `clearTimerState()` dient als Claim-Mutex gegen den Server-Cron (siehe unten) — wer zuerst die `timer_state`-Zeile löscht, kreditiert; der andere setzt nur lokal in den Leerlauf zurück
+- **Server**: `reset_stale_work_sessions()` (SECURITY DEFINER, `supabase/migrations/20260708000000_reset_stale_work_sessions.sql`), per `pg_cron` alle 5 Minuten. Grenzwertbasiert statt zeitpunktbasiert geprüft (`4:00 Berlin AT TIME ZONE`, DST-sicher) — läuft auch, wenn niemand die Seite offen hat (z.B. Limitless-Session über Nacht bei geschlossenem Tab). Rührt bereits vor 4 Uhr regulär abgelaufene Countdown-Sessions bewusst nicht an (bestehendes „nie zurückgekehrt"-Verhalten, kein Teil dieses Features)
 
 ### Timer State Persistence (Supabase)
 - Laufender Countdown-Timer: `end_at` gesetzt, `limitless = false`

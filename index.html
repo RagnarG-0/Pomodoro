@@ -1768,6 +1768,8 @@
   let limitlessSetting = false;   // persistierte Checkbox-Präferenz (localStorage)
   let limitless = false;          // true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
   let limitlessCreditedMin = 0;   // bereits per Zwischenkredit gutgeschriebene Minuten dieser Session
+  let lastTimerInteractionAt = Date.now(); // für Idle-Suspend des Tagesgrenze-Watchdogs
+  function markTimerActivity() { lastTimerInteractionAt = Date.now(); }
 
   function elapsedSec() { return (mode === 'work' && limitless) ? remaining : totalSec - remaining; }
   function hasProgress() { return (mode === 'work' && limitless) ? remaining > 0 : remaining < totalSec; }
@@ -2572,6 +2574,44 @@
     if (currentUser) saveTimerState({ credited_min: limitlessCreditedMin });
   }
 
+  // 4-Uhr-Tagesgrenze: laufende/pausierte Fokus-Sessions werden wie ein
+  // automatisches „✓ Jetzt" beendet, Kredit geht an pomoday (Vortag).
+  // clearTimerState() dient als Claim-Mutex gegen den Server-Cron
+  // (reset_stale_work_sessions) — wer zuerst die Zeile löscht, kreditiert.
+  async function checkDayRollover() {
+    if (mode !== 'work' || pomoDay == null) return;
+    if (!running && !hasProgress()) return;
+    if (todayKey() === pomoDay) return;
+
+    const elapsedMin = limitless
+      ? Math.max(0, Math.floor(remaining / 60) - limitlessCreditedMin)
+      : Math.floor((totalSec - remaining) / 60);
+
+    clearInterval(tid); running = false; startedAt = null;
+    swSend({ type: 'TIMER_RESET' });
+
+    const claimed = currentUser ? await clearTimerState() : true;
+    if (claimed && elapsedMin > 0) {
+      const key = pomoDay;
+      const label = currentLabel.trim() || 'not specified';
+      const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
+      days[key] = (days[key] || 0) + elapsedMin;
+      save();
+      if (currentUser) writeOrQueueCredit(key, elapsedMin, label);
+      const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
+      const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
+      const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
+      if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
+      if (incubatorData) renderIncubator();
+      renderTomatoes(); renderHeatmap(); renderStats();
+    }
+
+    pomoDay = null; limitlessCreditedMin = 0;
+    if (limitless) { totalSec = 0; remaining = 0; }
+    else { totalSec = getMin('work') * 60; remaining = totalSec; }
+    renderTimer();
+  }
+
   async function addStudyMinutes(date, delta) {
     if (!currentUser) return false;
     const token = await getValidToken();
@@ -3049,7 +3089,9 @@
   }
 
   /* ── Controls ── */
-  function start() {
+  async function start() {
+    markTimerActivity();
+    await checkDayRollover(); // ggf. abgelaufene Session über 4-Uhr-Grenze zuerst abschließen
     if (running) {
       clearInterval(tid); running=false; startedAt=null;
       swSend({ type: 'TIMER_PAUSE' });
@@ -3099,6 +3141,7 @@
   }
 
   function reset() {
+    markTimerActivity();
     clearInterval(tid); running=false; startedAt=null; pomoDay=null;
     if (mode === 'work') { limitless = limitlessSetting; limitlessCreditedMin = 0; }
     if (mode === 'work' && limitless) { totalSec=0; remaining=0; }
@@ -3110,6 +3153,7 @@
   }
 
   async function finishEarly() {
+    markTimerActivity();
     const wasLimitless = mode === 'work' && limitless;
     const totalElapsedMin = Math.floor(elapsedSec() / 60);
     clearInterval(tid); running = false; startedAt = null;
@@ -3126,6 +3170,7 @@
 
   function skip() {
     if (mode === 'work') return;
+    markTimerActivity();
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_SKIP' });
     clearTimerState();
@@ -3138,13 +3183,23 @@
 
   // Page Visibility API: re-anchor when tab comes back into foreground
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden || !running || !startedAt) return;
-    // Re-calculate immediately so display snaps to correct value
-    tick();
+    if (document.hidden) return;
+    if (running && startedAt) tick(); // Re-calculate immediately so display snaps to correct value
+    checkDayRollover(); // ggf. 4-Uhr-Grenze nachholen, die während des Backgrounds überschritten wurde
   });
 
-  document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
+  // 4-Uhr-Tagesgrenze-Watchdog: setzt sich nach 2h Inaktivität (kein
+  // laufender Timer, kein Start/Stop) selbst aus; markTimerActivity() beim
+  // nächsten Timer-Start reaktiviert ihn sofort.
+  setInterval(() => {
+    const idleMs = Date.now() - lastTimerInteractionAt;
+    if (!running && idleMs > 2 * 60 * 60 * 1000) return;
+    checkDayRollover();
+  }, 60 * 1000);
+
+  document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', async () => {
     const target = b.dataset.mode;
+    await checkDayRollover(); // stale Session zuerst kreditieren, sonst ginge ihr Fortschritt beim reset() verloren
     if (target !== 'work' && mode === 'work' && hasProgress()) {
       showTimerConfirmBanner('Fokus-Timer abbrechen? Der aktuelle Fortschritt geht verloren.', () => { mode = target; syncModeBtns(); reset(); });
     } else {
@@ -3152,7 +3207,8 @@
     }
   }));
   document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
-  document.getElementById('btn-reset').addEventListener('click', () => {
+  document.getElementById('btn-reset').addEventListener('click', async () => {
+    await checkDayRollover();
     if (mode === 'work' && hasProgress()) {
       showTimerConfirmBanner('Timer wirklich zurücksetzen? Der aktuelle Fokus-Fortschritt geht verloren.', reset);
     } else {
