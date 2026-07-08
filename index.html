@@ -207,7 +207,7 @@
 
   .watch-wrap { display: flex; justify-content: center; margin-bottom: 1.25rem; }
 
-  .limitless-track-wrap { margin: 0 auto 1.25rem; max-width: 320px; transition: opacity 0.2s; }
+  .limitless-track-wrap { margin: 0 auto 1.25rem; max-width: 960px; transition: opacity 0.2s; }
   .limitless-track {
     position: relative; height: 14px; border-radius: 7px;
     background: var(--surface2); border: 0.5px solid var(--border-strong);
@@ -1285,16 +1285,8 @@
     <div id="focus-settings-section"></div>
     <input type="hidden" id="set-work" value="25">
     <div class="panel-row">
-      <label for="set-short">Kurze Pause</label>
+      <label for="set-short">Pause</label>
       <div class="inp-wrap"><input type="number" id="set-short" value="5" min="1" max="30"> min</div>
-    </div>
-    <div class="panel-row">
-      <label for="set-long">Lange Pause</label>
-      <div class="inp-wrap"><input type="number" id="set-long" value="15" min="1" max="60"> min</div>
-    </div>
-    <div class="panel-row">
-      <label for="set-longafter">Lange Pause nach</label>
-      <div class="inp-wrap"><input type="number" id="set-longafter" value="4" min="1" max="12" style="width:44px;"> Pomodoros</div>
     </div>
     <div class="panel-row">
       <label for="set-limitless">Unbegrenzt (Stoppuhr)</label>
@@ -1416,8 +1408,7 @@
 <div class="card">
   <div class="mode-row">
     <button class="mode-btn active" data-mode="work">Fokus</button>
-    <button class="mode-btn" data-mode="short">Kurze Pause</button>
-    <button class="mode-btn" data-mode="long">Lange Pause</button>
+    <button class="mode-btn" data-mode="short">Pause</button>
   </div>
 
   <div class="watch-wrap" id="watch-wrap">
@@ -1900,8 +1891,6 @@
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
       if (s.work)      document.getElementById('set-work').value      = s.work;
       if (s.short)     document.getElementById('set-short').value     = s.short;
-      if (s.long)      document.getElementById('set-long').value      = s.long;
-      if (s.longafter) document.getElementById('set-longafter').value = s.longafter;
     } catch(e) {}
   }
 
@@ -1910,8 +1899,6 @@
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({
         work:      document.getElementById('set-work').value,
         short:     document.getElementById('set-short').value,
-        long:      document.getElementById('set-long').value,
-        longafter: document.getElementById('set-longafter').value,
       }));
     } catch(e) {}
   }
@@ -1958,10 +1945,7 @@
     if (m === 'work' && currentLabel && labelDurations[currentLabel] != null) {
       return Math.max(1, labelDurations[currentLabel]);
     }
-    return Math.max(1, parseInt(document.getElementById('set-' + m).value) || {work:25,short:5,long:15}[m]);
-  }
-  function getLongAfter() {
-    return Math.max(1, parseInt(document.getElementById('set-longafter').value) || 4);
+    return Math.max(1, parseInt(document.getElementById('set-' + m).value) || {work:25,short:5}[m]);
   }
 
   /* ── Format ── */
@@ -2022,7 +2006,7 @@
     if (prMin > 0) {
       prEl.style.display = '';
       prEl.style.left = (Math.min(1, prMin / 720) * 100).toFixed(2) + '%';
-      prLabelEl.textContent = minutesToDisplay(prMin);
+      prLabelEl.textContent = 'Bester Tag: ' + minutesToDisplay(prMin);
     } else {
       prEl.style.display = 'none';
       prLabelEl.textContent = '';
@@ -2190,7 +2174,7 @@
     document.getElementById('tomato-dots').innerHTML = html;
   }
 
-  const modeLabels = {work:'Fokus', short:'Kurze Pause', long:'Lange Pause'};
+  const modeLabels = {work:'Fokus', short:'Pause'};
 
   function fmtElapsed(s) {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -2217,7 +2201,7 @@
     const skipBtn = document.getElementById('btn-skip');
     const add5Btn = document.getElementById('btn-add5');
     const finishEarlyBtn = document.getElementById('btn-finish-early');
-    const isBreak = mode === 'short' || mode === 'long';
+    const isBreak = mode === 'short';
     skipBtn.style.display = isBreak ? 'inline-flex' : 'none';
     add5Btn.style.display = (isBreak || showElapsed) ? 'none' : 'inline-flex';
     skipBtn.disabled = !isBreak;
@@ -2770,8 +2754,7 @@
     const claimed = await clearTimerState();
     if (mode==='work') {
       if (claimed) completePomo();
-      const next=(totalPomodoros%getLongAfter()===0)?'long':'short';
-      setTimeout(()=>switchTo(next, false),1400);
+      setTimeout(()=>switchTo('short', false),1400);
     } else {
       playSound('break');
       toast('Pause vorbei – bereit für den nächsten Fokus!');
@@ -3072,8 +3055,7 @@
           const claimed = await clearTimerState();
           if (e.data.mode === 'work') {
             if (claimed) completePomo();
-            const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
-            setTimeout(() => switchTo(next, false), 1400);
+            setTimeout(() => switchTo('short', false), 1400);
           } else {
             playSound('break');
             toast('Pause vorbei – bereit für den nächsten Fokus!');
@@ -3284,8 +3266,7 @@
       : totalElapsedMin * 60;
     limitlessCreditedMin = 0;
     completePomo();
-    const next = (totalPomodoros % getLongAfter() === 0) ? 'long' : 'short';
-    setTimeout(() => switchTo(next, false), 1400);
+    setTimeout(() => switchTo('short', false), 1400);
   }
 
   function skip() {
@@ -3361,7 +3342,7 @@
     renderTimer();
     toast('+5 Minuten hinzugefügt');
   });
-  ['work','short','long'].forEach(m=>{
+  ['work','short'].forEach(m=>{
     document.getElementById('set-'+m).addEventListener('change', () => { if (mode===m) reset(); });
   });
 
@@ -3428,8 +3409,6 @@
           focus_min:        parseInt(document.getElementById('set-work').value) || 25,
           label_focus_mins: labelDurations,
           short_min:        getMin('short'),
-          long_min:         getMin('long'),
-          long_after:   getLongAfter(),
           display_unit: displayUnit,
           off_weekdays: offWeekdays,
           sound:        document.getElementById('sound-select')?.value,
@@ -3453,8 +3432,6 @@
   document.getElementById('overlay').addEventListener('click', e => {
     if (e.target === overlay) { overlay.classList.remove('open'); gearBtn.classList.remove('open'); }
   });
-  document.getElementById('set-longafter').addEventListener('change', saveSettingsWithSync);
-
   /* ── Leaderboard via Supabase ── */
   // ↓↓↓ HIER deine Supabase-Zugangsdaten eintragen ↓↓↓
   const SUPABASE_URL = 'https://cmbyzzfjzrhdxylopqkt.supabase.co';
@@ -3971,8 +3948,6 @@
       // Apply settings from profile
       if (profile.focus_min)  document.getElementById('set-work').value      = profile.focus_min;
       if (profile.short_min)  document.getElementById('set-short').value     = profile.short_min;
-      if (profile.long_min)   document.getElementById('set-long').value      = profile.long_min;
-      if (profile.long_after) document.getElementById('set-longafter').value = profile.long_after;
       if (profile.sound) {
         const sel = document.getElementById('sound-select');
         if (sel) sel.value = profile.sound;
@@ -4424,7 +4399,7 @@
         await saveProfile(data.access_token, {
           username, public: pub,
           focus_min: getMin('work'), label_focus_mins: labelDurations,
-          short_min: getMin('short'), long_min: getMin('long'), long_after: getLongAfter(),
+          short_min: getMin('short'),
           display_unit: displayUnit, off_weekdays: offWeekdays,
           avatar_url: uploadedAvatarUrl,
         });
@@ -4951,21 +4926,6 @@
   // Override save() to also persist to Supabase when logged in
   const _origSave = save;
   function saveWithSync() { _origSave(); } // minutes synced via addStudyMinutes delta RPC
-
-  async function saveSettingsWithSync() {
-    saveSettings();
-    if (!currentUser) return;
-    const token = await getValidToken();
-    if (!token) return;
-    await saveProfile(token, {
-      focus_min:        parseInt(document.getElementById('set-work').value) || 25,
-      label_focus_mins: labelDurations,
-      short_min:        getMin('short'),
-      long_min: getMin('long'), long_after: getLongAfter(),
-      display_unit: displayUnit, off_weekdays: offWeekdays,
-      sound: document.getElementById('sound-select')?.value,
-    });
-  }
 
   /* ── Clan ── */
 
