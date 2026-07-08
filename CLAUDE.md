@@ -185,6 +185,7 @@ claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der a
 - Fortschritt wird rein aus `study_days` abgeleitet (`total_minutes`, `weekend_minutes` = Sa+So-Summe, `count_days_threshold` = Anzahl Tage mit ≥ `param_h` Minuten, `streak_days` via wochenbegrenzter Streak-Logik) — **"10 Pomodoros" ist ein Minuten-Schwellenwert (250 Min.)**, keine Zeilenanzahl aus `pomodoro_sessions` (die ist durch `+5min`/Limitless-Checkpoints/4-Uhr-Reset ohnehin nicht zuverlässig als "1 Zeile = 1 Pomodoro" auswertbar)
 - **Claim**: manueller „Einlösen"-Button, `claim_weekly_challenge()` RPC berechnet Rotation + Fortschritt serverseitig neu (kein Vertrauen auf Client-Werte), `UNIQUE(user_id, week_start, challenge_key)` verhindert Doppel-Claims
 - Client-Rendering (`renderChallengesCard()`) und Fortschrittsberechnung (`computeChallengeProgress()`) laufen rein lokal aus bereits geladenen `days`/`offDays`/`offWeekdays` — kein zusätzlicher Fetch pro Anzeige, nur `loadWeeklyClaims()` einmal beim Login
+- **Bugfix (`20260710000000_fix_calc_week_streak.sql`)**: `calc_week_streak()` ließ `v_off_override`/`v_minutes` bei Tagen ohne `study_days`-Zeile auf dem Wert der vorherigen Schleifen-Iteration stehen (PL/pgSQL `SELECT INTO` setzt Variablen bei 0 Treffern nicht auf `NULL` zurück) — konnte eine gültige Streak-Challenge fälschlich mit `threshold_not_met` ablehnen. Variablen werden jetzt vor jedem `SELECT INTO` explizit auf `NULL` zurückgesetzt.
 
 ---
 
