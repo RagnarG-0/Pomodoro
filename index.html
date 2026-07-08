@@ -207,6 +207,26 @@
 
   .watch-wrap { display: flex; justify-content: center; margin-bottom: 1.25rem; }
 
+  .limitless-track-wrap { margin: 0 auto 1.25rem; max-width: 320px; transition: opacity 0.2s; }
+  .limitless-track {
+    position: relative; height: 14px; border-radius: 7px;
+    background: var(--surface2); border: 0.5px solid var(--border-strong);
+    overflow: hidden;
+  }
+  .limitless-track-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: var(--accent); border-radius: 7px;
+    transition: width 0.25s linear;
+  }
+  .limitless-track-pr {
+    position: absolute; top: -3px; bottom: -3px; width: 2px;
+    background: var(--accent-dark); left: 0%;
+  }
+  .limitless-track-labels {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--text-muted); margin-top: 4px;
+  }
+
   #time-display {
     font-size: 80px; font-weight: normal; letter-spacing: -3px;
     color: var(--text); line-height: 1; text-align: center; margin-bottom: 0.4rem;
@@ -1400,7 +1420,7 @@
     <button class="mode-btn" data-mode="long">Lange Pause</button>
   </div>
 
-  <div class="watch-wrap">
+  <div class="watch-wrap" id="watch-wrap">
     <svg id="watch-svg" width="150" height="150" viewBox="0 0 160 160">
       <circle cx="80" cy="80" r="68" fill="none" stroke="var(--surface2)" stroke-width="5.5"/>
       <circle id="watch-arc" cx="80" cy="80" r="68"
@@ -1414,6 +1434,18 @@
       <circle cx="80" cy="80" r="4" fill="var(--accent)"/>
       <circle cx="80" cy="80" r="1.5" fill="var(--surface)"/>
     </svg>
+  </div>
+
+  <div class="limitless-track-wrap" id="limitless-track-wrap" style="display:none;">
+    <div class="limitless-track" id="limitless-track">
+      <div class="limitless-track-fill" id="limitless-track-fill"></div>
+      <div class="limitless-track-pr" id="limitless-track-pr"></div>
+    </div>
+    <div class="limitless-track-labels">
+      <span>0h</span>
+      <span id="limitless-track-pr-label"></span>
+      <span>12h</span>
+    </div>
   </div>
 
   <div id="time-display">25:00</div>
@@ -1977,6 +2009,26 @@
     document.getElementById('watch-hand').setAttribute('y2', (80+len*Math.sin(rad)).toFixed(2));
   }
 
+  function updateLimitlessTrack() {
+    const creditKey = pomoDay || todayKey();
+    const liveMin = Math.max(0, (days[creditKey] || 0) - limitlessCreditedMin + Math.floor(remaining / 60));
+    const { min: prMin } = computeBestDay(creditKey);
+
+    document.getElementById('limitless-track-fill').style.width =
+      (Math.min(1, liveMin / 720) * 100).toFixed(2) + '%';
+
+    const prEl = document.getElementById('limitless-track-pr');
+    const prLabelEl = document.getElementById('limitless-track-pr-label');
+    if (prMin > 0) {
+      prEl.style.display = '';
+      prEl.style.left = (Math.min(1, prMin / 720) * 100).toFixed(2) + '%';
+      prLabelEl.textContent = minutesToDisplay(prMin);
+    } else {
+      prEl.style.display = 'none';
+      prLabelEl.textContent = '';
+    }
+  }
+
   /* ── Heatmap ── */
   function tileColor(mins) {
     // Spread: darkest color reached at 480 min (8h)
@@ -2149,7 +2201,9 @@
     const showElapsed = mode === 'work' && limitless;
     document.getElementById('time-display').textContent = showElapsed ? fmtElapsed(remaining) : fmt(remaining);
     document.getElementById('mode-label').textContent = modeLabels[mode];
-    updateWatch();
+    if (showElapsed) { updateLimitlessTrack(); } else { updateWatch(); }
+    document.getElementById('watch-wrap').style.display = showElapsed ? 'none' : 'flex';
+    document.getElementById('limitless-track-wrap').style.display = showElapsed ? 'block' : 'none';
     const btn = document.getElementById('btn-start');
     const icon = document.getElementById('btn-start-icon');
     if (running) {
@@ -2311,9 +2365,10 @@
     return longest;
   }
 
-  function computeBestDay() {
+  function computeBestDay(excludeKey) {
     let bestKey = null, bestMin = 0;
     for (const [k, v] of Object.entries(days)) {
+      if (k === excludeKey) continue;
       if (v > bestMin) { bestMin = v; bestKey = k; }
     }
     return { key: bestKey, min: bestMin };
@@ -3037,6 +3092,15 @@
     swReg.active.postMessage(msg);
   }
 
+  function schedulePRTargetIfPending(startedAtMs) {
+    const creditKey = pomoDay || todayKey();
+    const baseline = (days[creditKey] || 0) - limitlessCreditedMin;
+    const { min: prMin } = computeBestDay(creditKey);
+    if (prMin <= 0 || baseline >= prMin) return; // kein Rekord zu brechen, oder in dieser Session schon gebrochen
+    const crossAtMs = startedAtMs + (prMin - baseline) * 60000;
+    swSend({ type: 'PR_TARGET_SCHEDULE', crossAtMs, prMinutes: prMin });
+  }
+
   /* ── Timer State Persistence ── */
   async function saveTimerState(state) {
     if (!currentUser) return;
@@ -3095,6 +3159,7 @@
         totalSec = 0; running = true;
         tid = setInterval(tick, 250);
         swSend({ type: 'EYE_BREAK_START', startedAt: startMs });
+        schedulePRTargetIfPending(startMs);
         renderTimer();
         checkLimitlessCheckpoint(); // sofort nachholen, falls viel Zeit vergangen ist
         toast('Timer wird fortgesetzt…');
@@ -3163,6 +3228,7 @@
       if (mode === 'work' && limitless) {
         // Kein swSend TIMER_START — es gibt kein festes endAt, das der SW terminieren könnte.
         swSend({ type: 'EYE_BREAK_START', startedAt });
+        schedulePRTargetIfPending(startedAt);
         saveTimerState({
           end_at: null, total_sec: null, mode, paused_remaining: null,
           limitless: true, started_at: new Date(startedAt).toISOString(),
@@ -3947,6 +4013,7 @@
     startTokenRefreshTimer();
     document.getElementById('time-display').style.opacity = '1';
     document.getElementById('watch-svg').style.opacity = '1';
+    document.getElementById('limitless-track-wrap').style.opacity = '1';
     render();
     if (userPublic && clanRole) { document.getElementById('leaderboard-card').style.display = 'block'; }
     initLeaderboard();
@@ -4261,6 +4328,7 @@
         document.getElementById('migrate-banner').style.display = 'none';
         document.getElementById('time-display').style.opacity  = '1';
         document.getElementById('watch-svg').style.opacity     = '1';
+        document.getElementById('limitless-track-wrap').style.opacity = '1';
         return; // stop here — user must set password first
       }
     }
@@ -4411,6 +4479,7 @@
     // No valid session — show auth modal
     document.getElementById('time-display').style.opacity = '1';
     document.getElementById('watch-svg').style.opacity = '1';
+    document.getElementById('limitless-track-wrap').style.opacity = '1';
     openAuthModal();
   }
 
@@ -6141,6 +6210,7 @@
   // Hide timer until session is restored to avoid flash of default value
   document.getElementById('time-display').style.opacity = '0';
   document.getElementById('watch-svg').style.opacity = '0';
+  document.getElementById('limitless-track-wrap').style.opacity = '0';
   render();
   initEggs();
   initAuth();

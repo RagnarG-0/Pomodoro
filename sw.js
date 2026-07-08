@@ -26,6 +26,35 @@ function clearEyeBreak() {
   eyeBreakStartedAt = null;
 }
 
+// ── PR-Bruch-Notification (Limitless-Modus) ────────────────────────────────
+// One-shot, kein Selbst-Reschedule wie bei scheduleEyeBreak. crossAtMs wird
+// clientseitig berechnet (index.html:schedulePRTargetIfPending) — der SW
+// macht keine Datum/Zeitzonen-Arithmetik.
+let prTargetHandle = null;
+
+function clearPRTarget() {
+  if (prTargetHandle !== null) { clearTimeout(prTargetHandle); prTargetHandle = null; }
+}
+
+function schedulePRTarget(crossAtMs, prMinutes) {
+  clearPRTarget();
+  const delay = crossAtMs - Date.now();
+  if (delay < 0) return; // defensiv, sollte clientseitig nicht vorkommen
+  prTargetHandle = setTimeout(() => onPRTarget(prMinutes), delay);
+}
+
+function onPRTarget(prMinutes) {
+  prTargetHandle = null;
+  self.registration.showNotification('🏆 Neuer Rekord!', {
+    body: `Du hast deinen bisherigen Bestwert von ${prMinutes} Minuten überboten!`,
+    icon: 'https://em-content.zobj.net/source/apple/391/tomato_1f345.png',
+    tag: 'pomodoro-pr-broken',
+    renotify: true,
+    requireInteraction: false,
+    silent: false,
+  });
+}
+
 function scheduleEyeBreak(startedAt) {
   clearEyeBreak();
   eyeBreakStartedAt = startedAt;
@@ -68,7 +97,7 @@ async function onTimerDone() {
 
 // ── Nachrichten von der Seite ──────────────────────────────────────────────
 self.addEventListener('message', e => {
-  const { type, endAt, mode, startedAt } = e.data || {};
+  const { type, endAt, mode, startedAt, crossAtMs, prMinutes } = e.data || {};
   if (type === 'TIMER_START') {
     clearTimer(); pendingMode = mode;
     timerHandle = setTimeout(onTimerDone, Math.max(0, endAt - Date.now()));
@@ -76,9 +105,13 @@ self.addEventListener('message', e => {
   if (type === 'TIMER_PAUSE' || type === 'TIMER_RESET' || type === 'TIMER_SKIP') {
     clearTimer(); pendingMode = null;
     clearEyeBreak();
+    clearPRTarget();
   }
   if (type === 'EYE_BREAK_START') {
     scheduleEyeBreak(startedAt);
+  }
+  if (type === 'PR_TARGET_SCHEDULE') {
+    schedulePRTarget(crossAtMs, prMinutes);
   }
 });
 
