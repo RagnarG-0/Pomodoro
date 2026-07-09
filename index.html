@@ -2672,7 +2672,16 @@
       workStash = { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin };
     }
     switchTo('short', false);
-    saveTimerState(stashPayload());
+    // Sichert den idle-Pausen-Zustand (mode/end_at/started_at) direkt mit ab —
+    // sonst blieben bei auto=false (start() wird unten nicht aufgerufen) die
+    // alten 'work'/started_at-Werte der unterbrochenen Session in der DB
+    // stehen, und ein Reload vor dem manuellen Pausenstart würde die alte
+    // Fokus-Session fälschlich als weiterlaufend restaurieren.
+    saveTimerState({
+      end_at: null, total_sec: totalSec, mode: 'short', paused_remaining: remaining,
+      limitless: false, started_at: null, pomoday: null,
+      ...stashPayload(),
+    });
     if (auto) start();
   }
 
