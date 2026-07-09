@@ -1306,8 +1306,12 @@
       <input type="checkbox" id="set-auto-breaks" style="accent-color:var(--accent);width:18px;height:18px;cursor:pointer;">
     </div>
     <p id="auto-breaks-hint" style="display:none;font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
-      Alle 20 Minuten wechselt der Timer automatisch in eine Pause und danach zurück in den Fokus — an derselben Stelle.
+      Der Timer wechselt nach dem Fokus-Intervall automatisch in eine Pause und danach zurück in den Fokus — an derselben Stelle.
     </p>
+    <div class="panel-row" id="focus-interval-row" style="display:none;">
+      <label for="set-focus-interval">Fokus-Intervall</label>
+      <div class="inp-wrap"><input type="number" id="set-focus-interval" value="20" min="20" max="120" step="5"> min</div>
+    </div>
 
     <div class="panel-divider"></div>
     <div class="panel-section">Benachrichtigungston</div>
@@ -1835,6 +1839,7 @@
   let limitless = false;          // true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
   let limitlessCreditedMin = 0;   // bereits per Zwischenkredit gutgeschriebene Minuten dieser Session
   let autoBreaksSetting = false;  // persistierte Checkbox-Präferenz „Automatische Pausen" (nur bei Limitless wählbar)
+  let focusIntervalMin = 20;      // Fokus-Intervall bei aktiven Automatische Pausen (20-120, 5er-Schritte); ohne Automatische Pausen bleibt der Checkpoint fest bei 20 min (LIMITLESS_CHECKPOINT_SEC)
   let workStash = null;           // { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin } | null — pausierter Fokus während einer Pause (nur wenn autoBreaksSetting je aktiv war); bleibt für die gesamte Pausendauer gesetzt, erst switchTo('work',...) konsumiert ihn wieder
   let lastTimerInteractionAt = Date.now(); // für Idle-Suspend des Tagesgrenze-Watchdogs
   function markTimerActivity() { lastTimerInteractionAt = Date.now(); }
@@ -2699,7 +2704,10 @@
 
   function checkLimitlessCheckpoint() {
     const elapsedMin = Math.floor(remaining / 60); // remaining == verstrichene Sekunden im Limitless-Modus
-    const cycleMin = LIMITLESS_CHECKPOINT_SEC / 60;
+    // Bei aktiven Automatische Pausen bestimmt das einstellbare Fokus-Intervall den Zyklus
+    // (Checkpoint-Kredit + Pausen-Trigger sind bewusst gekoppelt, siehe CLAUDE.md); ohne
+    // Automatische Pausen bleibt der Zyklus fest bei LIMITLESS_CHECKPOINT_SEC (20 min).
+    const cycleMin = autoBreaksSetting ? focusIntervalMin : LIMITLESS_CHECKPOINT_SEC / 60;
     const targetCredited = Math.floor(elapsedMin / cycleMin) * cycleMin;
     if (targetCredited <= limitlessCreditedMin) return;
 
@@ -3123,9 +3131,11 @@
   }
 
   function syncAutoBreaksVisibility() {
-    const show = document.getElementById('set-limitless').checked;
-    document.getElementById('auto-breaks-row').style.display = show ? 'flex' : 'none';
-    document.getElementById('auto-breaks-hint').style.display = show ? 'block' : 'none';
+    const limitlessOn = document.getElementById('set-limitless').checked;
+    document.getElementById('auto-breaks-row').style.display = limitlessOn ? 'flex' : 'none';
+    document.getElementById('auto-breaks-hint').style.display = limitlessOn ? 'block' : 'none';
+    const autoBreaksOn = document.getElementById('set-auto-breaks').checked;
+    document.getElementById('focus-interval-row').style.display = (limitlessOn && autoBreaksOn) ? 'flex' : 'none';
   }
 
   function initLimitlessSetting() {
@@ -3148,9 +3158,27 @@
     autoBreaksSetting = localStorage.getItem('pomo_auto_breaks_v1') === '1';
     const cb = document.getElementById('set-auto-breaks');
     cb.checked = autoBreaksSetting;
+    syncAutoBreaksVisibility();
     cb.addEventListener('change', () => {
       autoBreaksSetting = cb.checked;
       localStorage.setItem('pomo_auto_breaks_v1', autoBreaksSetting ? '1' : '0');
+      syncAutoBreaksVisibility();
+    });
+  }
+
+  // Fokus-Intervall bei Automatische Pausen: 20-120 min, nur 5er-Schritte.
+  // Ohne Automatische Pausen bleibt der Checkpoint fest bei 20 min (siehe checkLimitlessCheckpoint()).
+  function initFocusIntervalSetting() {
+    const clamp = v => Math.min(120, Math.max(20, Math.round(v / 5) * 5));
+    const stored = parseInt(localStorage.getItem('pomo_focus_interval_v1'), 10);
+    focusIntervalMin = Number.isFinite(stored) ? clamp(stored) : 20;
+    const inp = document.getElementById('set-focus-interval');
+    inp.value = focusIntervalMin;
+    inp.addEventListener('change', () => {
+      const v = clamp(parseInt(inp.value, 10) || 20);
+      inp.value = v;
+      focusIntervalMin = v;
+      localStorage.setItem('pomo_focus_interval_v1', String(v));
     });
   }
 
@@ -3266,7 +3294,7 @@
         remaining = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         totalSec = 0; running = true;
         tid = setInterval(tick, 250);
-        if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt: startMs });
+        if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt: startMs, intervalMs: focusIntervalMin * 60 * 1000 });
         else swSend({ type: 'EYE_BREAK_START', startedAt: startMs });
         schedulePRTargetIfPending(startMs);
         renderTimer();
@@ -3336,7 +3364,7 @@
       if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
       if (mode === 'work' && limitless) {
         // Kein swSend TIMER_START — es gibt kein festes endAt, das der SW terminieren könnte.
-        if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt });
+        if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt, intervalMs: focusIntervalMin * 60 * 1000 });
         else swSend({ type: 'EYE_BREAK_START', startedAt });
         schedulePRTargetIfPending(startedAt);
         saveTimerState({
@@ -5401,6 +5429,7 @@
   initSound();
   initLimitlessSetting();
   initAutoBreaksSetting();
+  initFocusIntervalSetting();
   initChallengesCard();
   initPrivacyToggle();
   initAvatarUpload();

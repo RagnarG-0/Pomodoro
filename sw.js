@@ -65,17 +65,19 @@ function onPRTarget(prMinutes) {
 // echte 5-Minuten-Pause die 10-Sekunden-Wegschau-Erinnerung überflüssig macht.
 let autoBreakHandle = null;
 let autoBreakStartedAt = null;
+let autoBreakIntervalMs = EYE_BREAK_INTERVAL_MS; // vom Client konfigurierbar (Fokus-Intervall, 20-120 min)
 
 function clearAutoBreak() {
   if (autoBreakHandle !== null) { clearTimeout(autoBreakHandle); autoBreakHandle = null; }
   autoBreakStartedAt = null;
 }
 
-function scheduleAutoBreak(startedAt) {
+function scheduleAutoBreak(startedAt, intervalMs) {
   clearAutoBreak();
   autoBreakStartedAt = startedAt;
+  autoBreakIntervalMs = intervalMs || EYE_BREAK_INTERVAL_MS;
   const elapsedMs = Date.now() - startedAt;
-  const nextBoundaryMs = (Math.floor(elapsedMs / EYE_BREAK_INTERVAL_MS) + 1) * EYE_BREAK_INTERVAL_MS;
+  const nextBoundaryMs = (Math.floor(elapsedMs / autoBreakIntervalMs) + 1) * autoBreakIntervalMs;
   const delay = startedAt + nextBoundaryMs - Date.now();
   autoBreakHandle = setTimeout(onAutoBreak, Math.max(0, delay));
 }
@@ -91,7 +93,7 @@ async function onAutoBreak() {
   });
   const clients = await self.clients.matchAll({ type: 'window' });
   for (const client of clients) client.postMessage({ type: 'AUTO_BREAK_TRIGGER' });
-  if (autoBreakStartedAt !== null) scheduleAutoBreak(autoBreakStartedAt); // nächsten Zyklus planen
+  if (autoBreakStartedAt !== null) scheduleAutoBreak(autoBreakStartedAt, autoBreakIntervalMs); // nächsten Zyklus planen
 }
 
 function scheduleEyeBreak(startedAt) {
@@ -142,7 +144,7 @@ async function onTimerDone() {
 
 // ── Nachrichten von der Seite ──────────────────────────────────────────────
 self.addEventListener('message', e => {
-  const { type, endAt, mode, startedAt, crossAtMs, prMinutes, autoResume } = e.data || {};
+  const { type, endAt, mode, startedAt, crossAtMs, prMinutes, autoResume, intervalMs } = e.data || {};
   if (type === 'TIMER_START') {
     clearTimer(); pendingMode = mode; pendingAutoResume = !!autoResume;
     timerHandle = setTimeout(onTimerDone, Math.max(0, endAt - Date.now()));
@@ -157,7 +159,7 @@ self.addEventListener('message', e => {
     scheduleEyeBreak(startedAt);
   }
   if (type === 'AUTO_BREAK_SCHEDULE') {
-    scheduleAutoBreak(startedAt);
+    scheduleAutoBreak(startedAt, intervalMs);
   }
   if (type === 'PR_TARGET_SCHEDULE') {
     schedulePRTarget(crossAtMs, prMinutes);
