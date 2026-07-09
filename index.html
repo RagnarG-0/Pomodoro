@@ -208,30 +208,30 @@
   .watch-wrap { display: flex; justify-content: center; margin-bottom: 1.25rem; }
 
   .limitless-track-wrap { margin: 0 auto 1.25rem; max-width: 320px; transition: opacity 0.2s; }
+  .limitless-track-scroll { overflow-x: auto; overflow-y: hidden; padding: 5px 3px; margin: -5px -3px; }
   .limitless-track {
-    position: relative; height: 42px; border-radius: 8px;
+    position: relative; height: 42px; border-radius: 8px; margin: 0 auto;
     background: var(--surface2); border: 0.5px solid var(--border-strong);
     overflow: visible;
   }
   .limitless-track-fill {
-    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
-    background: var(--accent); border-radius: 8px;
-    transition: width 0.25s linear;
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-dark));
+    border-radius: 8px; transition: width 0.25s linear;
   }
-  .limitless-track-pr {
-    position: absolute; top: -3px; bottom: -3px; width: 2px;
-    background: var(--accent-dark); left: 0%;
+  .limitless-track-fill.over-goal { background: linear-gradient(90deg, var(--accent-dark), var(--accent)); }
+  .limitless-track-fill.over-goal::after {
+    content: ""; position: absolute; inset: 0; border-radius: 8px;
+    background: repeating-linear-gradient(45deg, rgba(255,255,255,0.16), rgba(255,255,255,0.16) 6px, transparent 6px, transparent 12px);
+    background-size: 24px 24px; animation: limitless-shimmer 1.4s linear infinite;
   }
-  .limitless-track-pr-label {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    font-size: 9px; white-space: nowrap; pointer-events: none;
-    background: var(--surface); color: var(--text);
-    border: 0.5px solid var(--border-strong); border-radius: 4px; padding: 1px 5px;
+  @keyframes limitless-shimmer { 0% { background-position: 0 0; } 100% { background-position: 24px 0; } }
+  .limitless-track-ticks { position: absolute; inset: 0; }
+  .limitless-track-tick {
+    position: absolute; top: 5px; bottom: 5px; width: 1.5px;
+    background: var(--border-strong); opacity: 0.6;
   }
-  .limitless-track-labels {
-    display: flex; justify-content: space-between;
-    font-size: 10px; color: var(--text-muted); margin-top: 4px;
-  }
+  .limitless-track-tick.lit { background: rgba(255,255,255,0.65); opacity: 1; }
 
   #time-display {
     font-size: 80px; font-weight: normal; letter-spacing: -3px;
@@ -1301,6 +1301,13 @@
     <p style="font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
       Fokus zählt hoch statt runter. Beenden nur über „✓ Jetzt"; alle 20 Minuten wird automatisch gespeichert.
     </p>
+    <div class="panel-row" id="daily-goal-row" style="display:none;">
+      <label for="set-daily-goal">Tagesziel</label>
+      <div class="inp-wrap"><input type="number" id="set-daily-goal" value="240" min="30" max="720" step="5"> min</div>
+    </div>
+    <p id="daily-goal-hint" style="display:none;font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
+      Bestimmt die Länge des Fokus-Balkens (bei 12h volle Breite). Gilt für jeden Tag, bis geändert.
+    </p>
     <div class="panel-row" id="auto-breaks-row" style="display:none;">
       <label for="set-auto-breaks">Automatische Pausen</label>
       <input type="checkbox" id="set-auto-breaks" style="accent-color:var(--accent);width:18px;height:18px;cursor:pointer;">
@@ -1445,15 +1452,11 @@
   </div>
 
   <div class="limitless-track-wrap" id="limitless-track-wrap" style="display:none;">
-    <div class="limitless-track" id="limitless-track">
-      <div class="limitless-track-fill" id="limitless-track-fill"></div>
-      <div class="limitless-track-pr" id="limitless-track-pr">
-        <span class="limitless-track-pr-label" id="limitless-track-pr-label"></span>
+    <div class="limitless-track-scroll" id="limitless-track-scroll">
+      <div class="limitless-track" id="limitless-track">
+        <div class="limitless-track-fill" id="limitless-track-fill"></div>
+        <div class="limitless-track-ticks" id="limitless-track-ticks"></div>
       </div>
-    </div>
-    <div class="limitless-track-labels">
-      <span>0h</span>
-      <span>12h</span>
     </div>
   </div>
 
@@ -1838,6 +1841,8 @@
   let limitlessSetting = false;   // persistierte Checkbox-Präferenz (localStorage)
   let limitless = false;          // true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
   let limitlessCreditedMin = 0;   // bereits per Zwischenkredit gutgeschriebene Minuten dieser Session
+  let dailyFocusGoalMin = 240;    // Tagesziel für den Limitless-Balken in Minuten (aus profiles.daily_focus_goal_min; Default 4h bis gesetzt); bestimmt Balkenlänge in updateLimitlessTrack()
+  let _limitlessTickCount = -1;   // Cache für updateLimitlessTrack(): verhindert Neuaufbau der Checkpoint-Striche bei jedem Tick (alle 250ms)
   let autoBreaksSetting = false;  // persistierte Checkbox-Präferenz „Automatische Pausen" (nur bei Limitless wählbar)
   let focusIntervalMin = 20;      // Fokus-Intervall bei aktiven Automatische Pausen (20-120, 5er-Schritte); ohne Automatische Pausen bleibt der Checkpoint fest bei 20 min (LIMITLESS_CHECKPOINT_SEC)
   let workStash = null;           // { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin } | null — pausierter Fokus während einer Pause (nur wenn autoBreaksSetting je aktiv war); bleibt für die gesamte Pausendauer gesetzt, erst switchTo('work',...) konsumiert ihn wieder
@@ -2014,23 +2019,40 @@
     document.getElementById('watch-hand').setAttribute('y2', (80+len*Math.sin(rad)).toFixed(2));
   }
 
+  // Balkenlänge = Tagesziel (dailyFocusGoalMin) relativ zu 12h (720 min) verfügbarer Breite:
+  // bei 12h Ziel volle Breite, bei 1h Ziel 1/12 davon usw. Wird das Ziel überschritten, wächst
+  // der ganze Balken (Track + Füllung) mit derselben Skala einfach weiter (siehe Design-Mockup).
   function updateLimitlessTrack() {
     const creditKey = pomoDay || todayKey();
     const liveMin = Math.max(0, (days[creditKey] || 0) - limitlessCreditedMin + Math.floor(remaining / 60));
-    const { min: prMin } = computeBestDay(creditKey);
+    const goalMin = dailyFocusGoalMin || 240;
+    const totalMin = Math.max(goalMin, liveMin);
 
-    document.getElementById('limitless-track-fill').style.width =
-      (Math.min(1, liveMin / 720) * 100).toFixed(2) + '%';
+    const scrollEl = document.getElementById('limitless-track-scroll');
+    const trackEl = document.getElementById('limitless-track');
+    const fillEl = document.getElementById('limitless-track-fill');
+    const ticksEl = document.getElementById('limitless-track-ticks');
+    const pxPerMin = (scrollEl.clientWidth || 320) / 720;
 
-    const prEl = document.getElementById('limitless-track-pr');
-    const prLabelEl = document.getElementById('limitless-track-pr-label');
-    if (prMin > 0) {
-      prEl.style.display = '';
-      prEl.style.left = (Math.min(1, prMin / 720) * 100).toFixed(2) + '%';
-      prLabelEl.textContent = 'Bester Tag: ' + minutesToDisplay(prMin);
+    trackEl.style.width = (totalMin * pxPerMin).toFixed(1) + 'px';
+    fillEl.style.width = (liveMin * pxPerMin).toFixed(1) + 'px';
+    fillEl.classList.toggle('over-goal', liveMin >= goalMin);
+
+    const cpMin = LIMITLESS_CHECKPOINT_SEC / 60;
+    const tickCount = Math.floor(totalMin / cpMin);
+    if (tickCount !== _limitlessTickCount) {
+      _limitlessTickCount = tickCount;
+      ticksEl.innerHTML = '';
+      for (let i = 1; i * cpMin < totalMin - 0.01; i++) {
+        const t = document.createElement('div');
+        t.className = 'limitless-track-tick' + (liveMin >= i * cpMin ? ' lit' : '');
+        t.style.left = (i * cpMin * pxPerMin).toFixed(1) + 'px';
+        ticksEl.appendChild(t);
+      }
     } else {
-      prEl.style.display = 'none';
-      prLabelEl.textContent = '';
+      ticksEl.querySelectorAll('.limitless-track-tick').forEach((t, idx) => {
+        t.classList.toggle('lit', liveMin >= (idx + 1) * cpMin);
+      });
     }
   }
 
@@ -2206,9 +2228,9 @@
     const showElapsed = mode === 'work' && limitless;
     document.getElementById('time-display').textContent = showElapsed ? fmtElapsed(remaining) : fmt(remaining);
     document.getElementById('mode-label').textContent = modeLabels[mode];
-    if (showElapsed) { updateLimitlessTrack(); } else { updateWatch(); }
     document.getElementById('watch-wrap').style.display = showElapsed ? 'none' : 'flex';
     document.getElementById('limitless-track-wrap').style.display = showElapsed ? 'block' : 'none';
+    if (showElapsed) { updateLimitlessTrack(); } else { updateWatch(); }
     const btn = document.getElementById('btn-start');
     const icon = document.getElementById('btn-start-icon');
     if (running) {
@@ -3141,6 +3163,8 @@
 
   function syncAutoBreaksVisibility() {
     const limitlessOn = document.getElementById('set-limitless').checked;
+    document.getElementById('daily-goal-row').style.display = limitlessOn ? 'flex' : 'none';
+    document.getElementById('daily-goal-hint').style.display = limitlessOn ? 'block' : 'none';
     document.getElementById('auto-breaks-row').style.display = limitlessOn ? 'flex' : 'none';
     document.getElementById('auto-breaks-hint').style.display = limitlessOn ? 'block' : 'none';
     const autoBreaksOn = document.getElementById('set-auto-breaks').checked;
@@ -3576,6 +3600,9 @@
     });
     saveLabelDurations();
     saveSettings(); // save to localStorage
+    const clampGoal = v => Math.min(720, Math.max(30, Math.round(v / 5) * 5));
+    dailyFocusGoalMin = clampGoal(parseInt(document.getElementById('set-daily-goal').value) || 240);
+    document.getElementById('set-daily-goal').value = dailyFocusGoalMin;
     if (currentUser) {
       const session = getToken();
       if (session) {
@@ -3583,6 +3610,7 @@
           focus_min:        parseInt(document.getElementById('set-work').value) || 25,
           label_focus_mins: labelDurations,
           short_min:        getMin('short'),
+          daily_focus_goal_min: dailyFocusGoalMin,
           display_unit: displayUnit,
           off_weekdays: offWeekdays,
           sound:        document.getElementById('sound-select')?.value,
@@ -3596,6 +3624,8 @@
       renderTimer();
       window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
     }
+    // Balken sofort mit neuem Tagesziel aktualisieren, auch während der Timer läuft
+    if (mode === 'work' && limitless) { _limitlessTickCount = -1; updateLimitlessTrack(); }
     feedback.textContent = '✓ Gespeichert';
     setTimeout(() => { feedback.textContent = ''; }, 2500);
   });
@@ -4122,6 +4152,8 @@
       // Apply settings from profile
       if (profile.focus_min)  document.getElementById('set-work').value      = profile.focus_min;
       if (profile.short_min)  document.getElementById('set-short').value     = profile.short_min;
+      dailyFocusGoalMin = profile.daily_focus_goal_min || 240;
+      document.getElementById('set-daily-goal').value = dailyFocusGoalMin;
       if (profile.sound) {
         const sel = document.getElementById('sound-select');
         if (sel) sel.value = profile.sound;
