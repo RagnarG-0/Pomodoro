@@ -921,7 +921,8 @@
   }
 
   /* Brutkasten */
-  .incubator-area { margin-bottom: 16px; }
+  .incubator-area { display: flex; gap: 14px; margin-bottom: 16px; }
+  .incubator-col  { flex: 1 1 0; min-width: 0; }
   .incubator-slot {
     min-height: 178px; border: 1.5px dashed var(--border-strong); border-radius: 10px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -967,6 +968,31 @@
   .btn-incubator:hover:not(:disabled) { background: rgba(96,165,250,0.12); border-color: rgba(96,165,250,0.4); }
   .btn-incubator:active:not(:disabled) { transform: scale(0.97); }
   .btn-incubator:disabled { opacity: 0.32; cursor: not-allowed; }
+
+  /* Zweiter Brutkasten — gesperrter Zustand */
+  .incubator-slot-wrap { position: relative; }
+  .incubator-slot.locked { opacity: 0.42; pointer-events: none; }
+  .incubator-lock-layer {
+    display: none;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 34px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25));
+    pointer-events: none;
+  }
+  .incubator-lock-layer.visible { display: block; }
+  .btn-unlock-incubator {
+    display: none;
+    margin: 10px auto 0; padding: 6px 16px; border-radius: 999px;
+    border: 1px solid var(--accent); background: rgba(29,158,117,0.10);
+    color: var(--accent); font-family: -apple-system, sans-serif;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
+  }
+  @media (prefers-color-scheme: dark) {
+    .btn-unlock-incubator { background: rgba(93,202,165,0.12); }
+  }
+  .btn-unlock-incubator:hover  { background: var(--accent); color: #fff; }
+  .btn-unlock-incubator:active { transform: scale(0.96); }
+  .btn-unlock-incubator.visible { display: block; }
 
   /* Inventar */
   .inv-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 2px 0; }
@@ -1637,16 +1663,36 @@
     </div>
 
     <div class="incubator-area">
-      <div class="egg-section-label">Brutkasten</div>
-      <div class="incubator-slot" id="incubatorSlot">
-        <div class="drop-hint" id="dropHint">
-          <div class="drop-hint-icon">🔥</div>
-          Ei aus Inventar hierher ziehen
+      <div class="incubator-col" id="incubatorCol1">
+        <div class="egg-section-label">Brutkasten</div>
+        <div class="incubator-slot" id="incubatorSlot">
+          <div class="drop-hint" id="dropHint">
+            <div class="drop-hint-icon">🔥</div>
+            Ei aus Inventar hierher ziehen
+          </div>
+        </div>
+        <div class="incubator-buttons">
+          <button class="btn-incubator" id="btnMinus1h" disabled>−1h &nbsp;💎1</button>
+          <button class="btn-incubator" id="btnSkip" disabled>Überspringen 💎—</button>
         </div>
       </div>
-      <div class="incubator-buttons">
-        <button class="btn-incubator" id="btnMinus1h" disabled>−1h &nbsp;💎1</button>
-        <button class="btn-incubator" id="btnSkip" disabled>Überspringen 💎—</button>
+
+      <div class="incubator-col" id="incubatorCol2" style="display:none">
+        <div class="egg-section-label">Brutkasten 2</div>
+        <div class="incubator-slot-wrap">
+          <div class="incubator-slot" id="incubatorSlot2">
+            <div class="drop-hint" id="dropHint2">
+              <div class="drop-hint-icon">🔥</div>
+              Ei aus Inventar hierher ziehen
+            </div>
+          </div>
+          <div class="incubator-lock-layer" id="incubatorLockLayer2">🔒</div>
+        </div>
+        <div class="incubator-buttons" id="incubatorButtons2">
+          <button class="btn-incubator" id="btnMinus1h2" disabled>−1h &nbsp;💎1</button>
+          <button class="btn-incubator" id="btnSkip2" disabled>Überspringen 💎—</button>
+        </div>
+        <button class="btn-unlock-incubator" id="btnUnlockIncubator2">+&nbsp;💎30</button>
       </div>
     </div>
 
@@ -2329,6 +2375,13 @@
     return { current, next };
   }
 
+  function hasReachedLevel15() {
+    const lvl15 = activeLevels[14];
+    if (!lvl15) return false;
+    const totalMins = Object.values(days).reduce((s, m) => s + m, 0);
+    return totalMins >= lvl15.minMinutes;
+  }
+
   function renderLevel() {
     const totalMins = Object.values(days).reduce((a, b) => a + b, 0);
     const { current, next } = getCurrentLevel(totalMins);
@@ -2731,6 +2784,8 @@
     if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
     // Brutkasten-Fortschritt neu berechnen
     if (incubatorData) renderIncubator();
+    if (incubatorData2) renderIncubator(2);
+    updateSecondIncubatorVisibility();
   }
 
   function checkLimitlessCheckpoint() {
@@ -2756,6 +2811,8 @@
     const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
     if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
     if (incubatorData) renderIncubator();
+    if (incubatorData2) renderIncubator(2);
+    updateSecondIncubatorVisibility();
     renderTomatoes(); renderHeatmap(); renderStats();
 
     // credited_min auf dem Server nachführen, damit ein Reload/zweites Gerät nicht doppelt kreditiert
@@ -2796,6 +2853,8 @@
         const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
         if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
         if (incubatorData) renderIncubator();
+        if (incubatorData2) renderIncubator(2);
+        updateSecondIncubatorVisibility();
         renderTomatoes(); renderHeatmap(); renderStats();
       }
       if (currentUser) saveTimerState(stashPayload()); // löscht nur die stash_*-Spalten, lässt den aktiven Pausen-Timer server-seitig unangetastet
@@ -2825,6 +2884,8 @@
       const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
       if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
       if (incubatorData) renderIncubator();
+      if (incubatorData2) renderIncubator(2);
+      updateSecondIncubatorVisibility();
       renderTomatoes(); renderHeatmap(); renderStats();
     }
 
@@ -4141,6 +4202,7 @@
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
       userDiamonds  = profile.diamonds || 0;
+      secondIncubatorUnlocked = !!profile.second_incubator_purchased;
       if (profile.eggs) eggsFromProfileString(profile.eggs);
       renderEggDiamonds(); renderInventory();
       displayUnit = profile.display_unit || 'pomodoros';
@@ -5731,6 +5793,9 @@
   // State
   let eggInventory   = Array(10).fill(null);
   let incubatorData  = null; // { color, focus_minutes_at_placement, bonusMin }
+  let incubatorData2 = null; // { color, focus_minutes_at_placement, bonusMin } — Slot 2
+  let secondIncubatorUnlocked = false; // profiles.second_incubator_purchased
+  let eggHatchingSlot = 1;   // welcher Slot gerade im Hatch-Overlay gezeigt wird
   let eggDeck        = [];
   let eggDeckOpen    = false;
   let eggInvOpen     = false;
@@ -5762,10 +5827,12 @@
     const w   = Math.round(px * EGG_STAGE_SCALE[f]);
     return `<img src="${src}" width="${w}" style="display:block;">`;
   }
-  function getEggProgress() {
-    if (!incubatorData) return 0;
+  function incData(n) { return n === 1 ? incubatorData : incubatorData2; }
+  function getEggProgress(n = 1) {
+    const data = incData(n);
+    if (!data) return 0;
     const total = Object.values(days).reduce((s, m) => s + m, 0);
-    return Math.min(total - incubatorData.focus_minutes_at_placement + (incubatorData.bonusMin || 0), EGG_TOTAL_MIN);
+    return Math.min(total - data.focus_minutes_at_placement + (data.bonusMin || 0), EGG_TOTAL_MIN);
   }
   function getEggCrackStage(min) {
     if (min >= EGG_TOTAL_MIN)             return 'ready';
@@ -5824,6 +5891,17 @@
     renderEggDiamonds(); renderInventory();
     saveEggProfile({ diamonds: userDiamonds, eggs: eggsToProfileString() });
   }
+  async function buySecondIncubator() {
+    if (secondIncubatorUnlocked || !hasReachedLevel15()) return;
+    if (userDiamonds < 30) { showEggDiamondError(); return; }
+    userDiamonds -= 30;
+    secondIncubatorUnlocked = true;
+    renderEggDiamonds();
+    updateSecondIncubatorVisibility();
+    renderIncubator(2);
+    await saveEggProfile({ diamonds: userDiamonds, second_incubator_purchased: true });
+  }
+  document.getElementById('btnUnlockIncubator2')?.addEventListener('click', buySecondIncubator);
   function toggleEggInv() {
     eggInvOpen = !eggInvOpen;
     document.getElementById('invContent')?.classList.toggle('open', eggInvOpen);
@@ -5833,29 +5911,31 @@
   document.getElementById('invHeader')?.addEventListener('click', toggleEggInv);
 
   // Brutkasten
-  function renderIncubator() {
-    const slot = document.getElementById('incubatorSlot');
-    const hint = document.getElementById('dropHint');
+  function renderIncubator(n = 1) {
+    const suf  = n === 1 ? '' : String(n);
+    const slot = document.getElementById('incubatorSlot' + suf);
+    const hint = document.getElementById('dropHint' + suf);
     if (!slot) return;
+    const data = incData(n);
     slot.querySelectorAll('.egg-display-wrap').forEach(el => el.remove());
-    if (!incubatorData) { if (hint) hint.style.display = ''; renderIncubatorButtons(); return; }
+    if (!data) { if (hint) hint.style.display = ''; renderIncubatorButtons(n); return; }
     if (hint) hint.style.display = 'none';
 
-    const progress  = getEggProgress();
+    const progress  = getEggProgress(n);
     const stage     = getEggCrackStage(progress);
     const pct       = Math.min((progress / EGG_TOTAL_MIN) * 100, 100);
     const remaining = Math.max(EGG_TOTAL_MIN - progress, 0);
     const isReady   = stage === 'ready';
-    const glow      = EGG_COLORS[incubatorData.color]?.glow || '#fff';
+    const glow      = EGG_COLORS[data.color]?.glow || '#fff';
     const h = Math.floor(remaining / 60), m = remaining % 60;
     const remText = h > 0 ? `noch ${h}h ${m}min` : `noch ${m}min`;
 
     const wrap = document.createElement('div');
     wrap.className = 'egg-display-wrap';
     wrap.innerHTML = `
-      <div class="egg-stage-wrap ${isReady ? 'egg-pulsing' : ''}" id="incEggWrap"
+      <div class="egg-stage-wrap ${isReady ? 'egg-pulsing' : ''}" id="incEggWrap${suf}"
            style="--glow:${glow};${isReady ? 'cursor:pointer' : ''}">
-        ${eggSprite(incubatorData.color, stage, 88)}
+        ${eggSprite(data.color, stage, 88)}
       </div>
       <div class="progress-wrap">
         <div class="progress-track">
@@ -5866,98 +5946,128 @@
         </div>
       </div>`;
     slot.appendChild(wrap);
-    if (isReady) document.getElementById('incEggWrap')?.addEventListener('click', startHatch);
-    renderIncubatorButtons();
+    if (isReady) document.getElementById('incEggWrap' + suf)?.addEventListener('click', () => startHatch(n));
+    renderIncubatorButtons(n);
   }
-  function renderIncubatorButtons() {
-    const progress  = getEggProgress();
+  function renderIncubatorButtons(n = 1) {
+    const suf  = n === 1 ? '' : String(n);
+    const progress  = getEggProgress(n);
     const remaining = Math.max(EGG_TOTAL_MIN - progress, 0);
     const skipCost  = Math.ceil(remaining / 60);
-    const hasEgg    = !!incubatorData;
+    const hasEgg    = !!incData(n);
     const timeLeft  = remaining > 0;
-    const btnM = document.getElementById('btnMinus1h');
-    const btnS = document.getElementById('btnSkip');
+    const btnM = document.getElementById('btnMinus1h' + suf);
+    const btnS = document.getElementById('btnSkip' + suf);
     if (btnM) btnM.disabled = !hasEgg || !timeLeft || userDiamonds < 1;
     if (btnS) { btnS.disabled = !hasEgg || !timeLeft || userDiamonds < skipCost; btnS.innerHTML = `Überspringen &nbsp;💎${skipCost}`; }
   }
-  document.getElementById('btnMinus1h')?.addEventListener('click', () => {
-    if (!incubatorData || userDiamonds < 1) { showEggDiamondError(); return; }
-    if (Math.max(EGG_TOTAL_MIN - getEggProgress(), 0) <= 0) return;
-    userDiamonds -= 1;
-    incubatorData.bonusMin = Math.min((incubatorData.bonusMin || 0) + 60, EGG_TOTAL_MIN);
-    renderEggDiamonds(); renderIncubator();
-    (async () => {
-      const token = await getValidToken();
-      if (!token || !currentUser || !incubatorData) return;
-      const newFmap = incubatorData.focus_minutes_at_placement - incubatorData.bonusMin;
-      await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}`, {
-        method: 'PATCH',
-        headers: { ...authHeaders(token), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ focus_minutes_at_placement: newFmap })
-      });
-      await saveEggProfile({ diamonds: userDiamonds });
-      incubatorData.focus_minutes_at_placement = newFmap;
-      incubatorData.bonusMin = 0;
-    })();
-  });
-  document.getElementById('btnSkip')?.addEventListener('click', () => {
-    if (!incubatorData) return;
-    const remaining = Math.max(EGG_TOTAL_MIN - getEggProgress(), 0);
-    if (remaining <= 0) return;
-    const cost = Math.ceil(remaining / 60);
-    if (userDiamonds < cost) { showEggDiamondError(); return; }
-    userDiamonds -= cost;
-    incubatorData.bonusMin = EGG_TOTAL_MIN;
-    renderEggDiamonds(); renderIncubator();
-    (async () => {
-      const token = await getValidToken();
-      if (!token || !currentUser || !incubatorData) return;
-      const totalMins = Object.values(days).reduce((s, m) => s + m, 0);
-      const newFmap   = totalMins - EGG_TOTAL_MIN;
-      await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}`, {
-        method: 'PATCH',
-        headers: { ...authHeaders(token), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ focus_minutes_at_placement: newFmap })
-      });
-      await saveEggProfile({ diamonds: userDiamonds });
-      incubatorData.focus_minutes_at_placement = newFmap;
-      incubatorData.bonusMin = 0;
-    })();
-  });
+  function updateSecondIncubatorVisibility() {
+    const col = document.getElementById('incubatorCol2');
+    if (!col) return;
+    const eligible = secondIncubatorUnlocked || hasReachedLevel15();
+    col.style.display = eligible ? '' : 'none';
+    if (!eligible) return;
+    const locked = !secondIncubatorUnlocked;
+    document.getElementById('incubatorSlot2')?.classList.toggle('locked', locked);
+    document.getElementById('incubatorLockLayer2')?.classList.toggle('visible', locked);
+    const buttons2 = document.getElementById('incubatorButtons2');
+    if (buttons2) buttons2.style.display = locked ? 'none' : '';
+    document.getElementById('btnUnlockIncubator2')?.classList.toggle('visible', locked);
+  }
+  function bindIncubatorButtons(n) {
+    const suf = n === 1 ? '' : String(n);
+    document.getElementById('btnMinus1h' + suf)?.addEventListener('click', () => {
+      const data = incData(n);
+      if (!data || userDiamonds < 1) { showEggDiamondError(); return; }
+      if (Math.max(EGG_TOTAL_MIN - getEggProgress(n), 0) <= 0) return;
+      userDiamonds -= 1;
+      data.bonusMin = Math.min((data.bonusMin || 0) + 60, EGG_TOTAL_MIN);
+      renderEggDiamonds(); renderIncubator(n);
+      (async () => {
+        const token = await getValidToken();
+        const cur = incData(n);
+        if (!token || !currentUser || !cur) return;
+        const newFmap = cur.focus_minutes_at_placement - cur.bonusMin;
+        await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}&slot_index=eq.${n}`, {
+          method: 'PATCH',
+          headers: { ...authHeaders(token), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ focus_minutes_at_placement: newFmap })
+        });
+        await saveEggProfile({ diamonds: userDiamonds });
+        cur.focus_minutes_at_placement = newFmap;
+        cur.bonusMin = 0;
+      })();
+    });
+    document.getElementById('btnSkip' + suf)?.addEventListener('click', () => {
+      const data = incData(n);
+      if (!data) return;
+      const remaining = Math.max(EGG_TOTAL_MIN - getEggProgress(n), 0);
+      if (remaining <= 0) return;
+      const cost = Math.ceil(remaining / 60);
+      if (userDiamonds < cost) { showEggDiamondError(); return; }
+      userDiamonds -= cost;
+      data.bonusMin = EGG_TOTAL_MIN;
+      renderEggDiamonds(); renderIncubator(n);
+      (async () => {
+        const token = await getValidToken();
+        const cur = incData(n);
+        if (!token || !currentUser || !cur) return;
+        const totalMins = Object.values(days).reduce((s, m) => s + m, 0);
+        const newFmap   = totalMins - EGG_TOTAL_MIN;
+        await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}&slot_index=eq.${n}`, {
+          method: 'PATCH',
+          headers: { ...authHeaders(token), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ focus_minutes_at_placement: newFmap })
+        });
+        await saveEggProfile({ diamonds: userDiamonds });
+        cur.focus_minutes_at_placement = newFmap;
+        cur.bonusMin = 0;
+      })();
+    });
+  }
+  bindIncubatorButtons(1);
+  bindIncubatorButtons(2);
 
   // Drag & Drop → Brutkasten
-  const _eggIncSlot = document.getElementById('incubatorSlot');
-  _eggIncSlot?.addEventListener('dragover', (e) => {
-    if (incubatorData) return;
-    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-    _eggIncSlot.classList.add('drag-over');
-  });
-  _eggIncSlot?.addEventListener('dragleave', (e) => {
-    if (!_eggIncSlot.contains(e.relatedTarget)) _eggIncSlot.classList.remove('drag-over');
-  });
-  _eggIncSlot?.addEventListener('drop', (e) => {
-    e.preventDefault(); _eggIncSlot.classList.remove('drag-over');
-    if (incubatorData || !eggDraggedId) return;
-    const idx = eggInventory.findIndex(eg => eg && eg.id === eggDraggedId);
-    if (idx === -1) return;
-    const egg = eggInventory[idx];
-    eggInventory[idx] = null;
-    const totalMins = Object.values(days).reduce((s, m) => s + m, 0);
-    incubatorData = { color: egg.color, focus_minutes_at_placement: totalMins, bonusMin: 0 };
-    eggDraggedId = null;
-    preloadEggImgs(egg.color);
-    renderInventory(); renderIncubator();
-    (async () => {
-      const token = await getValidToken();
-      if (!token || !currentUser) return;
-      await fetch(`${SB}/rest/v1/incubator`, {
-        method: 'POST',
-        headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: currentUser.id, egg_color: egg.color, placed_at: new Date().toISOString(), focus_minutes_at_placement: totalMins })
-      });
-      await saveEggProfile({ eggs: eggsToProfileString() });
-    })();
-  });
+  function bindIncubatorDragDrop(n) {
+    const suf = n === 1 ? '' : String(n);
+    const el  = document.getElementById('incubatorSlot' + suf);
+    if (!el) return;
+    el.addEventListener('dragover', (e) => {
+      if (incData(n) || (n === 2 && !secondIncubatorUnlocked)) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drag-over');
+    });
+    el.addEventListener('dragleave', (e) => {
+      if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over');
+    });
+    el.addEventListener('drop', (e) => {
+      e.preventDefault(); el.classList.remove('drag-over');
+      if (incData(n) || !eggDraggedId || (n === 2 && !secondIncubatorUnlocked)) return;
+      const idx = eggInventory.findIndex(eg => eg && eg.id === eggDraggedId);
+      if (idx === -1) return;
+      const egg = eggInventory[idx];
+      eggInventory[idx] = null;
+      const totalMins = Object.values(days).reduce((s, m) => s + m, 0);
+      const newData = { color: egg.color, focus_minutes_at_placement: totalMins, bonusMin: 0 };
+      if (n === 1) incubatorData = newData; else incubatorData2 = newData;
+      eggDraggedId = null;
+      preloadEggImgs(egg.color);
+      renderInventory(); renderIncubator(n);
+      (async () => {
+        const token = await getValidToken();
+        if (!token || !currentUser) return;
+        await fetch(`${SB}/rest/v1/incubator?on_conflict=user_id,slot_index`, {
+          method: 'POST',
+          headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: currentUser.id, slot_index: n, egg_color: egg.color, placed_at: new Date().toISOString(), focus_minutes_at_placement: totalMins })
+        });
+        await saveEggProfile({ eggs: eggsToProfileString() });
+      })();
+    });
+  }
+  bindIncubatorDragDrop(1);
+  bindIncubatorDragDrop(2);
   function preloadEggImgs(colorId) {
     const old = document.getElementById('eggPreload');
     if (old) old.remove();
@@ -5969,16 +6079,18 @@
   }
 
   // Schlüpf-Sequenz
-  function startHatch() {
-    if (!incubatorData) return;
-    const wrap = document.getElementById('incEggWrap');
+  function startHatch(n = 1) {
+    const data = incData(n);
+    if (!data) return;
+    eggHatchingSlot = n;
+    const wrap = document.getElementById('incEggWrap' + (n === 1 ? '' : n));
     if (!wrap) return;
     wrap.classList.add('egg-shaking');
-    setTimeout(() => splitEgg(wrap), 480);
+    setTimeout(() => splitEgg(wrap, n), 480);
   }
-  function splitEgg(wrapEl) {
+  function splitEgg(wrapEl, n = 1) {
     const rect  = wrapEl.getBoundingClientRect();
-    const color = EGG_COLORS[incubatorData.color] || EGG_COLORS['y'];
+    const color = EGG_COLORS[incData(n).color] || EGG_COLORS['y'];
     spawnEggChips(rect, color);
     function makeHalf(clip, tx, ty, rot) {
       const d = document.createElement('div');
@@ -6057,6 +6169,7 @@
   document.getElementById('btnDeck')?.addEventListener('click', () => {
     if (!eggCurrentCard) return;
     const card    = eggCurrentCard;
+    const slotN   = eggHatchingSlot;
     const rarity  = card.rarity;
     const overlay = document.getElementById('hatchOverlay');
     const cardEl  = document.getElementById('hatchCardEl').querySelector('.hatch-card');
@@ -6081,13 +6194,14 @@
     .onfinish = () => {
       fly.remove();
       addToEggDeck(card);
-      eggCurrentCard = null; incubatorData = null;
-      renderInventory(); renderIncubator();
+      eggCurrentCard = null;
+      if (slotN === 1) incubatorData = null; else incubatorData2 = null;
+      renderInventory(); renderIncubator(slotN);
       deckBox?.scrollIntoView({ behavior:'smooth', block:'nearest' });
       (async () => {
         const token = await getValidToken();
         if (!token || !currentUser) return;
-        await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}`, {
+        await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}&slot_index=eq.${slotN}`, {
           method: 'DELETE',
           headers: { ...authHeaders(token), 'Prefer': 'return=minimal' }
         });
@@ -6305,10 +6419,14 @@
     try {
       const res  = await fetch(`${SB}/rest/v1/incubator?user_id=eq.${currentUser.id}&select=*`, { headers: authHeaders(token) });
       const rows = await res.json();
-      if (Array.isArray(rows) && rows[0]) {
-        incubatorData = { color: rows[0].egg_color, focus_minutes_at_placement: rows[0].focus_minutes_at_placement, bonusMin: 0 };
-      } else {
-        incubatorData = null;
+      incubatorData  = null;
+      incubatorData2 = null;
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          const data = { color: row.egg_color, focus_minutes_at_placement: row.focus_minutes_at_placement, bonusMin: 0 };
+          if ((row.slot_index || 1) === 1) incubatorData = data;
+          else if (row.slot_index === 2) incubatorData2 = data;
+        }
       }
     } catch(e) { console.warn('loadIncubator error:', e); }
 
@@ -6332,7 +6450,9 @@
       }
     } catch(e) { console.warn('loadUserCards error:', e); }
 
-    renderIncubator();
+    renderIncubator(1);
+    renderIncubator(2);
+    updateSecondIncubatorVisibility();
     renderEggDeck(null, false);
   }
 

@@ -22,11 +22,11 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 
 | Tabelle | Inhalt |
 |---|---|
-| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound |
+| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound, second_incubator_purchased |
 | `study_days` | user_id, date, minutes, off |
 | `pomodoro_sessions` | user_id, date, label, duration_minutes |
 | `timer_state` | user_id, end_at, total_sec, mode, paused_remaining, pomoday, limitless, started_at, credited_min, stash_total_sec, stash_paused_remaining, stash_limitless, stash_pomoday, stash_credited_min |
-| `incubator` | user_id (PK), egg_color char(1), placed_at, focus_minutes_at_placement |
+| `incubator` | user_id + slot_index (PK, slot_index ∈ {1,2}), egg_color char(1), placed_at, focus_minutes_at_placement |
 | `cards` | id int (PK), name, rarity |
 | `user_cards` | id uuid (PK), user_id, card_id, obtained_at |
 | `clans` | id, name, leader_id, min_focus_min, max_focus_min, level_config (JSONB), created_at |
@@ -38,7 +38,7 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 
 `profiles.clan_role` ist `'leader'` | `'member'` | null.
 
-`incubator` hat max. 1 Zeile pro Nutzer. Brut-Fortschritt = `sum(study_days.minutes) − focus_minutes_at_placement`, Ziel = 600.
+`incubator` hat max. 2 Zeilen pro Nutzer (`slot_index` 1/2, PK ist das Paar) — Slot 2 nur nutzbar nach Kauf (`profiles.second_incubator_purchased`, ab Level 15, siehe „Zweiter Brutkasten"). Brut-Fortschritt je Slot = `sum(study_days.minutes) − focus_minutes_at_placement`, Ziel = 600.
 
 `clans.level_config` ist ein JSONB-Array mit 25 Einträgen `{ name, icon, minMinutes }`.
 
@@ -80,7 +80,10 @@ currentLabel  // aktuelles Session-Label
 currentStatsPeriod  // 'today' | 'month' | 'alltime' — Label-Stats-Tab
 userDiamonds  // number — aktueller Diamanten-Stand (aus profiles.diamonds)
 eggInventory  // Array[10] — null | { id, color } — lokale Kopie aus profiles.eggs
-incubatorData // null | { color, focus_minutes_at_placement, bonusMin } — aus incubator-Tabelle
+incubatorData // null | { color, focus_minutes_at_placement, bonusMin } — Slot 1, aus incubator-Tabelle
+incubatorData2       // null | { color, focus_minutes_at_placement, bonusMin } — Slot 2 (nur ab Level 15 + Kauf nutzbar)
+secondIncubatorUnlocked // boolean — aus profiles.second_incubator_purchased, permanent nach Kauf
+eggHatchingSlot      // 1 | 2 — welcher Slot gerade im Hatch-Overlay gezeigt wird (für btnDeck-Handler)
 eggDeck       // Array von { id, name, rarity, src, count } — aus user_cards
 clanRole      // 'leader' | 'member' | null — aus profiles.clan_role
 clanId        // uuid | null — aus profiles.clan_id
@@ -340,8 +343,18 @@ Schwellen = `600 × [0.35, 0.70, 1.0]`.
 | Neues Ei kaufen | 12 💎 |
 | Brutzeit −1h | 1 💎 |
 | Brutzeit überspringen | ⌈verbleibende Stunden⌉ 💎 |
+| Zweiter Brutkasten (einmalig, ab Level 15) | 30 💎 |
 
 Fehler-Banner bei zu wenig Diamanten: „Du bist wohl gesetzlich versichert. Verdiene mehr Diamanten und probiere es nochmal!"
+
+### Zweiter Brutkasten
+
+- Ab Level 15 (`hasReachedLevel15()`, index-basiert über `activeLevels[14].minMinutes` — robust gegen abweichend lange `clans.level_config`-Arrays) erscheint eine zweite Spalte (`#incubatorCol2`) neben dem bestehenden Brutkasten, per Kauf für 30 💎 dauerhaft freischaltbar (`buySecondIncubator()`, `profiles.second_incubator_purchased`). Bis Level 15 ist `#incubatorCol2` statisch `display:none` im Markup — keinerlei Layout-Unterschied für Nutzer unterhalb Level 15
+- **Parametrisiert statt dupliziert**: `getEggProgress`, `renderIncubator`, `renderIncubatorButtons`, `startHatch`, `splitEgg` nehmen alle einen Slot-Parameter `n` (Default `1`, bestehende Aufrufe ohne Argument bleiben unverändert Slot 1). Der Zugriff auf den jeweiligen State läuft über `incData(n)` (`n===1 ? incubatorData : incubatorData2`). DOM-IDs sind für Slot 2 mit `2` suffixiert (`incubatorSlot2`, `btnMinus1h2`, `btnSkip2`, inkl. der dynamisch erzeugten `incEggWrap2` — wichtig, da zwei gleichzeitig schlüpfbereite Eier sonst um dieselbe ID kollidieren würden)
+- **Bind-Funktionen statt Top-Level-Listener**: die −1h/Skip-Klick-Handler (`bindIncubatorButtons(n)`) und der Drag&Drop-Handler auf den Slot (`bindIncubatorDragDrop(n)`) werden je einmal für `n=1` und `n=2` aufgerufen. Alle Supabase-Schreibpfade auf `incubator` filtern zusätzlich auf `slot_index` (`&slot_index=eq.${n}` bei PATCH/DELETE, `slot_index: n` im Body + `?on_conflict=user_id,slot_index` beim Upsert) — sonst würden sich beide Slots gegenseitig überschreiben/löschen, da die PK jetzt `(user_id, slot_index)` ist
+- **Gesperrter Zustand** (Level 15 erreicht, aber noch nicht gekauft): `.incubator-slot.locked` (opacity 0.42, kein Blur), großes 🔒 (34px) als eigene, nicht gedimmte Ebene zentriert über dem Slot (`.incubator-lock-layer`), keine −1h/Skip-Buttons (komplett ausgeblendet, nicht nur disabled), stattdessen eine schmale Pillen-Schaltfläche „+ 💎30" (`#btnUnlockIncubator2`). `updateSecondIncubatorVisibility()` steuert diesen Zustand (aufgerufen nach `loadEggData()` und an allen 4 Level-Up-Stellen, analog zu `if (incubatorData) renderIncubator();`)
+- Nach dem Kauf verhält sich Slot 2 in jeder Hinsicht wie Slot 1 (Drag&Drop, −1h/Skip, Schlüpfen) — kein erneutes Level-Gating, `secondIncubatorUnlocked` ist permanent
+- `eggHatchingSlot` merkt sich beim Schlüpfen, aus welchem Slot die gerade im Overlay gezeigte Karte stammt, damit der „In Deck legen"-Handler (`btnDeck`) die richtige `incubator`-Zeile löscht und den richtigen State (`incubatorData`/`incubatorData2`) leert
 
 ---
 
@@ -394,10 +407,11 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 
 ### Eier & Kartensammlung — Supabase-Schreibpfade
 - **Ei kaufen**: PATCH `profiles` (diamonds + eggs)
-- **-1h / Skip**: PATCH `incubator` (focus_minutes_at_placement) + PATCH `profiles` (diamonds); normalisiert lokales `bonusMin` auf 0
-- **Drag & Drop → Brutkasten**: POST-Upsert `incubator` + PATCH `profiles.eggs`
+- **Zweiten Brutkasten kaufen**: PATCH `profiles` (diamonds + second_incubator_purchased)
+- **-1h / Skip**: PATCH `incubator?user_id=eq.<id>&slot_index=eq.<n>` (focus_minutes_at_placement) + PATCH `profiles` (diamonds); normalisiert lokales `bonusMin` auf 0
+- **Drag & Drop → Brutkasten**: POST-Upsert `incubator` (Body inkl. `slot_index`, `?on_conflict=user_id,slot_index`) + PATCH `profiles.eggs`
 - **Schlüpfen**: `draw_card()` RPC (serverseitig) → INSERT `user_cards`; bei Fehler lokaler Fallback
-- **Karte ins Deck**: DELETE `incubator`
+- **Karte ins Deck**: DELETE `incubator?user_id=eq.<id>&slot_index=eq.<n>` (nur die Zeile des Slots, aus dem geschlüpft wurde)
 - **Level-Up-Ei**: PATCH `profiles.eggs` via `saveEggProfile()`
 - **Duplikat verkaufen**: `sell_card(p_card_id)` RPC (atomar: DELETE `user_cards` + UPDATE `profiles.diamonds`); nur möglich wenn `count > 1`; Belohnung: common 2 / rare 4 / epic 6 / legendary 8 / mystic 10 💎
 
