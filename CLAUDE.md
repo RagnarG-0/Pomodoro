@@ -270,6 +270,14 @@ claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der a
 
 Level-Up → `awardEgg()` (zufällige Farbe in ersten freien Slot; bei vollem Inventar wird ältestes Ei ersetzt).
 
+### Level-15-Feier-Overlay
+
+Beim erstmaligen Überschreiten der Level-15-Schwelle (`activeLevels[14]`, gleiche Schwelle wie „Zweiter Brutkasten") zeigt `celebrateLevel15()` (`#level15Overlay`) ein persönliches Feier-Bild als Full-Screen-Overlay: dreht sich ein (720°, Bounce-Scale), kommt zur Ruhe, danach Konfetti-Burst, bleibt stehen bis „Weiter" geklickt wird. Bild liegt relativ im Repo (`level15.jpg`, **nicht** über die `CDN`-jsDelivr-Konstante wie Eier/Karten — ein frisch gepushtes File auf `@main` kann dort bis zu 24h gecacht ausbleiben). Titel ist ein fest hinterlegter Text (kein `activeLevels[14].label`) — ein persönlicher Insider-Gag zu diesem einen Meilenstein, kein allgemeiner Level-Name.
+
+- **Erkennung**: `crossedLevel15(lvlBefore, lvlAfter)` ist ein reiner Edge-Trigger, unabhängig vom generischen `awardEgg()`-Level-Up-Check daneben, aufgerufen an denselben 4 Level-Up-Stellen (`completePomo()`, `checkLimitlessCheckpoint()`, beide Zweige von `checkDayRollover()`). Da Fokusminuten nie sinken, feuert das garantiert nur einmal im Leben eines Accounts; bereits über Level 15 stehende Bestandsnutzer lösen es nie aus.
+- **Animation**: Rotation (`.lvl15-frame-wrap`) und Scale-in-Bounce (`.lvl15-frame`) laufen bewusst als zwei getrennte CSS-Animationen auf zwei verschiedenen Elementen statt einem gemeinsamen Keyframe-Set für `rotate()+scale()` — Letzteres erzeugte einen sichtbaren Ruckler gegen Ende (die Easing-Kurve der Rotation kollidierte mit dem Scale-Bounce-Overshoot). Der Glow-Kreis dahinter ist radialsymmetrisch, seine Mitrotation fällt nicht auf.
+- **Dismiss**: `cloneNode`/`replaceWith`-Muster (wie `showTimerConfirmBanner()`) verhindert Listener-Stacking.
+
 ---
 
 ## Karten-Katalog (33 Karten)
