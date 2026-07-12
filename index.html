@@ -2062,6 +2062,7 @@
   }
 
   function save() {
+    if (currentUser) return; // eingeloggt: Supabase ist Quelle der Wahrheit, kein lokaler Mirror
     try { localStorage.setItem(KEY, JSON.stringify({days, offDays, offWeekdays, totalPomodoros})); } catch(e) {}
   }
 
