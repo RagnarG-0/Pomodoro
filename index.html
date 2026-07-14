@@ -3009,7 +3009,10 @@
   // aktiver „Automatische Pausen"-Einstellung; sonst immer false, Verhalten
   // dann 1:1 wie vor diesem Feature).
   function switchTo(m, autoStart) {
-    if (m === 'work') setFocusMode(true);
+    // Automatische Aktivierung nur im Limitless-Modus mit „Automatische Pausen"
+    // (dort läuft der Fokus über Checkpoints hinweg ohnehin unbeaufsichtigt weiter).
+    // Sonst nur manuell per Klick auf #focus-toggle-btn.
+    if (m === 'work' && limitlessSetting && autoBreaksSetting) setFocusMode(true);
     mode=m; syncModeBtns();
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_RESET' }); // zentral hier statt pro Aufrufer; im SW idempotent
@@ -3718,7 +3721,7 @@
     try {
       await restoreTimerStateInner(state);
     } finally {
-      if (mode === 'work') setFocusMode(true);
+      if (mode === 'work' && limitlessSetting && autoBreaksSetting) setFocusMode(true);
     }
   }
 
