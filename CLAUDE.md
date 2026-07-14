@@ -33,6 +33,8 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `clan_requests` | id, clan_id, user_id, status (`pending`/`accepted`/`rejected`), created_at |
 | `weekly_challenges` | challenge_key (PK), tier, metric_type, param_n, param_h, reward_diamonds, pool_index, label, active |
 | `weekly_challenge_claims` | id uuid (PK), user_id, week_start, challenge_key, reward_diamonds (Snapshot), claimed_at |
+| `card_listings` | id uuid (PK), seller_id, user_card_id (verweist auf konkrete `user_cards`-Zeile), card_id, price_diamonds, status (`active`/`sold`/`cancelled`), buyer_id, created_at, sold_at |
+| `card_trades` | id uuid (PK), listing_id, seller_id, buyer_id, card_id, user_card_id, price_diamonds, traded_at — unveränderliches Audit-Log, kein UPDATE/DELETE möglich |
 
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
@@ -62,6 +64,9 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `my_clan_id()` | Hilfsfunktion für RLS-Policy (SECURITY DEFINER, kein direkter Aufruf) |
 | `calc_week_streak(p_week_start, p_user_id)` | Streak innerhalb einer Kalenderwoche, wie `computeCurrentStreak()` (SECURITY DEFINER). Freie Tage zählen wie normale Tage — kein Off-Day-Skip, siehe „Freie Tage" unter Bekannte Designentscheidungen |
 | `claim_weekly_challenge(p_challenge_key)` | Prüft Rotation/Schwellenwert serverseitig neu, schreibt Claim + Diamanten gut, gibt neuen Diamanten-Stand zurück |
+| `create_listing(p_card_id, p_price_diamonds)` | Wählt serverseitig die älteste noch nicht aktiv gelistete Kopie der Karte, legt `card_listings`-Zeile an, gibt `listing id uuid` zurück |
+| `cancel_listing(p_listing_id)` | Claim-Mutex-Update `active→cancelled`, nur eigene Angebote |
+| `buy_listing(p_listing_id)` | Atomare Kauf-Transaktion: Claim-Mutex `active→sold`, Diamanten-Transfer, `user_cards.user_id`-Übertragung, `card_trades`-Log-Eintrag, gibt neuen Diamanten-Stand des Käufers zurück. Siehe „Tauschbörse" |
 
 ---
 
@@ -97,6 +102,10 @@ challengesActiveTier // 'leicht' | 'mittel' | 'schwer' — aktiver Tab in der Wo
 claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der aktuellen Woche
 newDesignOn   // boolean — Settings-Opt-in „Neues Design" (Bento-Grid ab Desktop-Breite), Default aus, geräte-lokal
 focusModeOn   // boolean — Fokus-Modus (blendet alle Karten außer Timer aus), manuell + automatisch bei mode==='work'
+marketListings // Array — aktive Angebote aller Spieler, aus card_listings (Tab „Alle Angebote")
+myListings     // Array — eigene aktive Angebote (Tab „Meine Angebote")
+marketTab      // 'all' | 'mine' — aktiver Tab in der Tauschbörse
+marketLoaded   // boolean — verhindert Doppel-Fetch beim ersten Aufklappen der Deck-Box
 ```
 
 ---
@@ -397,6 +406,22 @@ Fehler-Banner bei zu wenig Diamanten: „Du bist wohl gesetzlich versichert. Ver
 
 ---
 
+## Tauschbörse (Karten-Marktplatz)
+
+Integriert in die bestehende Deck-Box (`#deckBox`, unterhalb des `#deckGrid`-Kartenrasters), keine eigene Karte. Nutzer bieten Karten aus `user_cards` für einen frei gewählten Diamanten-Preis an — jede Karte, auch die letzte/einzige Kopie (keine Mindestbestand-Regel wie bei `sell_card()`). Angebote sind für alle Spieler sichtbar, keine Handels-Gebühr (ein Trade ist ein reiner Diamanten-Transfer, kann die Gesamtmenge im System nicht erhöhen).
+
+- **Transaktionsmodell**: keine Blockchain — eine einzige vertrauenswürdige Postgres-Instanz braucht kein Hash-Chaining/verteilten Konsens. Stattdessen eine `SECURITY DEFINER`-RPC (`buy_listing()`) als atomare ACID-Transaktion + ein unveränderliches Audit-Log (`card_trades`, insert-only, keine RLS-Policy erlaubt UPDATE/DELETE). Claim-Mutex-Pattern wie bei `timer_state`: `UPDATE card_listings SET status='sold' ... WHERE status='active' RETURNING *` — 0 Zeilen zurück heißt, ein anderer Käufer war schneller.
+- **`card_listings` referenziert die konkrete `user_cards`-Zeile** (`user_card_id`) statt sie zu löschen/neu anzulegen — Ownership bleibt bis zum Kauf beim Verkäufer, `buy_listing()` ändert am Ende nur `user_cards.user_id`. `card_id` ist zusätzlich denormalisiert gespeichert, weil die RLS-Policy `user_cards_select_own` anderen Nutzern die Zeile komplett verbirgt — ohne Denormalisierung könnte der Browse-Feed die Kartenart nicht anzeigen.
+- **Ein partieller Unique-Index** (`card_listings_one_active_per_card` auf `user_card_id WHERE status='active'`) garantiert, dass eine physische Karten-Kopie nie zweimal gleichzeitig aktiv gelistet ist — bei Nebenläufigkeit schlägt der zweite `INSERT` mit `unique_violation` fehl.
+- **`buy_listing(p_listing_id)`**: Claim-Mutex → Selbstkauf-Schutz → `SELECT ... FOR UPDATE` auf die Käufer-Profil-Zeile (sperrt sie, *bevor* der Kontostand geprüft wird — verhindert, dass zwei parallele Käufe desselben Nutzers denselben veralteten Kontostand lesen und den Saldo ins Negative treiben) → Diamanten-Transfer → `user_cards.user_id`-Übertragung → `card_trades`-Eintrag. Jeder `RAISE EXCEPTION` rollt die gesamte Funktion zurück, es gibt nie einen Zwischenzustand.
+- **`sell_card()` schließt aktiv gelistete Kopien aus** (`WHERE id NOT IN (SELECT user_card_id FROM card_listings WHERE status='active')`) — sonst könnte ein Duplikat-Verkauf genau die Kopie löschen, die gerade auf dem Marktplatz hängt (führt wegen `buy_listing()`s `source_card_missing`-Guard nicht zu Diamanten-Diebstahl, aber zu einem unverkäuflichen Geister-Angebot).
+- **`profiles_read_active_sellers`**-RLS-Policy (über `has_active_listing()`, SECURITY DEFINER) erlaubt das Lesen des `profiles.username` eines Verkäufers mit aktivem Angebot, unabhängig von dessen `public`/Clan-Status — sonst würde der Verkäufername im Browse-Feed für private Profile `null` liefern.
+- **Client**: `fetchMarketListings()`/`fetchMyListings()` laden lazy beim ersten Aufklappen der Deck-Box (`toggleEggDeck()`, `marketLoaded`-Guard), Cache über `cacheGet`/`cacheSet` mit `CACHE_TTL_MARKET` (30s). Tab-Umschaltung „Alle Angebote"/„Meine Angebote" nutzt die bestehende `.lb-tab`-Klasse (`.market-tab`, schmal statt `flex:1`).
+- **`showEggCardView()` ist um einen optionalen `market`-Parameter erweitert** (`{ mode:'browse'|'mine', listingId, price, isMine }`): `mode:'browse'` zeigt einen Kauf-Button (oder „Dein eigenes Angebot" bei `isMine`), `mode:'mine'` einen Storno-Button, `market:null` (normale eigene Deck-Ansicht) zeigt zusätzlich zum bestehenden Duplikat-Verkauf-Button einen neuen „Zum Verkauf anbieten"-Button. Ein zusätzlicher `readOnly`-Parameter verhindert, dass dieser Button in der fremden Mitglieder-Deck-Ansicht (`showMemberDeck()`/`renderMemberDeckGrid()`, über den Leaderboard-🃏-Button) erscheint.
+- **RPC-autoritatives Muster** (wie `sellCard()`): `buyListing()` übernimmt den von der RPC zurückgegebenen neuen Diamanten-Stand, kein optimistisches Client-Rechnen bei dieser Zwei-Parteien-Transaktion.
+
+---
+
 ## Label-Stats Overlay
 
 - Tabs: **Heute** (`today_minutes`) / **Monat** (`month_minutes`) / **Gesamt** (`alltime_minutes`)
@@ -453,6 +478,9 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 - **Karte ins Deck**: DELETE `incubator?user_id=eq.<id>&slot_index=eq.<n>` (nur die Zeile des Slots, aus dem geschlüpft wurde)
 - **Level-Up-Ei**: PATCH `profiles.eggs` via `saveEggProfile()`
 - **Duplikat verkaufen**: `sell_card(p_card_id)` RPC (atomar: DELETE `user_cards` + UPDATE `profiles.diamonds`); nur möglich wenn `count > 1`; Belohnung: common 2 / rare 4 / epic 6 / legendary 8 / mystic 10 💎
+- **Karte anbieten**: `create_listing(p_card_id, p_price_diamonds)` RPC → INSERT `card_listings`
+- **Angebot zurückziehen**: `cancel_listing(p_listing_id)` RPC (Claim-Mutex-Update `active→cancelled`)
+- **Karte kaufen**: `buy_listing(p_listing_id)` RPC (atomar: Diamanten-Transfer + `user_cards.user_id`-Übertragung + `card_trades`-Log), siehe „Tauschbörse"
 
 ---
 

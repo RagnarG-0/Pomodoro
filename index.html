@@ -1023,10 +1023,26 @@
   /* Deck-Box */
   .deck-toggle-area { cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
   .deck-content { overflow: hidden; max-height: 0; transition: max-height 0.32s ease, margin-top 0.32s ease; margin-top: 0; }
-  .deck-content.open { max-height: 700px; margin-top: 16px; }
+  .deck-content.open { max-height: 1400px; margin-top: 16px; }
   .deck-grid  { display: flex; flex-wrap: wrap; gap: 10px; }
   .deck-empty { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--text-muted); opacity: 0.5; text-align: center; padding: 12px 0; width: 100%; }
   .deck-card-wrap { position: relative; }
+  .market-divider { height: 1px; background: var(--border-strong); opacity: 0.4; margin: 14px 0 10px; }
+  .market-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .market-tabs    { display: flex; gap: 6px; margin-bottom: 10px; }
+  .market-tab     { flex: none; }
+  .market-grid    { display: flex; flex-wrap: wrap; gap: 10px; }
+  .market-card-price {
+    position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #fff; font-size: 9px; font-weight: 700;
+    padding: 2px 7px; border-radius: 10px; white-space: nowrap;
+    font-family: -apple-system, sans-serif;
+  }
+  .market-card-seller {
+    font-family: -apple-system, sans-serif; font-size: 9px; color: var(--text-muted);
+    text-align: center; margin-top: 6px; max-width: 60px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
   .deck-card {
     width: 60px; height: 82px; border-radius: 8px;
     border: 1.5px solid var(--card-color, #999); background: var(--card-bg, #222);
@@ -1938,6 +1954,18 @@
       <div class="deck-grid" id="deckGrid">
         <div class="deck-empty">Noch keine Karten</div>
       </div>
+
+      <div class="market-divider"></div>
+      <div class="market-header">
+        <div class="hmap-label" style="font-size:13px;">🛒 Tauschbörse</div>
+      </div>
+      <div class="market-tabs">
+        <button class="lb-tab market-tab active" data-filter="all">Alle Angebote</button>
+        <button class="lb-tab market-tab" data-filter="mine">Meine Angebote</button>
+      </div>
+      <div class="market-grid" id="marketGrid">
+        <div class="deck-empty">Noch keine Angebote</div>
+      </div>
     </div>
   </div>
 
@@ -2068,8 +2096,15 @@
   let currentLabelStatsData = [];
   let currentStatsPeriod = 'alltime';
 
+  // Tauschbörse
+  let marketListings = [];   // aktive Angebote (alle Spieler), aus card_listings
+  let myListings = [];       // eigene aktive Angebote ("Meine Angebote"-Tab)
+  let marketTab = 'all';     // 'all' | 'mine'
+  let marketLoaded = false;  // verhindert Doppel-Fetch beim ersten Aufklappen der Deck-Box
+
   const CACHE_TTL_LABEL_STATS = 5 * 60 * 1000;
   const CACHE_TTL_LB = { today: 2 * 60 * 1000, week: 10 * 60 * 1000, month: 10 * 60 * 1000, alltime: 10 * 60 * 1000, wins: 10 * 60 * 1000 };
+  const CACHE_TTL_MARKET = 30 * 1000;
 
   function cacheGet(key, ttl) {
     try {
@@ -6605,10 +6640,41 @@
   }
   const CARD_SELL_REWARDS = { normal: 4, selten: 8, episch: 12, legendaer: 16, mystisch: 20 };
 
-  function showEggCardView({ id, src, rarity, count = 1 }) {
+  // market: { mode:'browse', listingId, price, isMine } | { mode:'mine', listingId, price } | null
+  // readOnly: true bei der Mitglieder-Deck-Ansicht (fremde Karten, nie handelbar von hier aus)
+  function showEggCardView({ id, src, rarity, count = 1, market = null, readOnly = false }) {
     const isMyst  = rarity.key === 'mystisch';
-    const canSell = count > 1;
+    const canSell = !market && !readOnly && count > 1;
+    const canList = !market && !readOnly;
     const reward  = CARD_SELL_REWARDS[rarity.key] ?? 0;
+
+    let actionHtml = '';
+    if (market?.mode === 'browse') {
+      actionHtml = market.isMine
+        ? `<div style="font-family:-apple-system,sans-serif;font-size:12px;color:var(--text-muted);text-align:center;">Dein eigenes Angebot</div>`
+        : `<button class="card-sell-btn" id="marketBuyBtn">Kaufen &nbsp;💎${market.price}</button>
+           <div id="marketBuyConfirmRow" style="display:none;flex-direction:row;gap:8px;">
+             <button class="card-sell-btn confirm" id="marketBuyYes">Ja, kaufen &nbsp;💎${market.price}</button>
+             <button class="card-sell-btn" id="marketBuyNo">Abbrechen</button>
+           </div>`;
+    } else if (market?.mode === 'mine') {
+      actionHtml = `<button class="card-sell-btn" id="marketCancelBtn">Angebot zurückziehen</button>`;
+    } else if (canList) {
+      actionHtml = `
+        ${canSell ? `
+        <button class="card-sell-btn" id="cardSellBtn">Duplikat verkaufen &nbsp;💎${reward}</button>
+        <div id="cardSellConfirmRow" style="display:none;flex-direction:row;gap:8px;">
+          <button class="card-sell-btn confirm" id="cardSellYes">Ja, verkaufen &nbsp;💎${reward}</button>
+          <button class="card-sell-btn" id="cardSellNo">Abbrechen</button>
+        </div>` : ''}
+        <button class="card-sell-btn" id="cardListBtn">Zum Verkauf anbieten</button>
+        <div id="cardListForm" style="display:none;flex-direction:row;gap:8px;align-items:center;">
+          <div class="inp-wrap"><input type="number" id="cardListPrice" value="10" min="1" max="9999" style="width:60px;"> 💎</div>
+          <button class="card-sell-btn confirm" id="cardListYes">Anbieten</button>
+          <button class="card-sell-btn" id="cardListNo">Abbrechen</button>
+        </div>`;
+    }
+
     document.getElementById('cardViewEl').innerHTML = `
       <div class="hatch-card" style="border-color:${rarity.color};box-shadow:0 0 30px ${rarity.color}66,0 0 60px ${rarity.color}22;background:${rarity.bg}">
         <div class="hatch-card-glow" style="background:${rarity.color}"></div>
@@ -6617,12 +6683,8 @@
           style="${isMyst?'':` background:${rarity.color}20;color:${rarity.color};border:1px solid ${rarity.color}44`}">
           ${rarity.name}</div>
       </div>
-      ${canSell ? `
-        <button class="card-sell-btn" id="cardSellBtn">Duplikat verkaufen &nbsp;💎${reward}</button>
-        <div id="cardSellConfirmRow" style="display:none;flex-direction:row;gap:8px;">
-          <button class="card-sell-btn confirm" id="cardSellYes">Ja, verkaufen &nbsp;💎${reward}</button>
-          <button class="card-sell-btn" id="cardSellNo">Abbrechen</button>
-        </div>` : ''}`;
+      ${actionHtml}`;
+
     if (canSell) {
       const btnSell    = document.getElementById('cardSellBtn');
       const confirmRow = document.getElementById('cardSellConfirmRow');
@@ -6647,6 +6709,65 @@
         else { toast('Fehler beim Verkaufen – bitte erneut versuchen'); btnYes.disabled = false; }
       });
     }
+
+    if (canList) {
+      const btnList = document.getElementById('cardListBtn');
+      const form    = document.getElementById('cardListForm');
+      btnList.addEventListener('click', e => {
+        e.stopPropagation();
+        btnList.style.display = 'none';
+        form.style.display = 'flex';
+      });
+      document.getElementById('cardListNo').addEventListener('click', e => {
+        e.stopPropagation();
+        form.style.display = 'none';
+        btnList.style.display = '';
+      });
+      document.getElementById('cardListYes').addEventListener('click', async e => {
+        e.stopPropagation();
+        const price = parseInt(document.getElementById('cardListPrice').value, 10);
+        if (!Number.isFinite(price) || price <= 0) { toast('Bitte einen gültigen Preis eingeben'); return; }
+        e.target.disabled = true;
+        const ok = await createListing(id, price);
+        document.getElementById('cardViewOverlay').classList.remove('visible');
+        if (ok) toast(`Karte für 💎${price} angeboten`);
+        else toast('Fehler beim Anbieten – bitte erneut versuchen');
+      });
+    }
+
+    if (market?.mode === 'browse' && !market.isMine) {
+      const btnBuy = document.getElementById('marketBuyBtn');
+      const row    = document.getElementById('marketBuyConfirmRow');
+      btnBuy.addEventListener('click', e => {
+        e.stopPropagation();
+        btnBuy.style.display = 'none';
+        row.style.display = 'flex';
+      });
+      document.getElementById('marketBuyNo').addEventListener('click', e => {
+        e.stopPropagation();
+        row.style.display = 'none';
+        btnBuy.style.display = '';
+      });
+      document.getElementById('marketBuyYes').addEventListener('click', async e => {
+        e.stopPropagation();
+        e.target.disabled = true;
+        const ok = await buyListing(market.listingId, market.price);
+        document.getElementById('cardViewOverlay').classList.remove('visible');
+        if (ok) toast(`Karte gekauft! −💎${market.price}`);
+      });
+    }
+
+    if (market?.mode === 'mine') {
+      document.getElementById('marketCancelBtn').addEventListener('click', async e => {
+        e.stopPropagation();
+        e.target.disabled = true;
+        const ok = await cancelListing(market.listingId);
+        document.getElementById('cardViewOverlay').classList.remove('visible');
+        if (ok) toast('Angebot zurückgezogen');
+        else toast('Konnte Angebot nicht zurückziehen');
+      });
+    }
+
     document.getElementById('cardViewOverlay').classList.add('visible');
   }
   async function sellCard(cardId, reward) {
@@ -6676,8 +6797,146 @@
     document.getElementById('deckContent')?.classList.toggle('open', eggDeckOpen);
     const btn = document.getElementById('deckBtn');
     if (btn) btn.textContent = eggDeckOpen ? '▲ zuklappen' : '▼ aufklappen';
+    if (eggDeckOpen && !marketLoaded) {
+      marketLoaded = true;
+      fetchMarketListings();
+      fetchMyListings();
+    }
   }
   document.getElementById('deckToggle')?.addEventListener('click', toggleEggDeck);
+
+  // ── Tauschbörse ──────────────────────────────────────────────────────────
+  document.querySelectorAll('#deckBox .market-tab').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('#deckBox .market-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      marketTab = btn.dataset.filter;
+      renderMarketGrid();
+    });
+  });
+
+  async function fetchMarketListings(force = false) {
+    const cacheKey = 'pomo_market_cache';
+    if (!force) {
+      const cached = cacheGet(cacheKey, CACHE_TTL_MARKET);
+      if (cached) { marketListings = cached; renderMarketGrid(); return; }
+    }
+    try {
+      const token = await getValidToken();
+      const res = await fetch(
+        `${SB}/rest/v1/card_listings?status=eq.active&select=id,card_id,price_diamonds,seller_id,created_at,profiles(username)&order=created_at.desc&limit=50`,
+        { headers: authHeaders(token) }
+      );
+      const rows = await res.json();
+      marketListings = Array.isArray(rows) ? rows : [];
+      cacheSet(cacheKey, marketListings);
+    } catch(e) { console.warn('fetchMarketListings error:', e); }
+    renderMarketGrid();
+  }
+
+  async function fetchMyListings() {
+    if (!currentUser) return;
+    try {
+      const token = await getValidToken();
+      const res = await fetch(
+        `${SB}/rest/v1/card_listings?seller_id=eq.${currentUser.id}&status=eq.active&select=id,card_id,price_diamonds,created_at&order=created_at.desc`,
+        { headers: authHeaders(token) }
+      );
+      const rows = await res.json();
+      myListings = Array.isArray(rows) ? rows : [];
+    } catch(e) { console.warn('fetchMyListings error:', e); }
+    renderMarketGrid();
+  }
+
+  function renderMarketGrid() {
+    const grid = document.getElementById('marketGrid');
+    if (!grid) return;
+    const list = marketTab === 'all' ? marketListings : myListings;
+    if (!list.length) { grid.innerHTML = '<div class="deck-empty">Noch keine Angebote</div>'; return; }
+    grid.innerHTML = '';
+    list.forEach(listing => {
+      const entry = CARD_CATALOG.find(c => c.id === listing.card_id);
+      if (!entry) return;
+      const rarity = EGG_RARITIES.find(r => r.folder === entry.rarity);
+      if (!rarity) return;
+      const src    = encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`);
+      const isMine = marketTab === 'all' && listing.seller_id === currentUser?.id;
+      const wrap = document.createElement('div');
+      wrap.className = 'deck-card-wrap';
+      wrap.innerHTML = `
+        <div class="deck-card" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
+          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+          <div class="market-card-price">💎${listing.price_diamonds}</div>
+        </div>
+        ${marketTab === 'all' ? `<div class="market-card-seller">${isMine ? 'Du' : (listing.profiles?.username || 'Anonym')}</div>` : ''}`;
+      grid.appendChild(wrap);
+      wrap.querySelector('.deck-card').addEventListener('click', () => {
+        showEggCardView({
+          src, rarity,
+          market: marketTab === 'all'
+            ? { mode: 'browse', listingId: listing.id, price: listing.price_diamonds, isMine }
+            : { mode: 'mine', listingId: listing.id, price: listing.price_diamonds },
+        });
+      });
+    });
+  }
+
+  async function createListing(cardId, price) {
+    try {
+      const token = await getValidToken();
+      const res = await fetch(`${SB}/rest/v1/rpc/create_listing`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ p_card_id: cardId, p_price_diamonds: price }),
+      });
+      if (!res.ok) { console.error('create_listing error:', await res.text()); return false; }
+      cacheDel('pomo_market_cache');
+      await fetchMyListings();
+      return true;
+    } catch(e) { console.error('create_listing error:', e); return false; }
+  }
+
+  async function buyListing(listingId, price) {
+    try {
+      const token = await getValidToken();
+      const res = await fetch(`${SB}/rest/v1/rpc/buy_listing`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ p_listing_id: listingId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.message === 'not_enough_diamonds') { showEggDiamondError(); return false; }
+        toast(body.message === 'listing_not_available' ? 'Angebot ist nicht mehr verfügbar' : 'Kauf fehlgeschlagen');
+        cacheDel('pomo_market_cache');
+        await fetchMarketListings(true);
+        return false;
+      }
+      const newDiamonds = await res.json();
+      userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
+      renderEggDiamonds();
+      cacheDel('pomo_market_cache');
+      await Promise.all([loadEggData(token), fetchMarketListings(true)]);
+      return true;
+    } catch(e) { console.error('buy_listing error:', e); return false; }
+  }
+
+  async function cancelListing(listingId) {
+    try {
+      const token = await getValidToken();
+      const res = await fetch(`${SB}/rest/v1/rpc/cancel_listing`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ p_listing_id: listingId }),
+      });
+      if (!res.ok) { console.error('cancel_listing error:', await res.text()); return false; }
+      cacheDel('pomo_market_cache');
+      myListings = myListings.filter(l => l.id !== listingId);
+      renderMarketGrid();
+      return true;
+    } catch(e) { console.error('cancel_listing error:', e); return false; }
+  }
 
   // ── Member-Deck-Overlay ──────────────────────────────────────────────────
   let memberDeckCache = {};
@@ -6757,7 +7016,7 @@
           <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
         </div>`;
       grid.appendChild(wrap);
-      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ src, rarity }));
+      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ src, rarity, readOnly: true }));
     });
   }
 
