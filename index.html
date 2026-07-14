@@ -1958,6 +1958,7 @@
       <div class="market-divider"></div>
       <div class="market-header">
         <div class="hmap-label" style="font-size:13px;">🛒 Tauschbörse</div>
+        <button id="market-refresh" style="font-size:11px;padding:3px 10px;border:0.5px solid var(--border-strong);border-radius:12px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;" title="Aktualisieren">↻</button>
       </div>
       <div class="market-tabs">
         <button class="lb-tab market-tab active" data-filter="all">Alle Angebote</button>
@@ -6817,6 +6818,10 @@
       marketTab = btn.dataset.filter;
       renderMarketGrid();
     });
+  });
+  document.getElementById('market-refresh')?.addEventListener('click', () => {
+    fetchMarketListings(true);
+    fetchMyListings();
   });
 
   async function fetchMarketListings(force = false) {
