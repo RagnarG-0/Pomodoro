@@ -1211,6 +1211,7 @@
     #level15Overlay.visible .btn-lvl15-dismiss {
       animation: none !important; opacity: 1; transform: none;
     }
+    body.focus-mode #timer-card { animation: none !important; }
   }
 
   /* Karten-Ansicht-Overlay */
@@ -1320,12 +1321,58 @@
   body.focus-mode .bento-row-leaderboard {
     margin-bottom: 0 !important;
   }
+
+  /* ── Fullscreen-Fokus-Timer ── */
+  body.focus-mode #app-title,
+  body.focus-mode #user-chip,
+  body.focus-mode #clan-join-wrap,
+  body.focus-mode #bell-wrap,
+  body.focus-mode #gear-btn { display: none !important; }
+  body.focus-mode .header { margin-bottom: 0 !important; min-height: 0; }
+
+  body.focus-mode #focus-toggle-btn {
+    position: fixed;
+    top: clamp(0.75rem, 3vw, 1.5rem);
+    right: clamp(0.75rem, 3vw, 1.5rem);
+    z-index: 60;
+  }
+
+  body.focus-mode #timer-card {
+    position: fixed; inset: 0; z-index: 50;
+    width: 100vw; height: 100vh; max-width: none !important;
+    margin: 0; border: none; border-radius: 0;
+    background: var(--bg);
+    display: grid;
+    grid-template-areas: "mode" "ring" "caption" "label" "ctrl" "today";
+    row-gap: clamp(0.75rem, 3vh, 2rem);
+    place-items: center;
+    padding: clamp(1rem, 5vw, 3rem);
+    overflow-y: auto;
+    animation: hatchFadeIn 0.3s ease;
+  }
+  body.focus-mode { overflow: hidden; }
+
+  body.focus-mode .mode-row       { grid-area: mode; margin-bottom: 0; }
+  body.focus-mode .watch-wrap,
+  body.focus-mode .limitless-track-wrap,
+  body.focus-mode .focus-ring-wrap,
+  body.focus-mode #time-display   { grid-area: ring; margin: 0; }
+  body.focus-mode #mode-label     { grid-area: caption; margin: 0; }
+  body.focus-mode .label-row      { grid-area: label; width: 100%; max-width: 420px; margin: 0; }
+  body.focus-mode .ctrl-row       { grid-area: ctrl; margin: 0; }
+  body.focus-mode .today-row      { grid-area: today; }
+
+  body.focus-mode #time-display   { font-size: clamp(48px, 12vw, 140px); }
+  body.focus-mode .ctrl-btn       { padding: clamp(8px,2vw,12px) clamp(20px,4vw,32px); font-size: clamp(13px,1.8vw,16px); }
+
+  .focus-ring-wrap { display: flex; justify-content: center; align-items: center; }
+  #focus-ring-svg { width: clamp(240px, 55vmin, 420px); height: clamp(240px, 55vmin, 420px); }
 </style>
 </head>
 <body>
 
 
-<div style="width:100%;max-width:680px;text-align:center;padding-top:1.5rem;">
+<div id="app-title" style="width:100%;max-width:680px;text-align:center;padding-top:1.5rem;">
   <h1>Pomodoro</h1>
 </div>
 <div class="header">
@@ -1644,6 +1691,16 @@
         <div class="limitless-track-ticks" id="limitless-track-ticks"></div>
       </div>
     </div>
+  </div>
+
+  <div class="focus-ring-wrap" id="focus-ring-wrap" style="display:none;">
+    <svg id="focus-ring-svg" width="320" height="320" viewBox="0 0 160 160">
+      <circle cx="80" cy="80" r="72" fill="none" stroke="var(--surface2)" stroke-width="8"/>
+      <circle id="focus-ring-arc" cx="80" cy="80" r="72"
+        fill="none" stroke="var(--accent)" stroke-width="8"
+        stroke-linecap="round" stroke-dashoffset="0"
+        transform="rotate(-90 80 80)"/>
+    </svg>
   </div>
 
   <div id="time-display">25:00</div>
@@ -1990,6 +2047,7 @@
   const KEY = 'pomo_heatmap_v3';
   const LABELS_KEY = 'pomo_labels_v1';
   const CIRC = 2 * Math.PI * 68;
+  const CIRC_RING = 2 * Math.PI * 72; // Ring-Radius 72 (dicker als der kleine Uhr-Radius 68), nur Fokus-Modus
   const ROWS = 7;
   const DAYS = 100;
   const LIMITLESS_CHECKPOINT_SEC = 20 * 60; // Intervall für stillen Zwischenkredit; für manuelles Testen temporär verkleinerbar
@@ -2232,9 +2290,19 @@
     g.innerHTML = html;
   }
 
+  // Fortschritts-Bruch (0..1) der aktuellen Session — von updateWatch() UND
+  // updateFocusRing() gemeinsam genutzt, damit die Frac-Logik nicht ein
+  // drittes Mal dupliziert wird.
+  function currentProgressFrac() {
+    if (mode === 'work' && limitless) {
+      return (remaining % LIMITLESS_CHECKPOINT_SEC) / LIMITLESS_CHECKPOINT_SEC; // Fortschritt zum nächsten Zwischenkredit
+    }
+    return totalSec > 0 ? remaining/totalSec : 0;
+  }
+
   function updateWatch() {
     if (mode === 'work' && limitless) {
-      const frac = (remaining % LIMITLESS_CHECKPOINT_SEC) / LIMITLESS_CHECKPOINT_SEC; // Fortschritt zum nächsten Zwischenkredit
+      const frac = currentProgressFrac();
       document.getElementById('watch-arc').setAttribute('stroke-dashoffset', (CIRC*(1-frac)).toFixed(2));
       const rad = (frac*360-90)*Math.PI/180;
       const len = 52;
@@ -2242,12 +2310,17 @@
       document.getElementById('watch-hand').setAttribute('y2', (80+len*Math.sin(rad)).toFixed(2));
       return;
     }
-    const frac = totalSec > 0 ? remaining/totalSec : 0;
+    const frac = currentProgressFrac();
     document.getElementById('watch-arc').setAttribute('stroke-dashoffset', (CIRC*(1-frac)).toFixed(2));
     const rad = ((totalSec-remaining)/totalSec*360-90)*Math.PI/180;
     const len = 52;
     document.getElementById('watch-hand').setAttribute('x2', (80+len*Math.cos(rad)).toFixed(2));
     document.getElementById('watch-hand').setAttribute('y2', (80+len*Math.sin(rad)).toFixed(2));
+  }
+
+  function updateFocusRing() {
+    const frac = currentProgressFrac();
+    document.getElementById('focus-ring-arc').setAttribute('stroke-dashoffset', (CIRC_RING*(1-frac)).toFixed(2));
   }
 
   // Balkenlänge = Tagesziel (dailyFocusGoalMin) relativ zu 12h (720 min) verfügbarer Breite:
@@ -2457,11 +2530,13 @@
 
   function renderTimer() {
     const showElapsed = mode === 'work' && limitless;
+    const focusUI = document.body.classList.contains('focus-mode');
     document.getElementById('time-display').textContent = showElapsed ? fmtElapsed(remaining) : fmt(remaining);
     document.getElementById('mode-label').textContent = modeLabels[mode];
-    document.getElementById('watch-wrap').style.display = showElapsed ? 'none' : 'flex';
-    document.getElementById('limitless-track-wrap').style.display = showElapsed ? 'block' : 'none';
-    if (showElapsed) { updateLimitlessTrack(); } else { updateWatch(); }
+    document.getElementById('watch-wrap').style.display = (!focusUI && !showElapsed) ? 'flex' : 'none';
+    document.getElementById('limitless-track-wrap').style.display = (!focusUI && showElapsed) ? 'block' : 'none';
+    document.getElementById('focus-ring-wrap').style.display = focusUI ? 'flex' : 'none';
+    if (focusUI) { updateFocusRing(); } else if (showElapsed) { updateLimitlessTrack(); } else { updateWatch(); }
     const btn = document.getElementById('btn-start');
     const icon = document.getElementById('btn-start-icon');
     if (running) {
@@ -3470,6 +3545,7 @@
     focusModeOn = on;
     localStorage.setItem('pomo_focus_mode_v1', focusModeOn ? '1' : '0');
     applyFocusModeUI();
+    renderTimer(); // Sichtbarkeits-Umschaltung (Uhr/Limitless-Balken/Fokus-Ring) hängt an body.focus-mode
   }
 
   function initFocusMode() {
@@ -5768,6 +5844,7 @@
   /* ── Init ── */
   registerSW();
   drawTicks();
+  document.getElementById('focus-ring-arc').setAttribute('stroke-dasharray', CIRC_RING.toFixed(2));
   buildDowCol();
   initDragScroll();
   initTooltip();
