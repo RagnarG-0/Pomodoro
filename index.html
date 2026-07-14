@@ -1280,19 +1280,117 @@
       margin-bottom: 0;
       max-width: none;
     }
-    body.new-design .bento-row-main > #heatmap-card,
-    body.new-design .bento-row-main > #stats-card {
-      flex: 1 1 0; min-width: 300px;
-    }
-    body.new-design .bento-row-secondary > #challenges-card {
-      flex: 2 1 0; min-width: 240px;
-    }
-    body.new-design .bento-row-secondary > #egg-section-wrapper {
-      flex: 3 1 0; min-width: 320px;
-    }
+    body.new-design .bento-row > #heatmap-card,
+    body.new-design .bento-row > #stats-card { min-width: 300px; }
+    body.new-design .bento-row > #challenges-card,
+    body.new-design .bento-row > #leaderboard-card { min-width: 240px; }
+    body.new-design .bento-row > #egg-section-wrapper { min-width: 320px; }
     body.new-design #time-display { font-size: 92px; }
     body.new-design #watch-svg { width: 176px; height: 176px; }
   }
+
+  /* ── Bento-Layout-Editor (Einstellungen, unabhängig von Viewport-Breite bedienbar) ── */
+  #bento-layout-editor-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #bentoEditorOverlay {
+    display: none; position: fixed; inset: 0; z-index: 970;
+    background: rgba(0,0,0,0.45); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center; padding: 1.25rem;
+  }
+  #bentoEditorOverlay.visible { display: flex; }
+  .bento-editor-panel {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 16px; padding: 1.25rem 1.25rem 1.4rem;
+    width: 100%; max-width: 960px; max-height: 88vh;
+    display: flex; flex-direction: column;
+  }
+  .bento-editor-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+  .bento-editor-close {
+    background: none; border: none; cursor: pointer; color: var(--text-muted);
+    font-size: 18px; padding: 0; line-height: 1; opacity: 0.6; transition: opacity 0.15s;
+  }
+  .bento-editor-close:hover { opacity: 1; }
+  .bento-editor-hint { font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin: 0 0 1rem; }
+
+  .bento-editor-canvas-scroll { overflow-x: auto; overflow-y: auto; padding: 4px; margin: -4px; flex: 1; }
+  .bento-editor-canvas {
+    width: 820px; max-width: 100%; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 0;
+  }
+
+  .bento-editor-row-gap { height: 14px; position: relative; flex-shrink: 0; }
+  .bento-editor-row-gap::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px;
+    transform: translateY(-50%); background: transparent; border-radius: 2px;
+    transition: background 0.12s, height 0.12s;
+  }
+  .bento-editor-row-gap.bento-editor-hot::before { background: var(--accent); height: 6px; }
+  body.bento-editor-dragging .bento-editor-row-gap::before { background: rgba(29,158,117,0.18); }
+  body.bento-editor-dragging .bento-editor-row-gap.bento-editor-hot::before { background: var(--accent); }
+
+  .bento-editor-row { display: flex; gap: 1.25rem; min-height: 92px; }
+  .bento-editor-row.bento-editor-hot { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 16px; }
+
+  .bento-editor-tile {
+    position: relative;
+    background: var(--surface2); border: 0.5px solid var(--border);
+    border-radius: 16px; padding: 0.9rem 1.1rem 1.6rem;
+    display: flex; flex-direction: column;
+    min-width: 90px;
+  }
+  .bento-editor-tile.bento-editor-dragging-src { opacity: 0.32; }
+  .bento-editor-tile-top { display: flex; align-items: center; gap: 8px; }
+  .bento-editor-grip {
+    cursor: grab; touch-action: none; user-select: none;
+    color: var(--text-muted); font-size: 14px; line-height: 1; padding: 2px 3px;
+    border-radius: 5px; flex-shrink: 0;
+  }
+  .bento-editor-grip:hover { background: var(--surface); color: var(--text); }
+  .bento-editor-grip:active { cursor: grabbing; }
+  .bento-editor-tile-icon { font-size: 15px; line-height: 1; flex-shrink: 0; }
+  .bento-editor-tile-name { font-size: 12.5px; letter-spacing: 0.01em; }
+  .bento-editor-tile-fill {
+    flex: 1; margin-top: 0.7rem; border-radius: 10px;
+    background: repeating-linear-gradient(135deg, var(--surface) 0 8px, transparent 8px 16px);
+    border: 0.5px dashed var(--border-strong);
+    min-height: 30px;
+  }
+  .bento-editor-tile-pct {
+    position: absolute; bottom: 0.6rem; right: 0.9rem;
+    font-size: 13px; font-variant-numeric: tabular-nums;
+    color: var(--accent-dark); letter-spacing: -0.01em;
+  }
+
+  .bento-editor-resizer {
+    width: 22px; margin: 0 -11px; flex-shrink: 0; cursor: col-resize;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; z-index: 5; position: relative;
+  }
+  .bento-editor-resizer::before {
+    content: ""; width: 2px; height: 40%; background: var(--border-strong);
+    border-radius: 2px; transition: background 0.12s, width 0.12s;
+  }
+  .bento-editor-resizer:hover::before, .bento-editor-resizer.active::before { background: var(--accent); width: 3px; }
+
+  .bento-editor-ghost {
+    position: fixed; pointer-events: none; z-index: 999;
+    background: var(--surface); border: 0.5px solid var(--accent);
+    border-radius: 12px; padding: 8px 14px; font-size: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.22);
+    display: flex; align-items: center; gap: 7px;
+    transform: translate(-50%, -140%);
+  }
+
+  .bento-editor-actions { display: flex; align-items: center; gap: 8px; margin-top: 1.1rem; }
+  .bento-editor-actions button {
+    font-family: Georgia, serif; font-size: 12px; letter-spacing: 0.02em;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    border: 0.5px solid var(--border-strong); background: transparent; color: var(--text);
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .bento-editor-actions button:hover { background: var(--surface2); }
+  .bento-editor-btn-primary { background: var(--accent) !important; color: #fff !important; border-color: var(--accent-dark) !important; }
+  .bento-editor-btn-primary:hover { background: var(--accent-dark) !important; }
 
   /* ── Fokus-Modus (Header-Button, unabhängig vom Bento-Grid-Toggle) ── */
   body.focus-mode #heatmap-card,
@@ -1302,9 +1400,7 @@
   body.focus-mode #leaderboard-card {
     display: none !important;
   }
-  body.focus-mode .bento-row-main,
-  body.focus-mode .bento-row-secondary,
-  body.focus-mode .bento-row-leaderboard {
+  body.focus-mode .bento-row {
     margin-bottom: 0 !important;
   }
 
@@ -1567,6 +1663,10 @@
     <p style="font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
       Kachel-Layout ab Desktop-Breite. Bei Problemen hier jederzeit wieder ausschaltbar.
     </p>
+    <button id="bento-layout-editor-btn" style="width:100%;padding:8px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Layout anpassen</button>
+    <p style="font-size:11px;color:var(--text-muted);margin:0.35rem 0 0.75rem;line-height:1.5;">
+      Nur verfügbar, wenn „Neues Design" aktiv ist.
+    </p>
 
     <div class="panel-divider"></div>
     <div class="panel-section">Freie Wochentage</div>
@@ -1721,7 +1821,7 @@
   </div>
 </div>
 
-<div class="bento-row bento-row-main">
+<div class="bento-row">
 <!-- Heatmap card -->
 <div class="card" id="heatmap-card">
   <div class="hmap-header">
@@ -1829,7 +1929,7 @@
 </div>
 </div>
 
-<div class="bento-row bento-row-secondary">
+<div class="bento-row">
 <!-- Wochen-Challenges (nur für eingeloggte Nutzer, kein Clan-/Public-Gating) -->
 <div class="card" id="challenges-card" style="display:none;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
@@ -1971,7 +2071,28 @@
   </div>
 </div>
 
-<div class="bento-row bento-row-leaderboard">
+<div id="bentoEditorOverlay">
+  <div class="bento-editor-panel">
+    <div class="bento-editor-header">
+      <div class="hmap-label">Layout anpassen</div>
+      <button class="bento-editor-close" id="bentoEditorClose">✕</button>
+    </div>
+    <p class="bento-editor-hint">
+      Am Griff (⠿) ziehen, um eine Kachel zu verschieben — auf eine Reihe fallen lassen zum Einreihen, auf einen schmalen Zwischenraum für eine neue Reihe. Am schmalen Rand zwischen zwei Kacheln ziehen, um die Breite zu verschieben.
+    </p>
+    <div class="bento-editor-canvas-scroll">
+      <div class="bento-editor-canvas" id="bentoEditorCanvas"></div>
+    </div>
+    <div class="bento-editor-actions">
+      <button id="bentoEditorReset">Zurücksetzen</button>
+      <div style="flex:1;"></div>
+      <button id="bentoEditorCancel">Abbrechen</button>
+      <button class="bento-editor-btn-primary" id="bentoEditorApply">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<div class="bento-row">
 <!-- Leaderboard card -->
 <div class="card" id="leaderboard-card" style="display:none;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
@@ -3528,6 +3649,289 @@
       localStorage.setItem('pomo_new_design_v1', newDesignOn ? '1' : '0');
       document.body.classList.toggle('new-design', newDesignOn);
     });
+  }
+
+  // Bento-Layout-Editor: Nutzer ordnen die 5 nicht-Timer-Kacheln selbst an
+  // (Drag/Resize), geräte-lokal in localStorage persistiert. bentoDefaultRows()
+  // bildet exakt die alte hartkodierte 3-Reihen-Struktur ab — es gibt dadurch
+  // nur einen Codepfad für Default- und Custom-Layout.
+  const BENTO_TILE_META = {
+    heatmap:     { elId: 'heatmap-card',        label: 'Heatmap',           icon: '▦' },
+    stats:       { elId: 'stats-card',          label: 'Statistik',         icon: '📊' },
+    challenges:  { elId: 'challenges-card',     label: 'Wochen-Challenges', icon: '🎯' },
+    eggdeck:     { elId: 'egg-section-wrapper', label: 'Ei & Karten',       icon: '🥚' },
+    leaderboard: { elId: 'leaderboard-card',    label: 'Rangliste',         icon: '🏆' },
+  };
+  const BENTO_LAYOUT_KEY = 'pomo_bento_layout_v1';
+
+  function bentoDefaultRows() {
+    return [
+      [{ id: 'heatmap', flex: 1 }, { id: 'stats', flex: 1 }],
+      [{ id: 'challenges', flex: 2 }, { id: 'eggdeck', flex: 3 }],
+      [{ id: 'leaderboard', flex: 1 }],
+    ];
+  }
+
+  function loadBentoLayout() {
+    try {
+      const raw = localStorage.getItem(BENTO_LAYOUT_KEY);
+      if (!raw) return bentoDefaultRows();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) return bentoDefaultRows();
+      const seen = new Set();
+      for (const row of parsed) {
+        if (!Array.isArray(row) || !row.length) return bentoDefaultRows();
+        for (const e of row) {
+          if (!e || !BENTO_TILE_META[e.id] || typeof e.flex !== 'number' || e.flex <= 0) return bentoDefaultRows();
+          seen.add(e.id);
+        }
+      }
+      if (seen.size !== Object.keys(BENTO_TILE_META).length) return bentoDefaultRows();
+      return parsed;
+    } catch { return bentoDefaultRows(); }
+  }
+
+  function saveBentoLayout(rows) { localStorage.setItem(BENTO_LAYOUT_KEY, JSON.stringify(rows)); }
+
+  // Editor-UI: 1:1-Übersetzung der Drag/Resize-Logik aus dem
+  // ~/.claude/plans/bento-mockup.html Prototyp, Klassen auf bento-editor-*
+  // präfixiert (Kollision mit der bestehenden .tile-Klasse der Heatmap).
+  // State lebt rein in Closure-Variablen, Listener werden einmalig gebunden.
+  function initBentoLayoutEditor() {
+    const openBtn = document.getElementById('bento-layout-editor-btn');
+    const cb      = document.getElementById('set-new-design');
+    const overlay = document.getElementById('bentoEditorOverlay');
+    const canvas  = document.getElementById('bentoEditorCanvas');
+    const MIN_FLEX = 0.3;
+    let rows = [], drag = null;
+
+    function syncButtonState() { openBtn.disabled = !newDesignOn; }
+    syncButtonState();
+    cb.addEventListener('change', syncButtonState);
+
+    function openEditor() {
+      if (!newDesignOn) return;
+      rows = JSON.parse(JSON.stringify(loadBentoLayout()));
+      render();
+      overlay.classList.add('visible');
+    }
+    function closeEditor() { overlay.classList.remove('visible'); }
+
+    openBtn.addEventListener('click', openEditor);
+    document.getElementById('bentoEditorClose').addEventListener('click', closeEditor);
+    document.getElementById('bentoEditorCancel').addEventListener('click', closeEditor);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeEditor(); });
+    document.getElementById('bentoEditorReset').addEventListener('click', () => { rows = bentoDefaultRows(); render(); });
+    document.getElementById('bentoEditorApply').addEventListener('click', () => {
+      saveBentoLayout(rows);
+      applyCustomBentoLayout(rows);
+      closeEditor();
+    });
+
+    function render() {
+      canvas.innerHTML = '';
+      canvas.appendChild(makeGap(-1));
+      rows.forEach((row, rIdx) => {
+        canvas.appendChild(makeRow(row, rIdx));
+        canvas.appendChild(makeGap(rIdx));
+      });
+    }
+
+    function makeGap(afterRowIdx) {
+      const g = document.createElement('div');
+      g.className = 'bento-editor-row-gap';
+      g.dataset.afterRow = afterRowIdx;
+      return g;
+    }
+
+    function makeRow(row, rIdx) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'bento-editor-row';
+      rowEl.dataset.rowIdx = rIdx;
+      row.forEach((entry, tIdx) => {
+        rowEl.appendChild(makeTile(entry, row));
+        if (tIdx < row.length - 1) rowEl.appendChild(makeResizer(row, tIdx));
+      });
+      return rowEl;
+    }
+
+    function makeTile(entry, row) {
+      const meta = BENTO_TILE_META[entry.id];
+      const el = document.createElement('div');
+      el.className = 'bento-editor-tile';
+      el.dataset.tileId = entry.id;
+      el.style.flex = entry.flex + ' 1 0';
+      const pct = Math.round((entry.flex / row.reduce((s, e) => s + e.flex, 0)) * 100);
+      el.innerHTML = `
+        <div class="bento-editor-tile-top">
+          <span class="bento-editor-grip" title="Ziehen zum Verschieben">⠿</span>
+          <span class="bento-editor-tile-icon">${meta.icon}</span>
+          <span class="bento-editor-tile-name">${meta.label}</span>
+        </div>
+        <div class="bento-editor-tile-fill"></div>
+        <div class="bento-editor-tile-pct">${row.length > 1 ? pct + '%' : '100%'}</div>
+      `;
+      el.querySelector('.bento-editor-grip').addEventListener('pointerdown', (e) => startDrag(e, entry.id));
+      return el;
+    }
+
+    function makeResizer(row, leftIdx) {
+      const el = document.createElement('div');
+      el.className = 'bento-editor-resizer';
+      el.addEventListener('pointerdown', (e) => startResize(e, row, leftIdx));
+      return el;
+    }
+
+    /* ── Resize (splitter) ── */
+    function startResize(e, row, leftIdx) {
+      e.preventDefault();
+      const handle = e.currentTarget;
+      handle.setPointerCapture(e.pointerId);
+      handle.classList.add('active');
+      const rowEl = handle.parentElement;
+      const tileEls = [...rowEl.querySelectorAll('.bento-editor-tile')];
+      const leftEl = tileEls[leftIdx], rightEl = tileEls[leftIdx + 1];
+      const left = row[leftIdx], right = row[leftIdx + 1];
+      const startLeftFlex = left.flex, startRightFlex = right.flex;
+      const totalFlex = startLeftFlex + startRightFlex;
+      const totalPx = leftEl.getBoundingClientRect().width + rightEl.getBoundingClientRect().width;
+      const pxPerFlex = totalPx / totalFlex;
+      const startX = e.clientX;
+
+      function onMove(ev) {
+        const deltaFlex = (ev.clientX - startX) / pxPerFlex;
+        let newLeft = startLeftFlex + deltaFlex;
+        newLeft = Math.max(MIN_FLEX, Math.min(totalFlex - MIN_FLEX, newLeft));
+        const newRight = totalFlex - newLeft;
+        left.flex = newLeft; right.flex = newRight;
+        leftEl.style.flex = newLeft + ' 1 0';
+        rightEl.style.flex = newRight + ' 1 0';
+        const pctL = Math.round((newLeft / totalFlex) * 100);
+        leftEl.querySelector('.bento-editor-tile-pct').textContent = pctL + '%';
+        rightEl.querySelector('.bento-editor-tile-pct').textContent = (100 - pctL) + '%';
+      }
+      function onUp(ev) {
+        handle.releasePointerCapture(e.pointerId);
+        handle.classList.remove('active');
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+      }
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+    }
+
+    /* ── Drag to reorder / regroup ── */
+    function startDrag(e, tileId) {
+      e.preventDefault();
+      const srcEl = e.currentTarget.closest('.bento-editor-tile');
+      srcEl.classList.add('bento-editor-dragging-src');
+      document.body.classList.add('bento-editor-dragging');
+      const ghost = document.createElement('div');
+      ghost.className = 'bento-editor-ghost';
+      const meta = BENTO_TILE_META[tileId];
+      ghost.innerHTML = `<span>${meta.icon}</span><span>${meta.label}</span>`;
+      document.body.appendChild(ghost);
+      moveGhost(ghost, e.clientX, e.clientY);
+      drag = { tileId, srcEl, ghost, target: null };
+      window.addEventListener('pointermove', onDragMove);
+      window.addEventListener('pointerup', onDragEnd);
+    }
+
+    function moveGhost(ghost, x, y) { ghost.style.left = x + 'px'; ghost.style.top = y + 'px'; }
+
+    function onDragMove(e) {
+      if (!drag) return;
+      moveGhost(drag.ghost, e.clientX, e.clientY);
+      clearHotStates();
+      const gapEl = elementUnder(e, '.bento-editor-row-gap');
+      if (gapEl) {
+        gapEl.classList.add('bento-editor-hot');
+        drag.target = { type: 'newRow', afterRow: parseInt(gapEl.dataset.afterRow, 10) };
+        return;
+      }
+      const rowEl = elementUnder(e, '.bento-editor-row');
+      if (rowEl) {
+        rowEl.classList.add('bento-editor-hot');
+        const rIdx = parseInt(rowEl.dataset.rowIdx, 10);
+        const tileEls = [...rowEl.querySelectorAll('.bento-editor-tile')].filter(t => t.dataset.tileId !== drag.tileId);
+        let index = tileEls.length;
+        for (let i = 0; i < tileEls.length; i++) {
+          const r = tileEls[i].getBoundingClientRect();
+          if (e.clientX < r.left + r.width / 2) { index = i; break; }
+        }
+        drag.target = { type: 'insert', row: rIdx, index };
+        return;
+      }
+      drag.target = null;
+    }
+
+    function elementUnder(e, selector) {
+      const els = document.elementsFromPoint(e.clientX, e.clientY);
+      return els.find(el => el.matches && el.matches(selector));
+    }
+
+    function clearHotStates() {
+      document.querySelectorAll('.bento-editor-hot').forEach(el => el.classList.remove('bento-editor-hot'));
+    }
+
+    function onDragEnd(e) {
+      if (!drag) return;
+      window.removeEventListener('pointermove', onDragMove);
+      window.removeEventListener('pointerup', onDragEnd);
+      document.body.classList.remove('bento-editor-dragging');
+      clearHotStates();
+      drag.ghost.remove();
+
+      const tileId = drag.tileId;
+      let removedEntry = null;
+      for (let r = rows.length - 1; r >= 0; r--) {
+        const idx = rows[r].findIndex(t => t.id === tileId);
+        if (idx !== -1) { removedEntry = rows[r].splice(idx, 1)[0]; if (rows[r].length === 0) rows.splice(r, 1); break; }
+      }
+      if (!removedEntry) removedEntry = { id: tileId, flex: 1 };
+      removedEntry.flex = 1;
+
+      const target = drag.target;
+      if (target) {
+        if (target.type === 'newRow') {
+          const insertAt = target.afterRow + 1;
+          rows.splice(insertAt, 0, [removedEntry]);
+        } else if (target.type === 'insert') {
+          const rIdx = Math.min(target.row, rows.length - 1);
+          if (rIdx >= 0 && rows[rIdx]) {
+            rows[rIdx].splice(Math.min(target.index, rows[rIdx].length), 0, removedEntry);
+          } else {
+            rows.push([removedEntry]);
+          }
+        }
+      } else {
+        rows.push([removedEntry]);
+      }
+      drag = null;
+      render();
+    }
+  }
+
+  // Verschiebt die 5 ECHTEN Kachel-Elemente (appendChild, kein Klonen) in frische
+  // .bento-row-Wrapper. Rührt style.display der Kacheln selbst nicht an.
+  function applyCustomBentoLayout(rows) {
+    const oldRows = Array.from(document.querySelectorAll('.bento-row'));
+    if (!oldRows.length) return;
+    const parent = oldRows[0].parentNode;
+    const anchor = oldRows[0];
+    rows.forEach(row => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'bento-row';
+      parent.insertBefore(rowEl, anchor);
+      row.forEach(entry => {
+        const meta = BENTO_TILE_META[entry.id];
+        const tileEl = meta && document.getElementById(meta.elId);
+        if (!tileEl) return;
+        tileEl.style.flex = entry.flex + ' 1 0';
+        rowEl.appendChild(tileEl); // verschiebt den echten Knoten, zerstört keine Listener/Inhalte
+      });
+    });
+    oldRows.forEach(w => w.remove());
   }
 
   // Fokus-Modus: blendet alle Karten außer Timer aus. Aktivierung manuell per
@@ -5851,6 +6255,8 @@
   initAutoBreaksSetting();
   initFocusIntervalSetting();
   initNewDesignSetting();
+  applyCustomBentoLayout(loadBentoLayout());
+  initBentoLayoutEditor();
   initFocusMode();
   initChallengesCard();
   initPrivacyToggle();
