@@ -6713,6 +6713,9 @@
     if (canList) {
       const btnList = document.getElementById('cardListBtn');
       const form    = document.getElementById('cardListForm');
+      // Ein Klick ins Preisfeld (z.B. um zu fokussieren) bubblet sonst zum
+      // cardViewOverlay-Klick-Handler hoch und schließt das Overlay sofort wieder.
+      form.addEventListener('click', e => e.stopPropagation());
       btnList.addEventListener('click', e => {
         e.stopPropagation();
         btnList.style.display = 'none';
@@ -6824,10 +6827,14 @@
     }
     try {
       const token = await getValidToken();
+      // profiles!card_listings_seller_id_fkey nötig: card_listings hat zwei FKs auf
+      // profiles (seller_id + buyer_id), ein unqualifizierter profiles(...)-Embed ist
+      // für PostgREST mehrdeutig (PGRST201) und schlägt fehl.
       const res = await fetch(
-        `${SB}/rest/v1/card_listings?status=eq.active&select=id,card_id,price_diamonds,seller_id,created_at,profiles(username)&order=created_at.desc&limit=50`,
+        `${SB}/rest/v1/card_listings?status=eq.active&select=id,card_id,price_diamonds,seller_id,created_at,profiles!card_listings_seller_id_fkey(username)&order=created_at.desc&limit=50`,
         { headers: authHeaders(token) }
       );
+      if (!res.ok) { console.error('fetchMarketListings error:', await res.text()); marketListings = []; renderMarketGrid(); return; }
       const rows = await res.json();
       marketListings = Array.isArray(rows) ? rows : [];
       cacheSet(cacheKey, marketListings);
