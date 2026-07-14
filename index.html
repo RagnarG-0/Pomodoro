@@ -873,36 +873,6 @@
 
   #egg-section-wrapper { width: 100%; max-width: 680px; }
 
-  /* ── Update-Banner ── */
-  #updateBannerOverlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 950; padding: 20px; animation: hatchFadeIn 0.3s ease;
-  }
-  #updateBannerOverlay.hidden { display: none; }
-  .update-banner-card {
-    background: var(--surface); border: 0.5px solid var(--border-strong);
-    border-radius: 18px; padding: 28px 26px 24px;
-    max-width: 380px; width: 100%;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.35);
-  }
-  .update-banner-title {
-    font-size: 18px; letter-spacing: 0.04em; color: var(--text);
-    margin-bottom: 16px; line-height: 1.35;
-  }
-  .update-banner-body {
-    font-family: -apple-system, sans-serif; font-size: 13.5px;
-    color: var(--text-muted); line-height: 1.65; margin-bottom: 22px;
-  }
-  .update-banner-btn {
-    width: 100%; padding: 13px; border-radius: 11px; border: none;
-    background: var(--accent); color: #fff;
-    font-family: Georgia, serif; font-size: 15px; letter-spacing: 0.04em;
-    cursor: pointer; transition: opacity 0.15s, transform 0.1s;
-  }
-  .update-banner-btn:hover  { opacity: 0.88; }
-  .update-banner-btn:active { transform: scale(0.98); }
-
   .diamond-error-banner {
     width: 100%; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
     border-radius: 10px; padding: 10px 16px; font-family: -apple-system, sans-serif;
@@ -1875,19 +1845,6 @@
 
 
 <!-- Ei-Box + Deck-Box (durch Platzhalter verdeckt; Leader-Toggle in Einstellungen) -->
-<div id="updateBannerOverlay" class="hidden">
-  <div class="update-banner-card">
-    <div class="update-banner-title">Das große neue Eier-Update ist da!</div>
-    <div class="update-banner-body">
-      ⬆️ Ein Level-up → du bekommst ein Ei 🥚. Leg es in den Brutkasten 🔥, lerne 10 Stunden, und sieh zu wie es schlüpft 🐣. In den Eiern befinden sich coole Spielkarten zum sammeln 🃏.<br><br>
-      ⏩ 10 Stunden sind dir zu lange? Verringere die Wartezeit mit deinen Diamanten 💎!<br><br>
-      🛒 Du hast alle Eier ausgebrütet? Mit deinen Diamanten 💎 kannst du dir wieder neue Eier kaufen!<br><br>
-      💸 Du schaffst es nicht unter die Top 3 des Tages und bekommst einfach keine Diamanten? Kaufe dir welche nach: 10 Diamanten für nur 0,99 Euro.
-    </div>
-    <button class="update-banner-btn" id="updateBannerBtn">Los geht's</button>
-  </div>
-</div>
-
 <div id="egg-section-wrapper">
 
   <div id="diamondBanner" class="diamond-error-banner"></div>
@@ -6166,17 +6123,6 @@
   let eggNextId      = 1;
   let eggBannerTimer = null;
 
-  const EGG_BANNER_KEY = 'pomo_egg_banner_v1';
-
-  function maybeShowEggBanner() {
-    if (localStorage.getItem(EGG_BANNER_KEY) === 'seen') return;
-    document.getElementById('updateBannerOverlay')?.classList.remove('hidden');
-  }
-  document.getElementById('updateBannerBtn')?.addEventListener('click', () => {
-    localStorage.setItem(EGG_BANNER_KEY, 'seen');
-    document.getElementById('updateBannerOverlay').classList.add('hidden');
-  });
-
   // Hilfsfunktionen
   function eggStageFrame(stage) {
     if (stage === 'ready') return 3;
@@ -7119,7 +7065,6 @@
     renderIncubator();
     renderEggDeck(null, false);
     toggleEggInv(); // Inventar beim Start aufgeklappt
-    maybeShowEggBanner();
   }
 
   // ─── Ende Eier & Kartensammlung ───────────────────────────────────────────
