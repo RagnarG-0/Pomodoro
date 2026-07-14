@@ -95,6 +95,8 @@ dailyFocusGoalMin    // number — Tagesziel in Minuten für den Limitless-Balke
 lastTimerInteractionAt // ms-Timestamp — für Idle-Suspend des 4-Uhr-Reset-Watchdogs (siehe „4-Uhr-Reset")
 challengesActiveTier // 'leicht' | 'mittel' | 'schwer' — aktiver Tab in der Wochen-Challenges-Karte
 claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der aktuellen Woche
+newDesignOn   // boolean — Settings-Opt-in „Neues Design" (Bento-Grid ab Desktop-Breite), Default aus, geräte-lokal
+focusModeOn   // boolean — Fokus-Modus (blendet alle Karten außer Timer aus), manuell + automatisch bei mode==='work'
 ```
 
 ---
@@ -181,6 +183,8 @@ claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der a
 | `pomo_egg_preview` | `'1'` wenn Clan-Leader den Placeholder deaktiviert hat | — |
 | `pomo_export_last_<userId>` | Zeitstempel des letzten CSV-Exports (Cooldown) | 12h |
 | `pomo_limitless_v1` | `'1'`/`'0'` — Präferenz „Unbegrenzt (Stoppuhr)"-Modus, geräte-lokal | — |
+| `pomo_new_design_v1` | `'1'`/`'0'` — Opt-in „Neues Design" (Bento-Grid ab Desktop-Breite), Default aus, geräte-lokal | — |
+| `pomo_focus_mode_v1` | `'1'`/`'0'` — Fokus-Modus-Zustand, geräte-lokal | — |
 
 ---
 
@@ -210,6 +214,24 @@ claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der a
 - Client-Rendering (`renderChallengesCard()`) und Fortschrittsberechnung (`computeChallengeProgress()`) laufen rein lokal aus bereits geladenen `days`/`offDays`/`offWeekdays` — kein zusätzlicher Fetch pro Anzeige, nur `loadWeeklyClaims()` einmal beim Login
 - **Bugfix (`20260710000000_fix_calc_week_streak.sql`)**: `calc_week_streak()` ließ `v_off_override`/`v_minutes` bei Tagen ohne `study_days`-Zeile auf dem Wert der vorherigen Schleifen-Iteration stehen (PL/pgSQL `SELECT INTO` setzt Variablen bei 0 Treffern nicht auf `NULL` zurück) — konnte eine gültige Streak-Challenge fälschlich mit `threshold_not_met` ablehnen. Variablen werden jetzt vor jedem `SELECT INTO` explizit auf `NULL` zurückgesetzt.
 - **Bugfix `getWeekIndex()`**: parste Datumsstrings ohne Zeitzonen-Suffix (`new Date(str + 'T00:00:00')`) — dadurch floss die lokale Browser-Zeitzone in die Millisekunden-Differenz zum Epoch-Datum ein. Liegen Epoch (Winter, UTC+1) und Zielwoche (Sommer, UTC+2) auf verschiedenen Seiten einer Sommerzeit-Umstellung, verschiebt sich der Tagesabstand um 1h und `Math.floor(diff / 7 Tage)` kann in genau den betroffenen Wochen um 1 zu niedrig ausfallen — Client und Server (reine Kalender-Arithmetik `date - date`, DST-immun) laufen dann bei der Rotation auseinander (`challenge_not_active_this_week` trotz im Frontend als aktiv angezeigter Challenge). Fix: `'T00:00:00Z'`-Suffix erzwingt UTC-Parsing auf beiden Seiten.
+
+### Bento-Grid-Layout (Desktop, Einstellungen-Opt-in)
+
+Ab `min-width:1024px` können die 6 Karten statt im reinen vertikalen Stack in einem Bento-Grid angeordnet werden: Timer volle Breite oben, darunter Heatmap+Stats 50/50, darunter Wochen-Challenges (~40%) + Ei/Deck (~60%), darunter Leaderboard als eigene volle Reihe. Zentriert auf `max-width:900px`.
+
+- **Opt-in, Default aus**: neue Settings-Checkbox „Neues Design (Beta)" (Sektion „Layout", zwischen „Anzeigeeinheit" und „Freie Wochentage"), `localStorage` Key `pomo_new_design_v1`, geräte-lokal. `newDesignOn`-Variable, `initNewDesignSetting()` (Muster wie `initLimitlessSetting()`) togglet `body.new-design`. Ohne diese Einstellung ist das Layout auch ab Desktop-Breite exakt wie vor diesem Feature — jederzeit über die Checkbox rückgängig machbar, falls das neue Layout Probleme macht.
+- **DOM**: 3 neue IDs (`#timer-card`, `#heatmap-card`, `#stats-card`) plus 3 neue Wrapper-Divs `.bento-row.bento-row-main` (Heatmap+Stats), `.bento-row.bento-row-secondary` (Challenges-Card + `#egg-section-wrapper`, inkl. der dazwischenliegenden `position:fixed`-Overlays wie `#updateBannerOverlay` — deren Position im Baum ist irrelevant, `position:fixed` wird nie zum Flex-Item), `.bento-row.bento-row-leaderboard` (Leaderboard allein).
+- **CSS**: `.bento-row { display:contents; }` als Default (mobil/Toggle-aus: pixelgleich zu vorher, kein eigener Layout-Effekt). Nur wenn **beides** zutrifft — `body.new-design` UND `@media(min-width:1024px)` — wird `.bento-row` zu `display:flex; width:100%; gap:1.25rem;`. `width:100%` ist hier nötig (wie bei `.header`/`.card`/`#egg-section-wrapper`), sonst gerät der Flex-Container ohne eigene Breite mit seinem `width:100%`-Kind in einen Shrink-to-fit-Zirkelbezug und wird zu schmal (`body`s `align-items:center` stretcht Top-Level-Kinder nicht). Ausgeblendete Kacheln (z. B. Challenges vor Login, Leaderboard ohne Public-Clan) erzeugen kein Flex-Item (`display:none`) — das verbleibende Geschwister füllt die Lücke automatisch, Leaderboard-Reihe kollabiert auf Höhe 0.
+- Fokus-Intervall/Zoom-Details (Hero-Vergrößerung `#time-display`/`#watch-svg`) ebenfalls nur unter `body.new-design`.
+
+### Fokus-Modus (Header-Button, unabhängig vom Bento-Grid-Toggle)
+
+Neuer Header-Button `#focus-toggle-btn` (`.icon-btn`, gleiche Klasse wie `#gear-btn`, zwischen `#bell-wrap` und `#gear-btn`) blendet alle Karten außer der Timer-Card aus — für ablenkungsfreies Lernen. **Nicht** an den Bento-Grid-Toggle gekoppelt, immer verfügbar, unabhängig davon ob „Neues Design" aktiv ist.
+
+- **State/Persistenz**: `focusModeOn`, `localStorage` Key `pomo_focus_mode_v1`, geräte-lokal. `setFocusMode(on)` / `applyFocusModeUI()` / `initFocusMode()`.
+- **Aktivierung**: manuell per Klick jederzeit, **plus** automatisch bei jedem Eintritt in `mode==='work'` — zwei Hook-Punkte: (1) `switchTo(m, autoStart)` als erste Zeile (`if (m==='work') setFocusMode(true);`, deckt Mode-Button-Klick, Auto-Resume aus `workStash`, `skip()`, `onTimerEnd()`-Rücksprung ab), (2) `restoreTimerState()` — intern in `restoreTimerStateInner()` umbenannt, der äußere `restoreTimerState()`-Wrapper prüft in einem `finally`-Block nach dem `await` `if (mode==='work') setFocusMode(true);` (deckt die 4 Stellen ab, an denen die Funktion `mode` direkt setzt, ohne über `switchTo()` zu laufen — Seiten-Reload/Login auf zweitem Gerät während laufender Session).
+- **Ausschalten passiert ausschließlich über den Button-Klick** — kein Code-Pfad ruft `setFocusMode(false)` sonst auf; auch während einer Pause bleibt ein manuell aktivierter Fokus-Modus an.
+- **CSS**: `body.focus-mode` blendet `#heatmap-card`, `#stats-card`, `#challenges-card`, `#egg-section-wrapper`, `#leaderboard-card` per `!important` aus (überstimmt bestehende Ad-hoc-`style.display`-Zuweisungen an anderer Stelle im Code) und nullt `margin-bottom` der `.bento-row`-Wrapper. Gezielt die 5 Karten-IDs, nicht die Wrapper selbst — sonst würden auch darin verschachtelte Overlays (`#hatchOverlay` etc.) unterdrückt, falls während einer fokussierten Session ein Level-Up/Ei-Schlüpfen auftritt.
 
 ---
 

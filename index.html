@@ -57,7 +57,7 @@
     letter-spacing: 0.15em; text-transform: uppercase;
     color: var(--text-muted);
   }
-  #gear-btn {
+  .icon-btn {
     width: 36px; height: 36px;
     border: 0.5px solid var(--border-strong); border-radius: 50%;
     background: var(--surface); color: var(--text-muted);
@@ -65,9 +65,10 @@
     transition: background 0.15s, color 0.15s, transform 0.3s; padding: 0;
     flex-shrink: 0;
   }
-  #gear-btn:hover { background: var(--surface2); color: var(--text); }
+  .icon-btn:hover { background: var(--surface2); color: var(--text); }
+  .icon-btn svg { width: 16px; height: 16px; }
   #gear-btn.open { transform: rotate(60deg); color: var(--accent); }
-  #gear-btn svg { width: 16px; height: 16px; }
+  #focus-toggle-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   /* ── Clan-Join Button (klanlose eingeloggte Nutzer) ── */
   #clan-join-wrap {
@@ -1271,6 +1272,54 @@
   .member-deck-close:hover { opacity: 1; }
   .member-deck-grid-wrap { overflow-y: auto; flex: 1; }
   .member-deck-grid { display: flex; flex-wrap: wrap; gap: 10px; padding-bottom: 4px; }
+
+  /* ── Bento-Grid Redesign (Einstellungen-Opt-in, Default aus) ── */
+  .bento-row { display: contents; }
+
+  @media (min-width: 1024px) {
+    body.new-design .header,
+    body.new-design #timer-card,
+    body.new-design .bento-row {
+      max-width: 900px;
+    }
+    body.new-design .bento-row {
+      display: flex;
+      width: 100%;
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    body.new-design .bento-row > .card,
+    body.new-design .bento-row > #egg-section-wrapper {
+      margin-bottom: 0;
+      max-width: none;
+    }
+    body.new-design .bento-row-main > #heatmap-card,
+    body.new-design .bento-row-main > #stats-card {
+      flex: 1 1 0; min-width: 300px;
+    }
+    body.new-design .bento-row-secondary > #challenges-card {
+      flex: 2 1 0; min-width: 240px;
+    }
+    body.new-design .bento-row-secondary > #egg-section-wrapper {
+      flex: 3 1 0; min-width: 320px;
+    }
+    body.new-design #time-display { font-size: 92px; }
+    body.new-design #watch-svg { width: 176px; height: 176px; }
+  }
+
+  /* ── Fokus-Modus (Header-Button, unabhängig vom Bento-Grid-Toggle) ── */
+  body.focus-mode #heatmap-card,
+  body.focus-mode #stats-card,
+  body.focus-mode #challenges-card,
+  body.focus-mode #egg-section-wrapper,
+  body.focus-mode #leaderboard-card {
+    display: none !important;
+  }
+  body.focus-mode .bento-row-main,
+  body.focus-mode .bento-row-secondary,
+  body.focus-mode .bento-row-leaderboard {
+    margin-bottom: 0 !important;
+  }
 </style>
 </head>
 <body>
@@ -1324,7 +1373,13 @@
       <div id="bell-request-list"><div class="bell-empty">Keine Anfragen</div></div>
     </div>
   </div>
-  <button id="gear-btn" title="Einstellungen">
+  <button id="focus-toggle-btn" class="icon-btn" title="Fokus-Modus">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+      <circle cx="12" cy="12" r="5"/>
+    </svg>
+  </button>
+  <button id="gear-btn" class="icon-btn" title="Einstellungen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="3"/>
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -1470,6 +1525,16 @@
     </div>
 
     <div class="panel-divider"></div>
+    <div class="panel-section">Layout</div>
+    <div class="panel-row">
+      <label for="set-new-design">Neues Design (Beta)</label>
+      <input type="checkbox" id="set-new-design" style="accent-color:var(--accent);width:18px;height:18px;cursor:pointer;">
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin:-0.4rem 0 0.75rem;line-height:1.5;">
+      Kachel-Layout ab Desktop-Breite. Bei Problemen hier jederzeit wieder ausschaltbar.
+    </p>
+
+    <div class="panel-divider"></div>
     <div class="panel-section">Freie Wochentage</div>
     <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Diese Wochentage werden in der Heatmap automatisch durchgestrichen.</p>
     <div class="weekday-grid" id="weekday-grid">
@@ -1550,7 +1615,7 @@
 </div>
 
 <!-- Timer card -->
-<div class="card">
+<div class="card" id="timer-card">
   <div class="mode-row">
     <button class="mode-btn active" data-mode="work">Fokus</button>
     <button class="mode-btn" data-mode="short">Pause</button>
@@ -1612,8 +1677,9 @@
   </div>
 </div>
 
+<div class="bento-row bento-row-main">
 <!-- Heatmap card -->
-<div class="card">
+<div class="card" id="heatmap-card">
   <div class="hmap-header">
     <div class="hmap-label">Heatmap</div>
     <div class="hmap-hint">← scrollen · klick = freier Tag</div>
@@ -1645,7 +1711,7 @@
 </div>
 
 <!-- Stats card -->
-<div class="card" style="position:relative;">
+<div class="card" id="stats-card" style="position:relative;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
     <div class="hmap-label">Statistik</div>
     <div class="stats-page-dots">
@@ -1717,7 +1783,9 @@
     </div>
   </div>
 </div>
+</div>
 
+<div class="bento-row bento-row-secondary">
 <!-- Wochen-Challenges (nur für eingeloggte Nutzer, kein Clan-/Public-Gating) -->
 <div class="card" id="challenges-card" style="display:none;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
@@ -1816,6 +1884,7 @@
   </div>
 
 </div>
+</div>
 
 <!-- Schlüpf-Overlay -->
 <div id="hatchOverlay">
@@ -1858,6 +1927,7 @@
   </div>
 </div>
 
+<div class="bento-row bento-row-leaderboard">
 <!-- Leaderboard card -->
 <div class="card" id="leaderboard-card" style="display:none;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
@@ -1877,6 +1947,7 @@
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid var(--border);">
     <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 Tagessiege: 1. Platz = 3, 2. Platz = 2, 3. Platz = 1</span>
   </div>
+</div>
 </div>
 
 <div class="notif-bar" id="notif"></div>
@@ -2002,6 +2073,8 @@
   let _limitlessTickCount = -1;   // Cache für updateLimitlessTrack(): verhindert Neuaufbau der Checkpoint-Striche bei jedem Tick (alle 250ms)
   let autoBreaksSetting = false;  // persistierte Checkbox-Präferenz „Automatische Pausen" (nur bei Limitless wählbar)
   let focusIntervalMin = 20;      // Fokus-Intervall bei aktiven Automatische Pausen (20-120, 5er-Schritte); ohne Automatische Pausen bleibt der Checkpoint fest bei 20 min (LIMITLESS_CHECKPOINT_SEC)
+  let newDesignOn = false;        // persistierte Checkbox-Präferenz „Neues Design" (Bento-Grid ab Desktop-Breite); Default aus, geräte-lokal
+  let focusModeOn = false;        // Fokus-Modus: blendet alle Karten außer Timer aus; manuell + automatisch bei mode==='work'
   let workStash = null;           // { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin } | null — pausierter Fokus während einer Pause (nur wenn autoBreaksSetting je aktiv war); bleibt für die gesamte Pausendauer gesetzt, erst switchTo('work',...) konsumiert ihn wieder
   let lastTimerInteractionAt = Date.now(); // für Idle-Suspend des Tagesgrenze-Watchdogs
   function markTimerActivity() { lastTimerInteractionAt = Date.now(); }
@@ -2824,6 +2897,7 @@
   // aktiver „Automatische Pausen"-Einstellung; sonst immer false, Verhalten
   // dann 1:1 wie vor diesem Feature).
   function switchTo(m, autoStart) {
+    if (m === 'work') setFocusMode(true);
     mode=m; syncModeBtns();
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_RESET' }); // zentral hier statt pro Aufrufer; im SW idempotent
@@ -3369,6 +3443,43 @@
     });
   }
 
+  // „Neues Design" (Bento-Grid): geräte-lokale Opt-in-Einstellung, Default aus.
+  // Ohne diese Einstellung ist das Layout ab Desktop-Breite unverändert wie vor
+  // diesem Feature — jederzeit über die Checkbox rückgängig machbar.
+  function initNewDesignSetting() {
+    newDesignOn = localStorage.getItem('pomo_new_design_v1') === '1';
+    document.body.classList.toggle('new-design', newDesignOn);
+    const cb = document.getElementById('set-new-design');
+    cb.checked = newDesignOn;
+    cb.addEventListener('change', () => {
+      newDesignOn = cb.checked;
+      localStorage.setItem('pomo_new_design_v1', newDesignOn ? '1' : '0');
+      document.body.classList.toggle('new-design', newDesignOn);
+    });
+  }
+
+  // Fokus-Modus: blendet alle Karten außer Timer aus. Aktivierung manuell per
+  // Button ODER automatisch bei jedem Eintritt in mode==='work' (siehe switchTo()/
+  // restoreTimerState()). Ausschalten passiert ausschließlich über den Button-Klick.
+  function applyFocusModeUI() {
+    document.body.classList.toggle('focus-mode', focusModeOn);
+    document.getElementById('focus-toggle-btn')?.classList.toggle('active', focusModeOn);
+  }
+
+  function setFocusMode(on) {
+    focusModeOn = on;
+    localStorage.setItem('pomo_focus_mode_v1', focusModeOn ? '1' : '0');
+    applyFocusModeUI();
+  }
+
+  function initFocusMode() {
+    focusModeOn = localStorage.getItem('pomo_focus_mode_v1') === '1';
+    applyFocusModeUI();
+    document.getElementById('focus-toggle-btn').addEventListener('click', () => {
+      setFocusMode(!focusModeOn);
+    });
+  }
+
   // „Automatische Pausen": geräte-lokale Opt-in-Einstellung, nur wirksam wenn
   // aktiv gesetzt — Default-Verhalten (Checkbox aus) bleibt unverändert wie
   // vor diesem Feature (siehe CLAUDE.md „Automatische Pausen").
@@ -3491,6 +3602,14 @@
   async function restoreTimerState() {
     const state = await loadTimerState();
     if (!state) return;
+    try {
+      await restoreTimerStateInner(state);
+    } finally {
+      if (mode === 'work') setFocusMode(true);
+    }
+  }
+
+  async function restoreTimerStateInner(state) {
 
     if (state.stash_paused_remaining != null) {
       workStash = {
@@ -5657,6 +5776,8 @@
   initLimitlessSetting();
   initAutoBreaksSetting();
   initFocusIntervalSetting();
+  initNewDesignSetting();
+  initFocusMode();
   initChallengesCard();
   initPrivacyToggle();
   initAvatarUpload();
