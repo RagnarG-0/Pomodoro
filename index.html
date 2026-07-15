@@ -1279,6 +1279,17 @@
     body.new-design .bento-row > #egg-section-wrapper {
       margin-bottom: 0;
       max-width: none;
+      /* Breite/Höhe kommen aus inerten CSS-Variablen (siehe applyCustomBentoLayout),
+         nicht aus rohen Inline-Styles — sonst würden sie auch dann noch wirken, wenn
+         .bento-row außerhalb dieses @media/body.new-design-Scopes zu display:contents
+         kollabiert (body selbst ist display:flex;flex-direction:column) und die Kachel
+         plötzlich direktes Flex-Item von body würde, mit falscher Wachstumsrichtung. */
+      flex: var(--bento-flex, 1) 1 0;
+    }
+    body.new-design .bento-row > .bento-custom-height {
+      height: var(--bento-height);
+      overflow-y: auto;
+      align-self: flex-start;
     }
     body.new-design .bento-row > #heatmap-card,
     body.new-design .bento-row > #stats-card { min-width: 300px; }
@@ -3686,13 +3697,18 @@
         const meta = BENTO_TILE_META[entry.id];
         const tileEl = meta && document.getElementById(meta.elId);
         if (!tileEl) return;
-        tileEl.style.flex = entry.flex + ' 1 0';
+        // Werte als inerte CSS-Variablen + Klasse speichern, nicht als rohe
+        // Inline-Styles — die eigentliche Wirkung kommt aus der CSS-Regel
+        // body.new-design .bento-row > ..., sonst würden flex/height/overflow
+        // auch dann noch greifen, wenn .bento-row zu display:contents kollabiert
+        // (new-design aus) und die Kachel direktes Flex-Item von body würde.
+        tileEl.style.setProperty('--bento-flex', entry.flex);
         // custom height nur auf der eigenen Kachel (align-self statt align-items
         // auf der ganzen Zeile) — Geschwister behalten ihr bestehendes Stretch-
         // Verhalten, sonst würde sich der Default-Look aller new-design-Nutzer ändern
-        tileEl.style.height = entry.height ? entry.height + 'px' : '';
-        tileEl.style.overflowY = entry.height ? 'auto' : '';
-        tileEl.style.alignSelf = entry.height ? 'flex-start' : '';
+        tileEl.classList.toggle('bento-custom-height', !!entry.height);
+        if (entry.height) tileEl.style.setProperty('--bento-height', entry.height + 'px');
+        else tileEl.style.removeProperty('--bento-height');
         rowEl.appendChild(tileEl); // verschiebt den echten Knoten, zerstört keine Listener/Inhalte
       });
     });
@@ -3881,14 +3897,13 @@
         let newLeft = Math.max(BENTO_MIN_FLEX, Math.min(totalFlex - BENTO_MIN_FLEX, startLeftFlex + deltaFlex));
         const newRight = totalFlex - newLeft;
         entry.flex = newLeft; rightEntry.flex = newRight;
-        tileEl.style.flex = newLeft + ' 1 0';
-        rightEl.style.flex = newRight + ' 1 0';
+        tileEl.style.setProperty('--bento-flex', newLeft);
+        rightEl.style.setProperty('--bento-flex', newRight);
       }
       const newHeight = Math.max(BENTO_MIN_HEIGHT, startHeight + (ev.clientY - startY));
       entry.height = newHeight;
-      tileEl.style.height = newHeight + 'px';
-      tileEl.style.overflowY = 'auto';
-      tileEl.style.alignSelf = 'flex-start';
+      tileEl.classList.add('bento-custom-height');
+      tileEl.style.setProperty('--bento-height', newHeight + 'px');
     }
     function onUp() {
       handle.releasePointerCapture(e.pointerId);
