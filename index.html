@@ -1001,7 +1001,12 @@
   .market-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .market-tabs    { display: flex; gap: 6px; margin-bottom: 10px; }
   .market-tab     { flex: none; }
-  .market-grid    { display: flex; flex-wrap: wrap; gap: 10px; }
+  /* padding-bottom reserviert Platz für .market-card-price (position:absolute,
+     bottom:-8px, hängt unter .deck-card raus) — #deckContent hat overflow:hidden,
+     ohne diesen Puffer wird der Preis-Badge unten abgeschnitten, sobald keine
+     .market-card-seller-Zeile (nur im "Alle Angebote"-Tab vorhanden) den Wrap
+     zufällig hoch genug macht (Bug: in "Meine Angebote" fehlte diese Zeile) */
+  .market-grid    { display: flex; flex-wrap: wrap; gap: 10px; padding-bottom: 10px; }
   .market-card-price {
     position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
     background: var(--accent); color: #fff; font-size: 9px; font-weight: 700;
