@@ -19,6 +19,8 @@
     --accent: #1D9E75;
     --accent-dark: #0F6E56;
     --balloon-string: rgba(0,0,0,0.28);
+    --ring-outer: #0F6E56;
+    --ring-inner: #5DCAA5;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -208,31 +210,15 @@
 
   .watch-wrap { display: flex; justify-content: center; margin-bottom: 1.25rem; }
 
-  .limitless-track-wrap { margin: 0 auto 1.25rem; max-width: 320px; transition: opacity 0.2s; }
-  .limitless-track-scroll { overflow-x: auto; overflow-y: hidden; padding: 5px 3px; margin: -5px -3px; }
-  .limitless-track {
-    position: relative; height: 42px; border-radius: 8px; margin: 0 auto;
-    background: var(--surface2); border: 0.5px solid var(--border-strong);
-    overflow: visible;
+  .limitless-ring-wrap { display: flex; justify-content: center; align-items: center; margin: 0 auto 1.25rem; transition: opacity 0.2s; }
+  #limitless-ring-svg { width: clamp(150px, 42vmin, 190px); height: clamp(150px, 42vmin, 190px); }
+  #limitless-ring-outer-arc, #focus-ring-arc.dual-outer { stroke: var(--ring-outer); opacity: 1; }
+  #limitless-ring-inner-arc, #focus-ring-inner-arc { stroke: var(--ring-inner); opacity: 0.9; }
+  @keyframes ring-glow-pulse {
+    0%, 100% { filter: drop-shadow(0 0 0px var(--ring-outer)); }
+    50% { filter: drop-shadow(0 0 6px var(--ring-outer)); }
   }
-  .limitless-track-fill {
-    position: absolute; left: 0; top: 0; bottom: 0; width: 0px;
-    background: linear-gradient(90deg, var(--accent), var(--accent-dark));
-    border-radius: 8px; transition: width 0.25s linear;
-  }
-  .limitless-track-fill.over-goal { background: linear-gradient(90deg, var(--accent-dark), var(--accent)); }
-  .limitless-track-fill.over-goal::after {
-    content: ""; position: absolute; inset: 0; border-radius: 8px;
-    background: repeating-linear-gradient(45deg, rgba(255,255,255,0.16), rgba(255,255,255,0.16) 6px, transparent 6px, transparent 12px);
-    background-size: 24px 24px; animation: limitless-shimmer 1.4s linear infinite;
-  }
-  @keyframes limitless-shimmer { 0% { background-position: 0 0; } 100% { background-position: 24px 0; } }
-  .limitless-track-ticks { position: absolute; inset: 0; }
-  .limitless-track-tick {
-    position: absolute; top: 5px; bottom: 5px; width: 1.5px;
-    background: var(--border-strong); opacity: 0.6;
-  }
-  .limitless-track-tick.lit { background: rgba(255,255,255,0.65); opacity: 1; }
+  .ring-over-goal { animation: ring-glow-pulse 1.4s ease-in-out infinite; }
 
   #time-display {
     font-size: 80px; font-weight: normal; letter-spacing: -3px;
@@ -1416,7 +1402,7 @@
 
   body.focus-mode .mode-row       { grid-area: mode; margin-bottom: 0; }
   body.focus-mode .watch-wrap,
-  body.focus-mode .limitless-track-wrap,
+  body.focus-mode .limitless-ring-wrap,
   body.focus-mode .focus-ring-wrap,
   body.focus-mode #time-display   { grid-area: ring; margin: 0; }
   body.focus-mode #mode-label     { grid-area: caption; margin: 0; }
@@ -1751,13 +1737,17 @@
     </svg>
   </div>
 
-  <div class="limitless-track-wrap" id="limitless-track-wrap" style="display:none;">
-    <div class="limitless-track-scroll" id="limitless-track-scroll">
-      <div class="limitless-track" id="limitless-track">
-        <div class="limitless-track-fill" id="limitless-track-fill"></div>
-        <div class="limitless-track-ticks" id="limitless-track-ticks"></div>
-      </div>
-    </div>
+  <div class="limitless-ring-wrap" id="limitless-ring-wrap" style="display:none;">
+    <svg id="limitless-ring-svg" width="170" height="170" viewBox="0 0 160 160">
+      <circle cx="80" cy="80" r="72" fill="none" stroke="var(--surface2)" stroke-width="8"/>
+      <circle id="limitless-ring-outer-arc" cx="80" cy="80" r="72"
+        fill="none" stroke-width="8" stroke-linecap="round" stroke-dashoffset="0"
+        transform="rotate(-90 80 80)"/>
+      <circle cx="80" cy="80" r="56" fill="none" stroke="var(--surface2)" stroke-width="7"/>
+      <circle id="limitless-ring-inner-arc" cx="80" cy="80" r="56"
+        fill="none" stroke-width="7" stroke-linecap="round" stroke-dashoffset="0"
+        transform="rotate(-90 80 80)"/>
+    </svg>
   </div>
 
   <div class="focus-ring-wrap" id="focus-ring-wrap" style="display:none;">
@@ -1767,6 +1757,12 @@
         fill="none" stroke="var(--accent)" stroke-width="8"
         stroke-linecap="round" stroke-dashoffset="0"
         transform="rotate(-90 80 80)"/>
+      <g id="focus-ring-inner-group" style="display:none;">
+        <circle cx="80" cy="80" r="56" fill="none" stroke="var(--surface2)" stroke-width="7"/>
+        <circle id="focus-ring-inner-arc" cx="80" cy="80" r="56"
+          fill="none" stroke-width="7" stroke-linecap="round" stroke-dashoffset="0"
+          transform="rotate(-90 80 80)"/>
+      </g>
     </svg>
   </div>
 
@@ -2116,7 +2112,8 @@
   const KEY = 'pomo_heatmap_v3';
   const LABELS_KEY = 'pomo_labels_v1';
   const CIRC = 2 * Math.PI * 68;
-  const CIRC_RING = 2 * Math.PI * 72; // Ring-Radius 72 (dicker als der kleine Uhr-Radius 68), nur Fokus-Modus
+  const CIRC_RING = 2 * Math.PI * 72; // Ring-Radius 72 (dicker als der kleine Uhr-Radius 68) — Fokus-Modus UND normale Timer-Karte (Limitless-Doppel-Ring)
+  const CIRC_RING_INNER = 2 * Math.PI * 56; // innerer Ring (Pausen-Fortschritt) des Limitless-Doppel-Rings
   const ROWS = 7;
   const DAYS = 100;
   const LIMITLESS_CHECKPOINT_SEC = 20 * 60; // Intervall für stillen Zwischenkredit; für manuelles Testen temporär verkleinerbar
@@ -2203,8 +2200,7 @@
   let limitlessSetting = false;   // persistierte Checkbox-Präferenz (localStorage)
   let limitless = false;          // true, wenn die AKTUELLE Work-Session eine Stoppuhr ist
   let limitlessCreditedMin = 0;   // bereits per Zwischenkredit gutgeschriebene Minuten dieser Session
-  let dailyFocusGoalMin = 240;    // Tagesziel für den Limitless-Balken in Minuten (aus profiles.daily_focus_goal_min; Default 4h bis gesetzt); bestimmt Balkenlänge in updateLimitlessTrack()
-  let _limitlessTickCount = -1;   // Cache für updateLimitlessTrack(): verhindert Neuaufbau der Checkpoint-Striche bei jedem Tick (alle 250ms)
+  let dailyFocusGoalMin = 240;    // Tagesziel für den Limitless-Ring in Minuten (aus profiles.daily_focus_goal_min; Default 4h bis gesetzt); bestimmt den äußeren Ring-Fortschritt in updateLimitlessRing()
   let autoBreaksSetting = false;  // persistierte Checkbox-Präferenz „Automatische Pausen" (nur bei Limitless wählbar)
   let focusIntervalMin = 20;      // Fokus-Intervall bei aktiven Automatische Pausen (20-120, 5er-Schritte); ohne Automatische Pausen bleibt der Checkpoint fest bei 20 min (LIMITLESS_CHECKPOINT_SEC)
   let newDesignOn = false;        // persistierte Checkbox-Präferenz „Neues Design" (Bento-Grid ab Desktop-Breite); Default aus, geräte-lokal
@@ -2371,7 +2367,10 @@
   // drittes Mal dupliziert wird.
   function currentProgressFrac() {
     if (mode === 'work' && limitless) {
-      return (remaining % LIMITLESS_CHECKPOINT_SEC) / LIMITLESS_CHECKPOINT_SEC; // Fortschritt zum nächsten Zwischenkredit
+      // Zykluslänge wie in checkLimitlessCheckpoint(): Fokus-Intervall bei aktiven
+      // Automatische Pausen, sonst fest LIMITLESS_CHECKPOINT_SEC (20 min).
+      const cycleSec = (autoBreaksSetting ? focusIntervalMin : LIMITLESS_CHECKPOINT_SEC / 60) * 60;
+      return (remaining % cycleSec) / cycleSec; // Fortschritt zum nächsten Zwischenkredit/zur nächsten Pause
     }
     return totalSec > 0 ? remaining/totalSec : 0;
   }
@@ -2394,45 +2393,38 @@
     document.getElementById('watch-hand').setAttribute('y2', (80+len*Math.sin(rad)).toFixed(2));
   }
 
-  function updateFocusRing() {
-    const frac = currentProgressFrac();
-    document.getElementById('focus-ring-arc').setAttribute('stroke-dashoffset', (CIRC_RING*(1-frac)).toFixed(2));
-  }
-
-  // Balkenlänge = Tagesziel (dailyFocusGoalMin) relativ zu 12h (720 min) verfügbarer Breite:
-  // bei 12h Ziel volle Breite, bei 1h Ziel 1/12 davon usw. Wird das Ziel überschritten, wächst
-  // der ganze Balken (Track + Füllung) mit derselben Skala einfach weiter (siehe Design-Mockup).
-  function updateLimitlessTrack() {
+  // Live "heute gelernte Minuten" + Tagesziel — Basis für den äußeren Ring (Timer-Karte + Fokus-Modus).
+  function dailyGoalMinLive() {
     const creditKey = pomoDay || todayKey();
     const liveMin = Math.max(0, (days[creditKey] || 0) - limitlessCreditedMin + Math.floor(remaining / 60));
-    const goalMin = dailyFocusGoalMin || 240;
-    const totalMin = Math.max(goalMin, liveMin);
+    return { liveMin, goalMin: dailyFocusGoalMin || 240 };
+  }
 
-    const scrollEl = document.getElementById('limitless-track-scroll');
-    const trackEl = document.getElementById('limitless-track');
-    const fillEl = document.getElementById('limitless-track-fill');
-    const ticksEl = document.getElementById('limitless-track-ticks');
-    const pxPerMin = (scrollEl.clientWidth || 320) / 720;
+  // Setzt beide Arcs eines Doppel-Rings (äußerer Ring = Tagesziel, innerer Ring = Pausen-Fortschritt).
+  // Von updateLimitlessRing() (normale Timer-Karte) UND updateFocusRing() (Fokus-Modus) genutzt.
+  function updateDualRingArcs(outerArcId, innerArcId) {
+    const { liveMin, goalMin } = dailyGoalMinLive();
+    const outerFrac = Math.min(1, liveMin / goalMin); // Ring bleibt bei 100% geschlossen, kein Überlaufen wie beim alten Balken
+    const outerEl = document.getElementById(outerArcId);
+    outerEl.setAttribute('stroke-dashoffset', (CIRC_RING*(1-outerFrac)).toFixed(2));
+    outerEl.classList.toggle('ring-over-goal', liveMin >= goalMin);
+    const innerFrac = currentProgressFrac();
+    document.getElementById(innerArcId).setAttribute('stroke-dashoffset', (CIRC_RING_INNER*(1-innerFrac)).toFixed(2));
+  }
 
-    trackEl.style.width = (totalMin * pxPerMin).toFixed(1) + 'px';
-    fillEl.style.width = (liveMin * pxPerMin).toFixed(1) + 'px';
-    fillEl.classList.toggle('over-goal', liveMin >= goalMin);
+  function updateLimitlessRing() {
+    updateDualRingArcs('limitless-ring-outer-arc', 'limitless-ring-inner-arc');
+  }
 
-    const cpMin = LIMITLESS_CHECKPOINT_SEC / 60;
-    const tickCount = Math.floor(totalMin / cpMin);
-    if (tickCount !== _limitlessTickCount) {
-      _limitlessTickCount = tickCount;
-      ticksEl.innerHTML = '';
-      for (let i = 1; i * cpMin < totalMin - 0.01; i++) {
-        const t = document.createElement('div');
-        t.className = 'limitless-track-tick' + (liveMin >= i * cpMin ? ' lit' : '');
-        t.style.left = (i * cpMin * pxPerMin).toFixed(1) + 'px';
-        ticksEl.appendChild(t);
-      }
+  function updateFocusRing(showElapsed) {
+    const arcEl = document.getElementById('focus-ring-arc');
+    document.getElementById('focus-ring-inner-group').style.display = showElapsed ? '' : 'none';
+    arcEl.classList.toggle('dual-outer', showElapsed);
+    if (showElapsed) {
+      updateDualRingArcs('focus-ring-arc', 'focus-ring-inner-arc');
     } else {
-      ticksEl.querySelectorAll('.limitless-track-tick').forEach((t, idx) => {
-        t.classList.toggle('lit', liveMin >= (idx + 1) * cpMin);
-      });
+      const frac = currentProgressFrac();
+      arcEl.setAttribute('stroke-dashoffset', (CIRC_RING*(1-frac)).toFixed(2));
     }
   }
 
@@ -2610,9 +2602,9 @@
     document.getElementById('time-display').textContent = showElapsed ? fmtElapsed(remaining) : fmt(remaining);
     document.getElementById('mode-label').textContent = modeLabels[mode];
     document.getElementById('watch-wrap').style.display = (!focusUI && !showElapsed) ? 'flex' : 'none';
-    document.getElementById('limitless-track-wrap').style.display = (!focusUI && showElapsed) ? 'block' : 'none';
+    document.getElementById('limitless-ring-wrap').style.display = (!focusUI && showElapsed) ? 'flex' : 'none';
     document.getElementById('focus-ring-wrap').style.display = focusUI ? 'flex' : 'none';
-    if (focusUI) { updateFocusRing(); } else if (showElapsed) { updateLimitlessTrack(); } else { updateWatch(); }
+    if (focusUI) { updateFocusRing(showElapsed); } else if (showElapsed) { updateLimitlessRing(); } else { updateWatch(); }
     const btn = document.getElementById('btn-start');
     const icon = document.getElementById('btn-start-icon');
     if (running) {
@@ -4437,8 +4429,8 @@
       renderTimer();
       window.electronAPI?.sendState({ running: false, mode, remaining, label: currentLabel });
     }
-    // Balken sofort mit neuem Tagesziel aktualisieren, auch während der Timer läuft
-    if (mode === 'work' && limitless) { _limitlessTickCount = -1; updateLimitlessTrack(); }
+    // Ring sofort mit neuem Tagesziel aktualisieren, auch während der Timer läuft
+    if (mode === 'work' && limitless) { updateLimitlessRing(); }
     feedback.textContent = '✓ Gespeichert';
     setTimeout(() => { feedback.textContent = ''; }, 2500);
   });
@@ -5007,7 +4999,7 @@
     startTokenRefreshTimer();
     document.getElementById('time-display').style.opacity = '1';
     document.getElementById('watch-svg').style.opacity = '1';
-    document.getElementById('limitless-track-wrap').style.opacity = '1';
+    document.getElementById('limitless-ring-wrap').style.opacity = '1';
     render();
     if (userPublic && clanRole) { document.getElementById('leaderboard-card').style.display = 'block'; }
     initLeaderboard();
@@ -5323,7 +5315,7 @@
         document.getElementById('migrate-banner').style.display = 'none';
         document.getElementById('time-display').style.opacity  = '1';
         document.getElementById('watch-svg').style.opacity     = '1';
-        document.getElementById('limitless-track-wrap').style.opacity = '1';
+        document.getElementById('limitless-ring-wrap').style.opacity = '1';
         return; // stop here — user must set password first
       }
     }
@@ -5474,7 +5466,7 @@
     // No valid session — show auth modal
     document.getElementById('time-display').style.opacity = '1';
     document.getElementById('watch-svg').style.opacity = '1';
-    document.getElementById('limitless-track-wrap').style.opacity = '1';
+    document.getElementById('limitless-ring-wrap').style.opacity = '1';
     openAuthModal();
   }
 
@@ -6279,6 +6271,9 @@
   registerSW();
   drawTicks();
   document.getElementById('focus-ring-arc').setAttribute('stroke-dasharray', CIRC_RING.toFixed(2));
+  document.getElementById('focus-ring-inner-arc').setAttribute('stroke-dasharray', CIRC_RING_INNER.toFixed(2));
+  document.getElementById('limitless-ring-outer-arc').setAttribute('stroke-dasharray', CIRC_RING.toFixed(2));
+  document.getElementById('limitless-ring-inner-arc').setAttribute('stroke-dasharray', CIRC_RING_INNER.toFixed(2));
   buildDowCol();
   initDragScroll();
   initTooltip();
@@ -7515,7 +7510,7 @@
   // Hide timer until session is restored to avoid flash of default value
   document.getElementById('time-display').style.opacity = '0';
   document.getElementById('watch-svg').style.opacity = '0';
-  document.getElementById('limitless-track-wrap').style.opacity = '0';
+  document.getElementById('limitless-ring-wrap').style.opacity = '0';
   render();
   initEggs();
   initAuth();
