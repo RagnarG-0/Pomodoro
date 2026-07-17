@@ -453,9 +453,10 @@ Integriert in die bestehende Deck-Box (`#deckBox`, unterhalb des `#deckGrid`-Kar
 
 ### Glocke (Kopf-Header) jetzt für alle Nutzer
 - `#bell-wrap` ist nicht mehr Leader-exklusiv — sichtbar für jeden eingeloggten Nutzer (`updateLeaderUI()`: `!!currentUser` statt `clanRole==='leader'`). Die Beitrittsanfragen-Sektion (`#bell-clan-section`) bleibt weiterhin nur für Leader sichtbar/gefüllt.
-- Neue Sektion `#bell-trade-section`/`#bell-trade-list`: `loadTradeNotifications()` (ruft `get_incoming_trade_offers()`) + `renderBellTradeItems()`, analog zum bestehenden `loadPendingRequests()`/`renderBellRequests()`-Muster. Badge-Zähler summiert beide Sektionen (`bellClanCount + bellTradeCount`, `updateBellBadge()`).
+- Neue Sektion `#bell-trade-section`/`#bell-trade-list`: `loadTradeNotifications()` (ruft `get_incoming_trade_offers()`) + `renderBellTradeItems()`, analog zum bestehenden `loadPendingRequests()`/`renderBellRequests()`-Muster.
 - Klick auf „Ansehen" bei einem Trade-Eintrag (`openMyListingFromBell()`): öffnet die Deck-Box, wechselt zu „Meine Angebote", lädt die Listings neu und öffnet direkt die passende `showEggCardView`-Detailansicht mit den eingehenden Gegenangeboten.
-- Kein Polling/Realtime, gleiches Muster wie bisher: Laden nur beim Öffnen der Glocke (`bell-btn`-Click).
+- **Indikator**: `#bell-badge` ist ein kleiner grüner Punkt (kein Zahlen-Badge mehr) — `updateBellBadge()` summiert `bellClanCount + bellTradeCount` und togglet nur die Sichtbarkeit; die Anzahl steht als `title`-Attribut auf `#bell-btn` (Hover-Tooltip statt Ziffer im Icon).
+- **Polling statt Realtime**: kein Websocket/Supabase-Realtime im Projekt, daher lädt `loadTradeNotifications()` (+ `loadPendingRequests()` bei Leadern) sowohl direkt nach dem Login (unmittelbar nach `updateLeaderUI()`) als auch per `setInterval` alle 45s bei sichtbarem Tab neu — gleiches Muster wie das bestehende 60s-Leaderboard-Polling (`index.html:~4704`). Macht ein anderer Spieler ein Gegenangebot, aktualisiert sich der grüne Punkt beim betroffenen Anbieter spätestens nach diesem Intervall von selbst, auch ohne die Glocke zu öffnen.
 
 ### Sonstiges
 - **`profiles_read_active_sellers`**-RLS-Policy (über `has_active_listing()`, SECURITY DEFINER) unverändert nötig, damit Angebotsersteller-Namen im Browse-Feed sichtbar bleiben, unabhängig von `public`/Clan-Status.
