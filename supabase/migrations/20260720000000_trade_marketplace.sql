@@ -12,15 +12,20 @@
 -- unter dem neuen Tausch-Modell semantisch ungültig — sauber schließen statt
 -- migrieren.
 UPDATE public.card_listings SET status = 'cancelled' WHERE status = 'active';
+
+-- Policy referenziert buyer_id — muss vor dem DROP COLUMN weg, sonst Fehler.
+DROP POLICY IF EXISTS "card_listings_select" ON public.card_listings;
+
+-- Alter CHECK ('active'/'sold'/'cancelled') muss weg, BEVOR 'sold'-Zeilen auf
+-- 'traded' umgeschrieben werden — sonst verbietet noch der alte Constraint
+-- genau den Wert, den wir gerade erst per neuem Constraint erlauben wollen.
+ALTER TABLE public.card_listings DROP CONSTRAINT IF EXISTS card_listings_status_check;
+
 -- Bereits abgeschlossene Käufe ('sold', altes Preis-Modell) sind unter dem
 -- neuen status-CHECK ('active'/'traded'/'cancelled') kein gültiger Wert mehr
 -- — als bereits abgeschlossene Transaktion ist 'traded' die richtige Analogie.
 UPDATE public.card_listings SET status = 'traded' WHERE status = 'sold';
 
--- Policy referenziert buyer_id — muss vor dem DROP COLUMN weg, sonst Fehler.
-DROP POLICY IF EXISTS "card_listings_select" ON public.card_listings;
-
-ALTER TABLE public.card_listings DROP CONSTRAINT IF EXISTS card_listings_status_check;
 ALTER TABLE public.card_listings DROP COLUMN price_diamonds;
 ALTER TABLE public.card_listings DROP COLUMN buyer_id;
 ALTER TABLE public.card_listings RENAME COLUMN sold_at TO traded_at;
