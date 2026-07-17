@@ -146,10 +146,9 @@
   #bell-btn:hover { background: var(--surface2); color: var(--text); }
   #bell-btn svg { width: 16px; height: 16px; }
   #bell-badge {
-    position: absolute; top: -2px; right: -2px;
-    background: var(--accent); color: #fff; font-size: 9px; border-radius: 50%;
-    width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;
-    font-family: Georgia, serif; pointer-events: none;
+    position: absolute; top: -1px; right: -1px;
+    background: #22c55e; border: 1.5px solid var(--surface); border-radius: 50%;
+    width: 10px; height: 10px; display: none; pointer-events: none;
   }
   #bell-dropdown {
     position: absolute; top: calc(100% + 6px); right: 0;
@@ -1477,7 +1476,7 @@
         <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
     </button>
-    <span id="bell-badge" style="display:none;">0</span>
+    <span id="bell-badge" style="display:none;" aria-hidden="true"></span>
     <div id="bell-dropdown">
       <div id="bell-clan-section" style="display:none;">
         <div class="bell-section-label">Beitrittsanfragen</div>
@@ -5008,6 +5007,10 @@
 
     if (clanId) await loadClanSettings(token);
     updateLeaderUI();
+    // Sofort laden statt erst beim ersten Öffnen der Glocke — sonst zeigt der
+    // grüne Punkt nichts an, bevor der Nutzer die Glocke einmal manuell öffnet.
+    if (clanRole === 'leader') loadPendingRequests();
+    loadTradeNotifications();
 
     // Read local days before server overwrites them (for reconciliation)
     const localRaw = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
@@ -6156,9 +6159,10 @@
   let bellTradeCount = 0;
   function updateBellBadge() {
     const badge = document.getElementById('bell-badge');
+    const bellBtn = document.getElementById('bell-btn');
     const total = bellClanCount + bellTradeCount;
-    badge.style.display = total > 0 ? 'flex' : 'none';
-    badge.textContent = total;
+    badge.style.display = total > 0 ? 'block' : 'none';
+    bellBtn.title = total > 0 ? `${total} neue Benachrichtigung${total === 1 ? '' : 'en'}` : 'Benachrichtigungen';
   }
 
   function renderBellRequests(requests, nameMap) {
@@ -6342,6 +6346,16 @@
       loadTradeNotifications();
     }
   });
+
+  // Kein Realtime/Websocket im Projekt (siehe Leaderboard-Polling) — macht ein
+  // Spieler ein Gegenangebot, aktualisiert sich die Glocke des betroffenen
+  // Anbieters spätestens nach diesem Intervall von selbst, auch ohne die
+  // Glocke manuell zu öffnen.
+  setInterval(() => {
+    if (!currentUser || document.hidden) return;
+    if (clanRole === 'leader') loadPendingRequests();
+    loadTradeNotifications();
+  }, 45000);
 
   document.addEventListener('click', e => {
     const wrap = document.getElementById('bell-wrap');
