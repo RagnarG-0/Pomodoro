@@ -33,8 +33,10 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `clan_requests` | id, clan_id, user_id, status (`pending`/`accepted`/`rejected`), created_at |
 | `weekly_challenges` | challenge_key (PK), tier, metric_type, param_n, param_h, reward_diamonds, pool_index, label, active |
 | `weekly_challenge_claims` | id uuid (PK), user_id, week_start, challenge_key, reward_diamonds (Snapshot), claimed_at |
-| `card_listings` | id uuid (PK), seller_id, user_card_id (verweist auf konkrete `user_cards`-Zeile), card_id, price_diamonds, status (`active`/`sold`/`cancelled`), buyer_id, created_at, sold_at |
-| `card_trades` | id uuid (PK), listing_id, seller_id, buyer_id, card_id, user_card_id, price_diamonds, traded_at — unveränderliches Audit-Log, kein UPDATE/DELETE möglich |
+| `card_listings` | id uuid (PK), seller_id, user_card_id (verweist auf konkrete `user_cards`-Zeile), card_id, status (`active`/`traded`/`cancelled`), created_at, traded_at — kein Preis mehr, reines Tausch-Angebot |
+| `card_trades` | id uuid (PK), listing_id, seller_id, buyer_id, card_id, user_card_id, trade_offer_id, traded_at — unveränderliches Audit-Log (kein UPDATE/DELETE), eine Zeile PRO bewegter Karte (seller/buyer = Abgeber/Empfänger dieser einen Karte) |
+| `trade_offers` | id uuid (PK), listing_id, offerer_id, status (`pending`/`accepted`/`rejected`), created_at, responded_at — ein Gegenangebot auf ein `card_listings`-Angebot |
+| `trade_offer_cards` | trade_offer_id + user_card_id (PK), card_id — welche eigenen Karten Teil eines Gegenangebots sind |
 
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
@@ -64,9 +66,11 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `my_clan_id()` | Hilfsfunktion für RLS-Policy (SECURITY DEFINER, kein direkter Aufruf) |
 | `calc_week_streak(p_week_start, p_user_id)` | Streak innerhalb einer Kalenderwoche, wie `computeCurrentStreak()` (SECURITY DEFINER). Freie Tage zählen wie normale Tage — kein Off-Day-Skip, siehe „Freie Tage" unter Bekannte Designentscheidungen |
 | `claim_weekly_challenge(p_challenge_key)` | Prüft Rotation/Schwellenwert serverseitig neu, schreibt Claim + Diamanten gut, gibt neuen Diamanten-Stand zurück |
-| `create_listing(p_card_id, p_price_diamonds)` | Wählt serverseitig die älteste noch nicht aktiv gelistete Kopie der Karte, legt `card_listings`-Zeile an, gibt `listing id uuid` zurück |
-| `cancel_listing(p_listing_id)` | Claim-Mutex-Update `active→cancelled`, nur eigene Angebote |
-| `buy_listing(p_listing_id)` | Atomare Kauf-Transaktion: Claim-Mutex `active→sold`, Diamanten-Transfer, `user_cards.user_id`-Übertragung, `card_trades`-Log-Eintrag, gibt neuen Diamanten-Stand des Käufers zurück. Siehe „Tauschbörse" |
+| `create_listing(p_card_id)` | Wählt serverseitig die älteste noch nicht aktiv gelistete Kopie der Karte, legt `card_listings`-Zeile an, gibt `listing id uuid` zurück |
+| `cancel_listing(p_listing_id)` | Claim-Mutex-Update `active→cancelled`, nur eigene Angebote; lehnt danach alle offenen Gegenangebote auf dieses Listing ab |
+| `create_trade_offer(p_listing_id, p_offered_card_ids int[])` | Legt ein Gegenangebot an (ein oder mehrere eigene Karten, per `card_id` wie bei `create_listing`, Server wählt konkrete Kopien). Tages-Limit: max. 1 Gegenangebot pro Nutzer pro App-Tag (global). Siehe „Tauschbörse" |
+| `respond_to_trade_offer(p_offer_id, p_accept)` | Nur der Angebotsersteller. Bei Annahme: atomarer Kartentausch (beide Richtungen) + Audit-Log + Cleanup-Kaskade (alle anderen Angebote/Gegenangebote mit denselben Karten werden verworfen). Siehe „Tauschbörse" |
+| `get_incoming_trade_offers()` | Eigene offene eingehende Gegenangebote für die Kopf-Glocke (SECURITY DEFINER) |
 
 ---
 
@@ -106,6 +110,8 @@ marketListings // Array — aktive Angebote aller Spieler, aus card_listings (Ta
 myListings     // Array — eigene aktive Angebote (Tab „Meine Angebote")
 marketTab      // 'all' | 'mine' — aktiver Tab in der Tauschbörse
 marketLoaded   // boolean — verhindert Doppel-Fetch beim ersten Aufklappen der Deck-Box
+bellClanCount / bellTradeCount // number — gemergte Zähler für den Glocken-Badge (Clan-Anfragen + eingehende Gegenangebote)
+tradeOfferListingId / tradeOfferSelected // uuid | null, Set<int> — Ziel-Listing bzw. gewählte eigene card_ids im Gegenangebot-Picker (#tradeOfferOverlay)
 ```
 
 ---
@@ -275,7 +281,7 @@ Im Fokus-Modus wird `#timer-card` zu einem echten Vollbild-Overlay (`position:fi
 - **Wichtig**: Subqueries in RLS-Policies auf `profiles` müssen SECURITY DEFINER-Funktionen nutzen — sonst rekursiver Loop → Profil nicht lesbar → Auto-Reset
 
 ### UI
-- **Header**: Glocken-Icon (nur Leader) mit Badge + Dropdown für offene Beitrittsanfragen
+- **Header**: Glocken-Icon (`#bell-wrap`, für **jeden eingeloggten Nutzer** sichtbar) mit Badge + Dropdown; Beitrittsanfragen-Sektion darin bleibt aber nur für Clan-Leader sichtbar. Zweite Sektion zeigt eingehende Tausch-Gegenangebote für alle Nutzer, siehe „Tauschbörse"
 - **Header**: „Clan"-Button (Nutzer ohne Clan) mit zwei Tabs: „Clan suchen" und „Neuen Clan erstellen"
 - **Clan suchen**: listet alle aktiven Clans, Anfrage geht an spezifischen Clan
 - **Neuen Clan erstellen**: Namenseingabe, Ersteller wird automatisch Leader
@@ -420,18 +426,42 @@ Fehler-Banner bei zu wenig Diamanten: „Du bist wohl gesetzlich versichert. Ver
 
 ## Tauschbörse (Karten-Marktplatz)
 
-Integriert in die bestehende Deck-Box (`#deckBox`, unterhalb des `#deckGrid`-Kartenrasters), keine eigene Karte. Nutzer bieten Karten aus `user_cards` für einen frei gewählten Diamanten-Preis an — jede Karte, auch die letzte/einzige Kopie (keine Mindestbestand-Regel wie bei `sell_card()`). Angebote sind für alle Spieler sichtbar, keine Handels-Gebühr (ein Trade ist ein reiner Diamanten-Transfer, kann die Gesamtmenge im System nicht erhöhen).
+Integriert in die bestehende Deck-Box (`#deckBox`, unterhalb des `#deckGrid`-Kartenrasters), keine eigene Karte. **Reiner Kartentausch, keine Diamanten** — Nutzer bieten Karten aus `user_cards` zum Tausch an (jede Karte, auch die letzte/einzige Kopie, keine Mindestbestand-Regel wie bei `sell_card()`), andere Spieler machen Gegenangebote aus einer oder mehreren eigenen Karten, der Angebotsersteller nimmt an oder lehnt ab. Ursprünglich ein Fixpreis-Marktplatz (Migration `20260718000000_card_marketplace.sql`), auf reinen Tausch umgestellt in `20260720000000_trade_marketplace.sql`.
 
-- **Transaktionsmodell**: keine Blockchain — eine einzige vertrauenswürdige Postgres-Instanz braucht kein Hash-Chaining/verteilten Konsens. Stattdessen eine `SECURITY DEFINER`-RPC (`buy_listing()`) als atomare ACID-Transaktion + ein unveränderliches Audit-Log (`card_trades`, insert-only, keine RLS-Policy erlaubt UPDATE/DELETE). Claim-Mutex-Pattern wie bei `timer_state`: `UPDATE card_listings SET status='sold' ... WHERE status='active' RETURNING *` — 0 Zeilen zurück heißt, ein anderer Käufer war schneller.
-- **`card_listings` referenziert die konkrete `user_cards`-Zeile** (`user_card_id`) statt sie zu löschen/neu anzulegen — Ownership bleibt bis zum Kauf beim Verkäufer, `buy_listing()` ändert am Ende nur `user_cards.user_id`. `card_id` ist zusätzlich denormalisiert gespeichert, weil die RLS-Policy `user_cards_select_own` anderen Nutzern die Zeile komplett verbirgt — ohne Denormalisierung könnte der Browse-Feed die Kartenart nicht anzeigen.
-- **Ein partieller Unique-Index** (`card_listings_one_active_per_card` auf `user_card_id WHERE status='active'`) garantiert, dass eine physische Karten-Kopie nie zweimal gleichzeitig aktiv gelistet ist — bei Nebenläufigkeit schlägt der zweite `INSERT` mit `unique_violation` fehl.
-- **`buy_listing(p_listing_id)`**: Claim-Mutex → Selbstkauf-Schutz → `SELECT ... FOR UPDATE` auf die Käufer-Profil-Zeile (sperrt sie, *bevor* der Kontostand geprüft wird — verhindert, dass zwei parallele Käufe desselben Nutzers denselben veralteten Kontostand lesen und den Saldo ins Negative treiben) → Diamanten-Transfer → `user_cards.user_id`-Übertragung → `card_trades`-Eintrag. Jeder `RAISE EXCEPTION` rollt die gesamte Funktion zurück, es gibt nie einen Zwischenzustand.
-- **`sell_card()` schließt aktiv gelistete Kopien aus** (`WHERE id NOT IN (SELECT user_card_id FROM card_listings WHERE status='active')`) — sonst könnte ein Duplikat-Verkauf genau die Kopie löschen, die gerade auf dem Marktplatz hängt (führt wegen `buy_listing()`s `source_card_missing`-Guard nicht zu Diamanten-Diebstahl, aber zu einem unverkäuflichen Geister-Angebot).
-- **`profiles_read_active_sellers`**-RLS-Policy (über `has_active_listing()`, SECURITY DEFINER) erlaubt das Lesen des `profiles.username` eines Verkäufers mit aktivem Angebot, unabhängig von dessen `public`/Clan-Status — sonst würde der Verkäufername im Browse-Feed für private Profile `null` liefern.
-- **Client**: `fetchMarketListings()`/`fetchMyListings()` laden lazy beim ersten Aufklappen der Deck-Box (`toggleEggDeck()`, `marketLoaded`-Guard), Cache über `cacheGet`/`cacheSet` mit `CACHE_TTL_MARKET` (30s). Tab-Umschaltung „Alle Angebote"/„Meine Angebote" nutzt die bestehende `.lb-tab`-Klasse (`.market-tab`, schmal statt `flex:1`). Kein Polling/Realtime — `#market-refresh` (↻-Button, analog `#lb-refresh` beim Leaderboard) erzwingt einen frischen Fetch beider Listen (`force=true`).
-- **`profiles(username)`-Embed ist mehrdeutig**: `card_listings` hat zwei FKs auf `profiles` (`seller_id` + `buyer_id`) — PostgREST kann ohne Disambiguierung nicht entscheiden, welche Beziehung gemeint ist (`PGRST201`). `fetchMarketListings()` nutzt daher `profiles!card_listings_seller_id_fkey(username)`; die Antwort behält trotzdem den Schlüssel `profiles` (kein Alias nötig).
-- **`showEggCardView()` ist um einen optionalen `market`-Parameter erweitert** (`{ mode:'browse'|'mine', listingId, price, isMine }`): `mode:'browse'` zeigt einen Kauf-Button (oder „Dein eigenes Angebot" bei `isMine`), `mode:'mine'` einen Storno-Button, `market:null` (normale eigene Deck-Ansicht) zeigt zusätzlich zum bestehenden Duplikat-Verkauf-Button einen neuen „Zum Verkauf anbieten"-Button. Ein zusätzlicher `readOnly`-Parameter verhindert, dass dieser Button in der fremden Mitglieder-Deck-Ansicht (`showMemberDeck()`/`renderMemberDeckGrid()`, über den Leaderboard-🃏-Button) erscheint.
-- **RPC-autoritatives Muster** (wie `sellCard()`): `buyListing()` übernimmt den von der RPC zurückgegebenen neuen Diamanten-Stand, kein optimistisches Client-Rechnen bei dieser Zwei-Parteien-Transaktion.
+### Angebot erstellen & zurückziehen
+- **`create_listing(p_card_id)`**: wie zuvor — Server wählt serverseitig die älteste noch nicht aktiv gelistete Kopie, kein Preis-Parameter mehr.
+- **Ein partieller Unique-Index** (`card_listings_one_active_per_card` auf `user_card_id WHERE status='active'`) garantiert weiterhin, dass eine physische Karten-Kopie nie zweimal gleichzeitig aktiv gelistet ist.
+- **`cancel_listing(p_listing_id)`**: Claim-Mutex `active→cancelled` wie zuvor, lehnt zusätzlich alle noch offenen Gegenangebote auf dieses Listing ab (`trade_offers.status='pending'→'rejected'`) — ein zurückgezogenes Angebot lässt keine baumelnden Gegenangebote zurück.
+
+### Gegenangebot machen & annehmen
+- **`create_trade_offer(p_listing_id, p_offered_card_ids int[])`**: `p_offered_card_ids` referenziert Katalog-Karten (`cards.id`), nicht `user_cards.id` — wie bei `create_listing()` wählt der Server pro genannter `card_id` serverseitig die älteste verfügbare eigene Kopie (weder aktiv gelistet noch bereits Teil irgendeines Gegenangebots). Der Client (`eggDeck`) kennt ohnehin nur `card_id` + Stückzahl, nie einzelne `user_cards`-Zeilen-IDs. Mehrfachnennung derselben `card_id` ist erlaubt (mehrere eigene Kopien derselben Karte anbieten).
+- **Tages-Limit, global**: max. 1 Gegenangebot pro Nutzer pro **App-Tag** (4-Uhr-Grenze Berlin, DST-sicher — gleiches Zeitzonen-Idiom wie `reset_stale_work_sessions()`), unabhängig davon auf wie viele verschiedene Listings. Fehler `daily_offer_limit_reached`. Verhindert Gegenangebots-Spam.
+- **`respond_to_trade_offer(p_offer_id, p_accept)`**: nur der Angebotsersteller (`listing.seller_id`). Claim-Mutex auf `trade_offers` (`pending→accepted/rejected`) verhindert Doppel-Antworten. Bei Ablehnung: fertig, Listing bleibt aktiv für weitere Gegenangebote. Bei Annahme (eine Transaktion):
+  1. Listing-Claim-Mutex `active→traded`.
+  2. Gelistete Karte → Offerer, alle angebotenen Karten → Seller (`UPDATE user_cards SET user_id=...`); schlägt eine Übertragung fehl (Karte inzwischen anderweitig weggetauscht), rollt die **gesamte** Transaktion zurück (`source_card_missing`/`offered_card_missing`).
+  3. Unveränderliches Audit-Log in `card_trades`: **eine Zeile pro bewegter Karte** (nicht mehr eine pro Trade wie beim alten Fixpreis-Modell), alle mit derselben `trade_offer_id` gruppiert.
+  4. **Cleanup-Kaskade**: alle anderen Angebote/Gegenangebote, die mit den soeben bewegten physischen Karten zusammenhängen, werden verworfen — jede andere aktive `card_listings`-Zeile auf eine der bewegten Karten wird `cancelled`, jedes andere offene `trade_offers` auf dasselbe Listing ODER mit einer der bewegten Karten im eigenen `trade_offer_cards`-Set wird `rejected`.
+- **`get_incoming_trade_offers()`** (SECURITY DEFINER): eigene offene eingehende Gegenangebote für die Kopf-Glocke, joint intern über `trade_offers`/`card_listings`/`profiles` — vermeidet fragile PostgREST-Embed-Filter-Syntax.
+- **RLS-Rekursion vermieden**: `trade_offers`/`trade_offer_cards` referenzieren `card_listings` (und umgekehrt hätte `card_listings` theoretisch `trade_offers` referenzieren können) — direkte Cross-Table-Subqueries in beiden Policies gleichzeitig würden einen rekursiven RLS-Loop erzeugen (gleiches Risiko wie bei `profiles`/Clan, siehe „Clan-System"). Gelöst über SECURITY DEFINER-Helper (`owns_listing()`, `can_view_trade_offer()`), die intern RLS umgehen.
+
+### Sichtbarkeitsregeln
+- **Nur eigene Karten in voller Auflösung.** `showEggCardView({ id, src, rarity, count, market, readOnly })`: `market` ist jetzt `{ listingId, isMine }` (kein `mode`/`price` mehr). `market.isMine === true` (egal ob über „Alle Angebote" oder „Meine Angebote" erreicht — dieselbe physische Karte) zeigt die Karte klar, mit „Angebot zurückziehen"-Button + eingehenden Gegenangeboten. `market.isMine === false` blurt das Kartenbild (`filter:blur(14px)` inline auf dem `<img>`, kein separates CSS-Klassen-Konstrukt), zeigt nur „Gegenangebot machen".
+- Auch die **Grid-Vorschau** in „Alle Angebote" (`renderMarketGrid()`) blurt fremde Karten bereits im Thumbnail (`filter:blur(10px)`), nicht erst in der Detailansicht.
+- **Eingehende Gegenangebote** (`renderIncomingOffers()`, in der eigenen Listing-Detailansicht): die vom Gegenüber angebotenen Karten sind ebenfalls fremde Karten und werden genauso verschwommen dargestellt.
+- **Mitglieder-Deck nicht mehr anklickbar**: `renderMemberDeckGrid()` (über den Leaderboard-🃏-Button) rendert Karten nur noch mit `.deck-card-inert` (kein Klick-Handler, `cursor:default`) — fremde Decks sind nur noch anschaubar. Das früher genutzte `readOnly`-Flag von `showEggCardView()` wird dadurch faktisch nicht mehr erreicht, bleibt aber als Sicherheitsnetz im Code.
+- **Gegenangebot-Karten-Picker** (`#tradeOfferOverlay`, `showTradeOfferPicker(listingId)`): zeigt das **eigene** `eggDeck` in voller Klarheit (eigene Karten), Klick auf eine Kachel togglet `.selected` (Mehrfachauswahl, `tradeOfferSelected`-Set), sendet beim Bestätigen die gewählten `card_id`s an `create_trade_offer()`.
+
+### Glocke (Kopf-Header) jetzt für alle Nutzer
+- `#bell-wrap` ist nicht mehr Leader-exklusiv — sichtbar für jeden eingeloggten Nutzer (`updateLeaderUI()`: `!!currentUser` statt `clanRole==='leader'`). Die Beitrittsanfragen-Sektion (`#bell-clan-section`) bleibt weiterhin nur für Leader sichtbar/gefüllt.
+- Neue Sektion `#bell-trade-section`/`#bell-trade-list`: `loadTradeNotifications()` (ruft `get_incoming_trade_offers()`) + `renderBellTradeItems()`, analog zum bestehenden `loadPendingRequests()`/`renderBellRequests()`-Muster. Badge-Zähler summiert beide Sektionen (`bellClanCount + bellTradeCount`, `updateBellBadge()`).
+- Klick auf „Ansehen" bei einem Trade-Eintrag (`openMyListingFromBell()`): öffnet die Deck-Box, wechselt zu „Meine Angebote", lädt die Listings neu und öffnet direkt die passende `showEggCardView`-Detailansicht mit den eingehenden Gegenangeboten.
+- Kein Polling/Realtime, gleiches Muster wie bisher: Laden nur beim Öffnen der Glocke (`bell-btn`-Click).
+
+### Sonstiges
+- **`profiles_read_active_sellers`**-RLS-Policy (über `has_active_listing()`, SECURITY DEFINER) unverändert nötig, damit Angebotsersteller-Namen im Browse-Feed sichtbar bleiben, unabhängig von `public`/Clan-Status.
+- **Client**: `fetchMarketListings()`/`fetchMyListings()` laden weiterhin lazy beim ersten Aufklappen der Deck-Box (`toggleEggDeck()`, `marketLoaded`-Guard), Cache über `cacheGet`/`cacheSet` mit `CACHE_TTL_MARKET` (30s). Tab-Umschaltung „Alle Angebote"/„Meine Angebote" unverändert über `.market-tab`.
+- **`profiles(username)`-Embed ist mehrdeutig**: `card_listings` hatte zwei FKs auf `profiles` (`seller_id` + `buyer_id`); `buyer_id` ist mit dem Preis-Modell entfallen, `fetchMarketListings()` nutzt weiterhin `profiles!card_listings_seller_id_fkey(username)` zur Disambiguierung (schadet nicht, auch wenn es jetzt nur noch einen FK gibt).
+- **`sell_card()` schließt weiterhin aktiv gelistete Kopien aus** (unverändert) — betrifft nur den separaten Diamanten-Duplikat-Verkauf, nicht die Tauschbörse selbst.
 
 ---
 
@@ -491,9 +521,10 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 - **Karte ins Deck**: DELETE `incubator?user_id=eq.<id>&slot_index=eq.<n>` (nur die Zeile des Slots, aus dem geschlüpft wurde)
 - **Level-Up-Ei**: PATCH `profiles.eggs` via `saveEggProfile()`
 - **Duplikat verkaufen**: `sell_card(p_card_id)` RPC (atomar: DELETE `user_cards` + UPDATE `profiles.diamonds`); nur möglich wenn `count > 1`; Belohnung: common 2 / rare 4 / epic 6 / legendary 8 / mystic 10 💎
-- **Karte anbieten**: `create_listing(p_card_id, p_price_diamonds)` RPC → INSERT `card_listings`
-- **Angebot zurückziehen**: `cancel_listing(p_listing_id)` RPC (Claim-Mutex-Update `active→cancelled`)
-- **Karte kaufen**: `buy_listing(p_listing_id)` RPC (atomar: Diamanten-Transfer + `user_cards.user_id`-Übertragung + `card_trades`-Log), siehe „Tauschbörse"
+- **Karte zum Tausch anbieten**: `create_listing(p_card_id)` RPC → INSERT `card_listings` (kein Preis)
+- **Angebot zurückziehen**: `cancel_listing(p_listing_id)` RPC (Claim-Mutex-Update `active→cancelled` + Ablehnung offener Gegenangebote)
+- **Gegenangebot machen**: `create_trade_offer(p_listing_id, p_offered_card_ids)` RPC → INSERT `trade_offers` + `trade_offer_cards` (Tages-Limit)
+- **Gegenangebot annehmen/ablehnen**: `respond_to_trade_offer(p_offer_id, p_accept)` RPC (atomar bei Annahme: beidseitige `user_cards.user_id`-Übertragung + `card_trades`-Log + Cleanup-Kaskade), siehe „Tauschbörse"
 
 ---
 

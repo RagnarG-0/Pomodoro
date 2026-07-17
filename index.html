@@ -132,7 +132,7 @@
   #clan-create-confirm-btn:hover { background: var(--accent); color: #fff; }
   #clan-create-confirm-btn:disabled { opacity: 0.5; cursor: default; }
 
-  /* ── Bell (Leader only) ── */
+  /* ── Bell (alle eingeloggten Nutzer; Clan-Anfragen-Sektion nur für Leader) ── */
   #bell-wrap {
     position: relative; display: none; align-items: center; margin-right: 6px;
   }
@@ -175,6 +175,11 @@
   .bell-req-accept:hover { background: var(--accent); color: #fff; }
   .bell-req-reject:hover { background: var(--surface2); }
   .bell-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 4px 0; }
+  .bell-section-label {
+    font-size: 10px; color: var(--text-muted); letter-spacing: 0.06em;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  #bell-clan-section { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 0.5px solid var(--border-strong); }
 
   /* ── Clan leader settings ── */
   #clan-leader-section { display: none; }
@@ -987,18 +992,7 @@
   .market-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .market-tabs    { display: flex; gap: 6px; margin-bottom: 10px; }
   .market-tab     { flex: none; }
-  /* padding-bottom reserviert Platz für .market-card-price (position:absolute,
-     bottom:-8px, hängt unter .deck-card raus) — #deckContent hat overflow:hidden,
-     ohne diesen Puffer wird der Preis-Badge unten abgeschnitten, sobald keine
-     .market-card-seller-Zeile (nur im "Alle Angebote"-Tab vorhanden) den Wrap
-     zufällig hoch genug macht (Bug: in "Meine Angebote" fehlte diese Zeile) */
   .market-grid    { display: flex; flex-wrap: wrap; gap: 10px; padding-bottom: 10px; }
-  .market-card-price {
-    position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
-    background: var(--accent); color: #fff; font-size: 9px; font-weight: 700;
-    padding: 2px 7px; border-radius: 10px; white-space: nowrap;
-    font-family: -apple-system, sans-serif;
-  }
   .market-card-seller {
     font-family: -apple-system, sans-serif; font-size: 9px; color: var(--text-muted);
     text-align: center; margin-top: 6px; max-width: 60px; overflow: hidden;
@@ -1010,6 +1004,10 @@
     position: relative; display: flex; flex-direction: column;
     align-items: center; justify-content: center; padding: 4px; cursor: pointer;
   }
+  /* Mitglieder-Deck: fremde Karten sind nur anschaubar, nicht mehr anklickbar */
+  .deck-card-inert { cursor: default; }
+  /* Gegenangebot-Picker: Mehrfachauswahl eigener Karten */
+  .deck-card.selected { box-shadow: 0 0 0 2.5px var(--accent); }
   .deck-card.stack-2::before {
     content: ''; position: absolute; inset: 0; border-radius: 8px;
     border: 1.5px solid var(--card-color, #999); background: var(--card-bg, #222);
@@ -1210,6 +1208,7 @@
     cursor: pointer; transition: background 0.15s, color 0.15s;
   }
   .card-sell-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .card-sell-btn:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   .card-sell-btn.confirm {
     border-color: #ffd700; color: #ffd700; background: rgba(255,215,0,0.12);
   }
@@ -1222,13 +1221,13 @@
   }
   .lb-deck-btn:hover  { opacity: 1; transform: scale(1.15); }
 
-  /* ── Member-Deck-Overlay ── */
-  #memberDeckOverlay {
+  /* ── Member-Deck-Overlay (auch vom Gegenangebot-Karten-Picker geteilt) ── */
+  #memberDeckOverlay, #tradeOfferOverlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.72);
     display: none; align-items: center; justify-content: center;
     z-index: 920; padding: 20px; animation: hatchFadeIn 0.2s ease;
   }
-  #memberDeckOverlay.visible { display: flex; }
+  #memberDeckOverlay.visible, #tradeOfferOverlay.visible { display: flex; }
   .member-deck-modal {
     background: var(--surface); border: 0.5px solid var(--border-strong);
     border-radius: 18px; padding: 20px 20px 16px;
@@ -1250,6 +1249,20 @@
   .member-deck-close:hover { opacity: 1; }
   .member-deck-grid-wrap { overflow-y: auto; flex: 1; }
   .member-deck-grid { display: flex; flex-wrap: wrap; gap: 10px; padding-bottom: 4px; }
+  #tradeOfferOverlay .member-deck-modal { gap: 12px; }
+  #tradeOfferOverlay #tradeOfferSendBtn { align-self: center; }
+
+  /* ── Eingehende Gegenangebote (in "Meine Angebote" > eigene Karte) ── */
+  #incomingOffersWrap { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .incoming-offer-row {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding-top: 10px; border-top: 0.5px solid rgba(255,255,255,0.15);
+  }
+  .incoming-offer-user {
+    font-family: -apple-system, sans-serif; font-size: 11px; color: rgba(255,255,255,0.6);
+  }
+  .incoming-offer-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .incoming-offer-btns { display: flex; gap: 8px; }
 
   /* ── Bento-Grid Redesign (Einstellungen-Opt-in, Default aus) ── */
   .bento-row { display: contents; }
@@ -1466,7 +1479,14 @@
     </button>
     <span id="bell-badge" style="display:none;">0</span>
     <div id="bell-dropdown">
-      <div id="bell-request-list"><div class="bell-empty">Keine Anfragen</div></div>
+      <div id="bell-clan-section" style="display:none;">
+        <div class="bell-section-label">Beitrittsanfragen</div>
+        <div id="bell-request-list"><div class="bell-empty">Keine Anfragen</div></div>
+      </div>
+      <div id="bell-trade-section">
+        <div class="bell-section-label">Tauschangebote</div>
+        <div id="bell-trade-list"><div class="bell-empty">Keine Gegenangebote</div></div>
+      </div>
     </div>
   </div>
   <button id="focus-toggle-btn" class="icon-btn" title="Fokus-Modus">
@@ -2044,6 +2064,19 @@
     <div class="member-deck-grid-wrap">
       <div class="member-deck-grid" id="memberDeckGrid"></div>
     </div>
+  </div>
+</div>
+
+<div id="tradeOfferOverlay">
+  <div class="member-deck-modal">
+    <div class="member-deck-header">
+      <span class="member-deck-title">Gegenangebot — eigene Karten wählen</span>
+      <button class="member-deck-close" id="tradeOfferClose">✕</button>
+    </div>
+    <div class="member-deck-grid-wrap">
+      <div class="member-deck-grid" id="tradeOfferGrid"></div>
+    </div>
+    <button class="card-sell-btn confirm" id="tradeOfferSendBtn" disabled>Gegenangebot senden</button>
   </div>
 </div>
 
@@ -5945,7 +5978,10 @@
   function updateLeaderUI() {
     const isLeader = clanRole === 'leader';
     const noClan   = currentUser && !clanRole;
-    document.getElementById('bell-wrap').style.display      = isLeader ? 'flex' : 'none';
+    // Glocke: für jeden eingeloggten Nutzer (Tauschangebote-Benachrichtigungen),
+    // die Beitrittsanfragen-Sektion darin bleibt nur für Clan-Leader sichtbar.
+    document.getElementById('bell-wrap').style.display      = currentUser ? 'flex' : 'none';
+    document.getElementById('bell-clan-section').style.display = isLeader ? 'block' : 'none';
     document.getElementById('clan-leader-section').style.display = isLeader ? 'block' : 'none';
     document.getElementById('clan-join-wrap').style.display = noClan ? 'flex' : 'none';
   }
@@ -6116,16 +6152,23 @@
     } catch(e) { console.warn('loadPendingRequests error', e); }
   }
 
-  function renderBellRequests(requests, nameMap) {
-    const list  = document.getElementById('bell-request-list');
+  let bellClanCount  = 0;
+  let bellTradeCount = 0;
+  function updateBellBadge() {
     const badge = document.getElementById('bell-badge');
+    const total = bellClanCount + bellTradeCount;
+    badge.style.display = total > 0 ? 'flex' : 'none';
+    badge.textContent = total;
+  }
+
+  function renderBellRequests(requests, nameMap) {
+    const list = document.getElementById('bell-request-list');
+    bellClanCount = requests.length;
+    updateBellBadge();
     if (!requests.length) {
-      badge.style.display = 'none';
       list.innerHTML = '<div class="bell-empty">Keine offenen Anfragen</div>';
       return;
     }
-    badge.style.display = 'flex';
-    badge.textContent = requests.length;
     list.innerHTML = requests.map(r => `
       <div class="bell-request-row">
         <span>${esc(nameMap[r.user_id] || 'Unbekannt')}</span>
@@ -6150,6 +6193,62 @@
         body: JSON.stringify({ p_request_id: requestId, p_accept: accept }),
       });
     } catch(e) { console.warn('respondToRequest error', e); }
+  }
+
+  // ── Glocke: eingehende Tauschangebote (für alle Nutzer) ─────────────────
+  async function loadTradeNotifications() {
+    if (!currentUser) return;
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/rpc/get_incoming_trade_offers`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const rows = await res.json();
+      renderBellTradeItems(Array.isArray(rows) ? rows : []);
+    } catch(e) { console.warn('loadTradeNotifications error', e); }
+  }
+
+  function renderBellTradeItems(offers) {
+    const list = document.getElementById('bell-trade-list');
+    bellTradeCount = offers.length;
+    updateBellBadge();
+    if (!offers.length) {
+      list.innerHTML = '<div class="bell-empty">Keine Gegenangebote</div>';
+      return;
+    }
+    list.innerHTML = offers.map(o => {
+      const entry = CARD_CATALOG.find(c => c.id === o.card_id);
+      const cardName = entry ? entry.name : 'Karte';
+      return `
+        <div class="bell-request-row">
+          <span>${esc(o.offerer_username)} → ${esc(cardName)}</span>
+          <button class="bell-req-accept bell-trade-view" data-listing-id="${o.listing_id}">Ansehen</button>
+        </div>`;
+    }).join('');
+    list.querySelectorAll('.bell-trade-view').forEach(btn =>
+      btn.addEventListener('click', () => {
+        document.getElementById('bell-dropdown').classList.remove('open');
+        openMyListingFromBell(btn.dataset.listingId);
+      }));
+  }
+
+  async function openMyListingFromBell(listingId) {
+    if (!eggDeckOpen) toggleEggDeck();
+    document.querySelectorAll('#deckBox .market-tab').forEach(b => b.classList.toggle('active', b.dataset.filter === 'mine'));
+    marketTab = 'mine';
+    await fetchMyListings();
+    document.getElementById('deckBox')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const listing = myListings.find(l => l.id === listingId);
+    if (!listing) { toast('Angebot nicht mehr verfügbar'); return; }
+    const entry = CARD_CATALOG.find(c => c.id === listing.card_id);
+    if (!entry) return;
+    const rarity = EGG_RARITIES.find(r => r.folder === entry.rarity);
+    if (!rarity) return;
+    const src = encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`);
+    showEggCardView({ src, rarity, market: { listingId: listing.id, isMine: true } });
   }
 
   async function loadClanMembers() {
@@ -6238,7 +6337,10 @@
     e.stopPropagation();
     const dd = document.getElementById('bell-dropdown');
     const isOpen = dd.classList.toggle('open');
-    if (isOpen) loadPendingRequests();
+    if (isOpen) {
+      if (clanRole === 'leader') loadPendingRequests();
+      loadTradeNotifications();
+    }
   });
 
   document.addEventListener('click', e => {
@@ -7024,25 +7126,25 @@
   }
   const CARD_SELL_REWARDS = { normal: 4, selten: 8, episch: 12, legendaer: 16, mystisch: 20 };
 
-  // market: { mode:'browse', listingId, price, isMine } | { mode:'mine', listingId, price } | null
-  // readOnly: true bei der Mitglieder-Deck-Ansicht (fremde Karten, nie handelbar von hier aus)
+  // market: { listingId, isMine } | null — isMine=true auch wenn über den
+  // "Alle Angebote"-Tab geöffnet (dieselbe physische Karte, volle Klarheit,
+  // egal über welchen Tab erreicht). isMine=false → fremde Karte, nur
+  // verschwommen ("nur eigene Karten in groß ansehen").
+  // readOnly: aktuell ungenutzt (Mitglieder-Deck ist nicht mehr anklickbar),
+  // Parameter bleibt als Sicherheitsnetz erhalten.
   function showEggCardView({ id, src, rarity, count = 1, market = null, readOnly = false }) {
-    const isMyst  = rarity.key === 'mystisch';
-    const canSell = !market && !readOnly && count > 1;
-    const canList = !market && !readOnly;
-    const reward  = CARD_SELL_REWARDS[rarity.key] ?? 0;
+    const isMyst    = rarity.key === 'mystisch';
+    const isForeign = !!market && !market.isMine;
+    const canSell   = !market && !readOnly && count > 1;
+    const canList   = !market && !readOnly;
+    const reward    = CARD_SELL_REWARDS[rarity.key] ?? 0;
 
     let actionHtml = '';
-    if (market?.mode === 'browse') {
-      actionHtml = market.isMine
-        ? `<div style="font-family:-apple-system,sans-serif;font-size:12px;color:var(--text-muted);text-align:center;">Dein eigenes Angebot</div>`
-        : `<button class="card-sell-btn" id="marketBuyBtn">Kaufen &nbsp;💎${market.price}</button>
-           <div id="marketBuyConfirmRow" style="display:none;flex-direction:row;gap:8px;">
-             <button class="card-sell-btn confirm" id="marketBuyYes">Ja, kaufen &nbsp;💎${market.price}</button>
-             <button class="card-sell-btn" id="marketBuyNo">Abbrechen</button>
-           </div>`;
-    } else if (market?.mode === 'mine') {
-      actionHtml = `<button class="card-sell-btn" id="marketCancelBtn">Angebot zurückziehen</button>`;
+    if (market?.isMine) {
+      actionHtml = `<button class="card-sell-btn" id="marketCancelBtn">Angebot zurückziehen</button>
+        <div id="incomingOffersWrap"></div>`;
+    } else if (isForeign) {
+      actionHtml = `<button class="card-sell-btn" id="tradeOfferBtn">Gegenangebot machen</button>`;
     } else if (canList) {
       actionHtml = `
         ${canSell ? `
@@ -7051,10 +7153,9 @@
           <button class="card-sell-btn confirm" id="cardSellYes">Ja, verkaufen &nbsp;💎${reward}</button>
           <button class="card-sell-btn" id="cardSellNo">Abbrechen</button>
         </div>` : ''}
-        <button class="card-sell-btn" id="cardListBtn">Zum Verkauf anbieten</button>
-        <div id="cardListForm" style="display:none;flex-direction:row;gap:8px;align-items:center;">
-          <div class="inp-wrap"><input type="number" id="cardListPrice" value="10" min="1" max="9999" style="width:60px;"> 💎</div>
-          <button class="card-sell-btn confirm" id="cardListYes">Anbieten</button>
+        <button class="card-sell-btn" id="cardListBtn">Zum Tausch anbieten</button>
+        <div id="cardListConfirmRow" style="display:none;flex-direction:row;gap:8px;">
+          <button class="card-sell-btn confirm" id="cardListYes">Ja, anbieten</button>
           <button class="card-sell-btn" id="cardListNo">Abbrechen</button>
         </div>`;
     }
@@ -7062,7 +7163,7 @@
     document.getElementById('cardViewEl').innerHTML = `
       <div class="hatch-card" style="border-color:${rarity.color};box-shadow:0 0 30px ${rarity.color}66,0 0 60px ${rarity.color}22;background:${rarity.bg}">
         <div class="hatch-card-glow" style="background:${rarity.color}"></div>
-        <img src="${src}" style="width:100%;height:100%;object-fit:contain;padding:8px;position:relative;z-index:1;">
+        <img src="${src}" style="width:100%;height:100%;object-fit:contain;padding:8px;position:relative;z-index:1;${isForeign ? 'filter:blur(14px);' : ''}">
         <div class="rarity-badge-h ${isMyst?'mystisch':''}"
           style="${isMyst?'':` background:${rarity.color}20;color:${rarity.color};border:1px solid ${rarity.color}44`}">
           ${rarity.name}</div>
@@ -7095,56 +7196,37 @@
     }
 
     if (canList) {
-      const btnList = document.getElementById('cardListBtn');
-      const form    = document.getElementById('cardListForm');
-      // Ein Klick ins Preisfeld (z.B. um zu fokussieren) bubblet sonst zum
-      // cardViewOverlay-Klick-Handler hoch und schließt das Overlay sofort wieder.
-      form.addEventListener('click', e => e.stopPropagation());
+      const btnList    = document.getElementById('cardListBtn');
+      const confirmRow = document.getElementById('cardListConfirmRow');
       btnList.addEventListener('click', e => {
         e.stopPropagation();
         btnList.style.display = 'none';
-        form.style.display = 'flex';
+        confirmRow.style.display = 'flex';
       });
       document.getElementById('cardListNo').addEventListener('click', e => {
         e.stopPropagation();
-        form.style.display = 'none';
+        confirmRow.style.display = 'none';
         btnList.style.display = '';
       });
       document.getElementById('cardListYes').addEventListener('click', async e => {
         e.stopPropagation();
-        const price = parseInt(document.getElementById('cardListPrice').value, 10);
-        if (!Number.isFinite(price) || price <= 0) { toast('Bitte einen gültigen Preis eingeben'); return; }
         e.target.disabled = true;
-        const ok = await createListing(id, price);
+        const ok = await createListing(id);
         document.getElementById('cardViewOverlay').classList.remove('visible');
-        if (ok) toast(`Karte für 💎${price} angeboten`);
+        if (ok) toast('Karte zum Tausch angeboten');
         else toast('Fehler beim Anbieten – bitte erneut versuchen');
       });
     }
 
-    if (market?.mode === 'browse' && !market.isMine) {
-      const btnBuy = document.getElementById('marketBuyBtn');
-      const row    = document.getElementById('marketBuyConfirmRow');
-      btnBuy.addEventListener('click', e => {
+    if (isForeign) {
+      document.getElementById('tradeOfferBtn').addEventListener('click', e => {
         e.stopPropagation();
-        btnBuy.style.display = 'none';
-        row.style.display = 'flex';
-      });
-      document.getElementById('marketBuyNo').addEventListener('click', e => {
-        e.stopPropagation();
-        row.style.display = 'none';
-        btnBuy.style.display = '';
-      });
-      document.getElementById('marketBuyYes').addEventListener('click', async e => {
-        e.stopPropagation();
-        e.target.disabled = true;
-        const ok = await buyListing(market.listingId, market.price);
         document.getElementById('cardViewOverlay').classList.remove('visible');
-        if (ok) toast(`Karte gekauft! −💎${market.price}`);
+        showTradeOfferPicker(market.listingId);
       });
     }
 
-    if (market?.mode === 'mine') {
+    if (market?.isMine) {
       document.getElementById('marketCancelBtn').addEventListener('click', async e => {
         e.stopPropagation();
         e.target.disabled = true;
@@ -7153,6 +7235,7 @@
         if (ok) toast('Angebot zurückgezogen');
         else toast('Konnte Angebot nicht zurückziehen');
       });
+      renderIncomingOffers(market.listingId);
     }
 
     document.getElementById('cardViewOverlay').classList.add('visible');
@@ -7179,6 +7262,159 @@
   document.getElementById('cardViewOverlay')?.addEventListener('click', () => {
     document.getElementById('cardViewOverlay').classList.remove('visible');
   });
+
+  // ── Gegenangebote (eingehend, in "Meine Angebote") ──────────────────────
+  async function fetchOffersForListing(listingId) {
+    try {
+      const token = await getValidToken();
+      const res = await fetch(
+        `${SB}/rest/v1/trade_offers?listing_id=eq.${listingId}&status=eq.pending&select=id,profiles(username),trade_offer_cards(card_id)&order=created_at.asc`,
+        { headers: authHeaders(token) }
+      );
+      if (!res.ok) { console.error('fetchOffersForListing error:', await res.text()); return []; }
+      const rows = await res.json();
+      return (Array.isArray(rows) ? rows : []).map(r => ({
+        id: r.id,
+        offerer_username: r.profiles?.username || 'Anonym',
+        cards: (r.trade_offer_cards || []).map(tc => {
+          const entry = CARD_CATALOG.find(c => c.id === tc.card_id);
+          if (!entry) return null;
+          const rarity = EGG_RARITIES.find(x => x.folder === entry.rarity);
+          if (!rarity) return null;
+          return { src: encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`), rarity };
+        }).filter(Boolean),
+      }));
+    } catch(e) { console.warn('fetchOffersForListing error:', e); return []; }
+  }
+
+  async function respondToTradeOffer(offerId, accept) {
+    try {
+      const token = await getValidToken();
+      const res = await fetch(`${SB}/rest/v1/rpc/respond_to_trade_offer`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ p_offer_id: offerId, p_accept: accept }),
+      });
+      if (!res.ok) { console.error('respond_to_trade_offer error:', await res.text()); return false; }
+      cacheDel('pomo_market_cache');
+      return true;
+    } catch(e) { console.error('respond_to_trade_offer error:', e); return false; }
+  }
+
+  async function renderIncomingOffers(listingId) {
+    const wrap = document.getElementById('incomingOffersWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="bell-empty">Lade Gegenangebote…</div>';
+    const offers = await fetchOffersForListing(listingId);
+    if (!document.getElementById('incomingOffersWrap')) return; // Overlay inzwischen geschlossen
+    if (!offers.length) { wrap.innerHTML = '<div class="bell-empty">Noch keine Gegenangebote</div>'; return; }
+    wrap.innerHTML = offers.map(o => `
+      <div class="incoming-offer-row">
+        <div class="incoming-offer-user">${esc(o.offerer_username)}</div>
+        <div class="incoming-offer-cards">
+          ${o.cards.map(c => `
+            <div class="deck-card" style="--card-color:${c.rarity.color};--card-bg:${c.rarity.bg}">
+              <img src="${c.src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;filter:blur(10px);">
+            </div>`).join('')}
+        </div>
+        <div class="incoming-offer-btns">
+          <button class="card-sell-btn confirm incoming-offer-accept" data-id="${o.id}">Annehmen</button>
+          <button class="card-sell-btn incoming-offer-reject" data-id="${o.id}">Ablehnen</button>
+        </div>
+      </div>`).join('');
+    wrap.querySelectorAll('.incoming-offer-accept').forEach(btn => btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      btn.disabled = true;
+      const ok = await respondToTradeOffer(btn.dataset.id, true);
+      if (ok) {
+        toast('Tausch abgeschlossen!');
+        document.getElementById('cardViewOverlay').classList.remove('visible');
+        const token = await getValidToken();
+        await Promise.all([loadEggData(token), fetchMyListings(), fetchMarketListings(true)]);
+      } else { toast('Annehmen fehlgeschlagen'); btn.disabled = false; }
+    }));
+    wrap.querySelectorAll('.incoming-offer-reject').forEach(btn => btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      btn.disabled = true;
+      const ok = await respondToTradeOffer(btn.dataset.id, false);
+      if (ok) { toast('Gegenangebot abgelehnt'); renderIncomingOffers(listingId); }
+      else { toast('Ablehnen fehlgeschlagen'); btn.disabled = false; }
+    }));
+  }
+
+  // ── Gegenangebot machen (eigene Karten wählen) ──────────────────────────
+  let tradeOfferListingId = null;
+  let tradeOfferSelected  = new Set();
+
+  function showTradeOfferPicker(listingId) {
+    tradeOfferListingId = listingId;
+    tradeOfferSelected  = new Set();
+    const grid = document.getElementById('tradeOfferGrid');
+    if (!eggDeck.length) {
+      grid.innerHTML = '<div class="deck-empty">Du hast noch keine eigenen Karten</div>';
+    } else {
+      grid.innerHTML = '';
+      eggDeck.forEach(({ id, src, rarity, count }) => {
+        const stackClass = count >= 3 ? 'stack-2 stack-3' : count === 2 ? 'stack-2' : '';
+        const wrap = document.createElement('div');
+        wrap.className = 'deck-card-wrap';
+        wrap.innerHTML = `
+          <div class="deck-card ${stackClass}" data-card-id="${id}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
+            ${count > 1 ? `<div class="deck-count-badge">×${count}</div>` : ''}
+            <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+          </div>`;
+        grid.appendChild(wrap);
+        wrap.querySelector('.deck-card').addEventListener('click', () => {
+          const el = wrap.querySelector('.deck-card');
+          if (tradeOfferSelected.has(id)) { tradeOfferSelected.delete(id); el.classList.remove('selected'); }
+          else { tradeOfferSelected.add(id); el.classList.add('selected'); }
+          document.getElementById('tradeOfferSendBtn').disabled = tradeOfferSelected.size === 0;
+        });
+      });
+    }
+    document.getElementById('tradeOfferSendBtn').disabled = true;
+    document.getElementById('tradeOfferOverlay').classList.add('visible');
+  }
+
+  document.getElementById('tradeOfferClose')?.addEventListener('click', () => {
+    document.getElementById('tradeOfferOverlay').classList.remove('visible');
+  });
+  document.getElementById('tradeOfferOverlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
+  });
+  document.getElementById('tradeOfferSendBtn')?.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!tradeOfferSelected.size) return;
+    e.target.disabled = true;
+    const ok = await createTradeOffer(tradeOfferListingId, Array.from(tradeOfferSelected));
+    if (ok) {
+      toast('Gegenangebot gesendet');
+      document.getElementById('tradeOfferOverlay').classList.remove('visible');
+    } else {
+      e.target.disabled = false;
+    }
+  });
+
+  async function createTradeOffer(listingId, offeredCardIds) {
+    try {
+      const token = await getValidToken();
+      const res = await fetch(`${SB}/rest/v1/rpc/create_trade_offer`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ p_listing_id: listingId, p_offered_card_ids: offeredCardIds }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.message === 'daily_offer_limit_reached') toast('Du kannst nur ein Gegenangebot pro Tag machen.');
+        else if (body.message === 'listing_not_available') toast('Angebot ist nicht mehr verfügbar');
+        else if (body.message === 'card_not_available') toast('Eine gewählte Karte ist nicht verfügbar');
+        else toast('Gegenangebot fehlgeschlagen');
+        return false;
+      }
+      return true;
+    } catch(e) { console.error('create_trade_offer error:', e); return false; }
+  }
+
   function toggleEggDeck() {
     eggDeckOpen = !eggDeckOpen;
     document.getElementById('deckContent')?.classList.toggle('open', eggDeckOpen);
@@ -7219,7 +7455,7 @@
       // profiles (seller_id + buyer_id), ein unqualifizierter profiles(...)-Embed ist
       // für PostgREST mehrdeutig (PGRST201) und schlägt fehl.
       const res = await fetch(
-        `${SB}/rest/v1/card_listings?status=eq.active&select=id,card_id,price_diamonds,seller_id,created_at,profiles!card_listings_seller_id_fkey(username)&order=created_at.desc&limit=50`,
+        `${SB}/rest/v1/card_listings?status=eq.active&select=id,card_id,seller_id,created_at,profiles!card_listings_seller_id_fkey(username)&order=created_at.desc&limit=50`,
         { headers: authHeaders(token) }
       );
       if (!res.ok) { console.error('fetchMarketListings error:', await res.text()); marketListings = []; renderMarketGrid(); return; }
@@ -7235,7 +7471,7 @@
     try {
       const token = await getValidToken();
       const res = await fetch(
-        `${SB}/rest/v1/card_listings?seller_id=eq.${currentUser.id}&status=eq.active&select=id,card_id,price_diamonds,created_at&order=created_at.desc`,
+        `${SB}/rest/v1/card_listings?seller_id=eq.${currentUser.id}&status=eq.active&select=id,card_id,created_at&order=created_at.desc`,
         { headers: authHeaders(token) }
       );
       const rows = await res.json();
@@ -7256,65 +7492,36 @@
       const rarity = EGG_RARITIES.find(r => r.folder === entry.rarity);
       if (!rarity) return;
       const src    = encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`);
-      const isMine = marketTab === 'all' && listing.seller_id === currentUser?.id;
+      // "Meine Angebote" sind trivial isMine=true; im "Alle Angebote"-Tab
+      // entscheidet der Seller-Vergleich — die eigene Karte bleibt auch dort klar.
+      const isMine = marketTab === 'mine' || listing.seller_id === currentUser?.id;
       const wrap = document.createElement('div');
       wrap.className = 'deck-card-wrap';
       wrap.innerHTML = `
         <div class="deck-card" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
-          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
-          <div class="market-card-price">💎${listing.price_diamonds}</div>
+          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;${isMine ? '' : 'filter:blur(10px);'}">
         </div>
         ${marketTab === 'all' ? `<div class="market-card-seller">${isMine ? 'Du' : (listing.profiles?.username || 'Anonym')}</div>` : ''}`;
       grid.appendChild(wrap);
       wrap.querySelector('.deck-card').addEventListener('click', () => {
-        showEggCardView({
-          src, rarity,
-          market: marketTab === 'all'
-            ? { mode: 'browse', listingId: listing.id, price: listing.price_diamonds, isMine }
-            : { mode: 'mine', listingId: listing.id, price: listing.price_diamonds },
-        });
+        showEggCardView({ src, rarity, market: { listingId: listing.id, isMine } });
       });
     });
   }
 
-  async function createListing(cardId, price) {
+  async function createListing(cardId) {
     try {
       const token = await getValidToken();
       const res = await fetch(`${SB}/rest/v1/rpc/create_listing`, {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ p_card_id: cardId, p_price_diamonds: price }),
+        body: JSON.stringify({ p_card_id: cardId }),
       });
       if (!res.ok) { console.error('create_listing error:', await res.text()); return false; }
       cacheDel('pomo_market_cache');
       await fetchMyListings();
       return true;
     } catch(e) { console.error('create_listing error:', e); return false; }
-  }
-
-  async function buyListing(listingId, price) {
-    try {
-      const token = await getValidToken();
-      const res = await fetch(`${SB}/rest/v1/rpc/buy_listing`, {
-        method: 'POST',
-        headers: authHeaders(token),
-        body: JSON.stringify({ p_listing_id: listingId }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        if (body.message === 'not_enough_diamonds') { showEggDiamondError(); return false; }
-        toast(body.message === 'listing_not_available' ? 'Angebot ist nicht mehr verfügbar' : 'Kauf fehlgeschlagen');
-        cacheDel('pomo_market_cache');
-        await fetchMarketListings(true);
-        return false;
-      }
-      const newDiamonds = await res.json();
-      userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
-      renderEggDiamonds();
-      cacheDel('pomo_market_cache');
-      await Promise.all([loadEggData(token), fetchMarketListings(true)]);
-      return true;
-    } catch(e) { console.error('buy_listing error:', e); return false; }
   }
 
   async function cancelListing(listingId) {
@@ -7405,13 +7612,15 @@
       const stackClass = count >= 3 ? 'stack-2 stack-3' : count === 2 ? 'stack-2' : '';
       const wrap = document.createElement('div');
       wrap.className = 'deck-card-wrap';
+      // Fremde Decks sind nur noch anschaubar, nicht mehr anklickbar/vergrößerbar
+      // (siehe Tauschbörse-Sichtbarkeitsregeln) — daher .deck-card-inert statt
+      // .deck-card (kein Klick-Handler, kein Pointer-Cursor).
       wrap.innerHTML = `
-        <div class="deck-card ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
+        <div class="deck-card deck-card-inert ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
           ${count > 1 ? `<div class="deck-count-badge">×${count}</div>` : ''}
           <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
         </div>`;
       grid.appendChild(wrap);
-      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ src, rarity, readOnly: true }));
     });
   }
 
