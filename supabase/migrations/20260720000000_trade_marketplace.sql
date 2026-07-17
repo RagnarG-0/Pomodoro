@@ -12,6 +12,10 @@
 -- unter dem neuen Tausch-Modell semantisch ungültig — sauber schließen statt
 -- migrieren.
 UPDATE public.card_listings SET status = 'cancelled' WHERE status = 'active';
+-- Bereits abgeschlossene Käufe ('sold', altes Preis-Modell) sind unter dem
+-- neuen status-CHECK ('active'/'traded'/'cancelled') kein gültiger Wert mehr
+-- — als bereits abgeschlossene Transaktion ist 'traded' die richtige Analogie.
+UPDATE public.card_listings SET status = 'traded' WHERE status = 'sold';
 
 -- Policy referenziert buyer_id — muss vor dem DROP COLUMN weg, sonst Fehler.
 DROP POLICY IF EXISTS "card_listings_select" ON public.card_listings;
