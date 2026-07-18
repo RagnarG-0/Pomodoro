@@ -6252,7 +6252,7 @@
     const rarity = EGG_RARITIES.find(r => r.folder === entry.rarity);
     if (!rarity) return;
     const src = encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`);
-    showEggCardView({ src, rarity, market: { listingId: listing.id, isMine: true } });
+    showEggCardView({ id: listing.card_id, src, rarity, market: { listingId: listing.id, isMine: true } });
   }
 
   async function loadClanMembers() {
@@ -7114,7 +7114,7 @@
     const grid    = document.getElementById('deckGrid');
     const countEl = document.getElementById('deckCount');
     if (!grid) return;
-    if (countEl) countEl.textContent = `(${eggDeck.reduce((s,c)=>s+c.count,0)})`;
+    if (countEl) countEl.textContent = `(${eggDeck.length}/${CARD_CATALOG.length})`;
     if (!eggDeck.length) { grid.innerHTML='<div class="deck-empty">Noch keine Karten</div>'; return; }
     grid.innerHTML = '';
     eggDeck.forEach(({ id, src, rarity, count }) => {
@@ -7143,12 +7143,14 @@
   // market: { listingId, isMine } | null — isMine=true auch wenn über den
   // "Alle Angebote"-Tab geöffnet (dieselbe physische Karte, volle Klarheit,
   // egal über welchen Tab erreicht). isMine=false → fremde Karte, nur
-  // verschwommen ("nur eigene Karten in groß ansehen").
+  // verschwommen — außer der Nutzer besitzt diese Karte (per id) bereits
+  // selbst im eigenen eggDeck, dann kennt er den Kartenlook ohnehin schon.
   // readOnly: aktuell ungenutzt (Mitglieder-Deck ist nicht mehr anklickbar),
   // Parameter bleibt als Sicherheitsnetz erhalten.
   function showEggCardView({ id, src, rarity, count = 1, market = null, readOnly = false }) {
     const isMyst    = rarity.key === 'mystisch';
-    const isForeign = !!market && !market.isMine;
+    const alreadyOwned = id != null && eggDeck.some(c => c.id === id);
+    const isForeign = !!market && !market.isMine && !alreadyOwned;
     const canSell   = !market && !readOnly && count > 1;
     const canList   = !market && !readOnly;
     const reward    = CARD_SELL_REWARDS[rarity.key] ?? 0;
@@ -7328,7 +7330,7 @@
         <div class="incoming-offer-cards">
           ${o.cards.map(c => `
             <div class="deck-card" style="--card-color:${c.rarity.color};--card-bg:${c.rarity.bg}">
-              <img src="${c.src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;filter:blur(10px);">
+              <img src="${c.src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
             </div>`).join('')}
         </div>
         <div class="incoming-offer-btns">
@@ -7513,12 +7515,12 @@
       wrap.className = 'deck-card-wrap';
       wrap.innerHTML = `
         <div class="deck-card" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
-          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;${isMine ? '' : 'filter:blur(10px);'}">
+          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
         </div>
         ${marketTab === 'all' ? `<div class="market-card-seller">${isMine ? 'Du' : (listing.profiles?.username || 'Anonym')}</div>` : ''}`;
       grid.appendChild(wrap);
       wrap.querySelector('.deck-card').addEventListener('click', () => {
-        showEggCardView({ src, rarity, market: { listingId: listing.id, isMine } });
+        showEggCardView({ id: listing.card_id, src, rarity, market: { listingId: listing.id, isMine } });
       });
     });
   }
