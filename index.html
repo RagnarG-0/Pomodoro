@@ -2262,6 +2262,18 @@
     return `${y}-${m}-${d}`;
   }
 
+  // Reverse von todayKey(): 4 Uhr Berlin (DST-sicher) am Tag NACH `dayKey` (YYYY-MM-DD),
+  // als ms-Timestamp. Pendant zu v_boundary in reset_stale_work_sessions() (SQL) —
+  // hält die client- und serverseitige 4-Uhr-Kappung synchron.
+  function dayRolloverBoundaryMs(dayKey) {
+    const [y, m, d] = dayKey.split('-').map(Number);
+    const noonNextDayUTC = new Date(Date.UTC(y, m - 1, d + 1, 12, 0, 0)); // Mittag: nie auf einer DST-Kante
+    const berlin = new Date(noonNextDayUTC.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+    const utc = new Date(noonNextDayUTC.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const offsetMs = berlin - utc; // Berlin-Offset an diesem Tag (+1h oder +2h)
+    return Date.UTC(y, m - 1, d + 1, 4, 0, 0) - offsetMs;
+  }
+
   // Montag der aktuellen Woche (4-Uhr-Grenze wie todayKey()), als YYYY-MM-DD
   function getWeekStartKey(dateInput) {
     const berlinNow = dateInput
@@ -3162,6 +3174,14 @@
   }
 
   function checkLimitlessCheckpoint() {
+    // 4-Uhr-Grenze hat Vorrang vor einem normalen Zwischenkredit: tick(), der
+    // Restore-Catchup und der AUTO_BREAK_TRIGGER-Handler rufen diese Funktion mit
+    // bereits live nachgezogenem `remaining` auf — nach einem eingefrorenen Tab kann
+    // das weit über die Grenze hinausschießen. checkDayRollover() übernimmt in dem
+    // Fall die an 4 Uhr gekappte Kreditierung und beendet die Session, statt hier
+    // ungekappt alles auf einen Schlag zu verbuchen (siehe dortiger Kommentar).
+    if (pomoDay != null && todayKey() !== pomoDay) { checkDayRollover(); return; }
+
     const elapsedMin = Math.floor(remaining / 60); // remaining == verstrichene Sekunden im Limitless-Modus
     // Bei aktiven Automatische Pausen bestimmt das einstellbare Fokus-Intervall den Zyklus
     // (Checkpoint-Kredit + Pausen-Trigger sind bewusst gekoppelt, siehe CLAUDE.md); ohne
@@ -3239,8 +3259,17 @@
     if (!running && !hasProgress()) return;
     if (todayKey() === pomoDay) return;
 
+    // Limitless + noch laufend: `remaining` zählt live seit `startedAt` hoch und kann,
+    // wenn der Tab lange eingefroren war (Laptop zu, Tab im Hintergrund gedrosselt),
+    // weit über die 4-Uhr-Grenze hinausgeschossen sein (>24h). An der Berlin-4-Uhr-
+    // Grenze kappen — exakt wie v_boundary in reset_stale_work_sessions() (SQL) —
+    // statt die komplette, ggf. tagelange Laufzeit auf einen Schlag zu kreditieren.
+    // Pausiert ist `remaining` dagegen bereits eingefroren (kein Live-Zähler mehr)
+    // und damit von sich aus schon korrekt begrenzt, keine Kappung nötig.
     const elapsedMin = limitless
-      ? Math.max(0, Math.floor(remaining / 60) - limitlessCreditedMin)
+      ? Math.max(0, Math.floor((running && startedAt
+          ? Math.max(0, Math.min(Date.now(), dayRolloverBoundaryMs(pomoDay)) - startedAt) / 1000
+          : remaining) / 60) - limitlessCreditedMin)
       : Math.floor((totalSec - remaining) / 60);
 
     clearInterval(tid); running = false; startedAt = null;
