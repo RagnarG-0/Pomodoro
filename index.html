@@ -794,6 +794,15 @@
   }
   .timer-confirm-btns { display: flex; gap: 8px; justify-content: flex-end; }
 
+  /* ── Vergessene Limitless-Timer: Unbroken-Bestätigungsbanner ── */
+  #idle-confirm-banner {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200; display: none;
+    align-items: center; justify-content: center;
+  }
+  #idle-confirm-banner.open { display: flex; }
+
   /* ── Finish-early button ── */
   #btn-finish-early {
     display: none;
@@ -1814,6 +1823,17 @@
     <div class="tomato-dots" id="tomato-dots"></div>
     <span id="today-count">0 Pomodoros</span>
   </div>
+
+  <!-- Zwischengespeicherte Fokus-Sessions (vergessene Limitless-Timer) -->
+  <div id="pending-focus-section" style="display:none;margin-top:14px;">
+    <div class="deck-toggle-area" id="pending-focus-toggle">
+      <div class="hmap-label">⏳ Zwischengespeicherte Sessions <span id="pending-focus-count" style="opacity:0.45;font-size:11px">(0)</span></div>
+      <button class="deck-toggle-btn" id="pending-focus-toggle-btn">▼ aufklappen</button>
+    </div>
+    <div class="deck-content" id="pending-focus-content">
+      <div id="pending-focus-list"></div>
+    </div>
+  </div>
 </div>
 
 <div class="bento-row">
@@ -2119,6 +2139,18 @@
   </div>
 </div>
 
+<!-- Vergessene Limitless-Timer: 3h-Unbroken-Bestätigungsbanner -->
+<div id="idle-confirm-banner">
+  <div class="timer-confirm-box">
+    <div class="timer-confirm-msg" id="idle-confirm-msg"></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Automatischer Stopp in <span id="idle-confirm-countdown">2:00</span></div>
+    <div class="timer-confirm-btns">
+      <button class="merge-btn-no" id="idle-confirm-no">Anhalten</button>
+      <button class="merge-btn-yes" id="idle-confirm-yes">Ich bin noch da</button>
+    </div>
+  </div>
+</div>
+
 <!-- Label merge confirmation banner -->
 <div id="label-merge-banner">
   <div class="merge-banner-box">
@@ -2240,6 +2272,17 @@
   let workStash = null;           // { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin } | null — pausierter Fokus während einer Pause (nur wenn autoBreaksSetting je aktiv war); bleibt für die gesamte Pausendauer gesetzt, erst switchTo('work',...) konsumiert ihn wieder
   let lastTimerInteractionAt = Date.now(); // für Idle-Suspend des Tagesgrenze-Watchdogs
   function markTimerActivity() { lastTimerInteractionAt = Date.now(); }
+
+  // Vergessene Limitless-Timer: eine Session, die 3h ohne manuelle
+  // Interaktion durchläuft, wird nicht mehr automatisch kreditiert, sondern
+  // zur Bestätigung zwischengespeichert (pending_focus_sessions). Für
+  // manuelles Testen temporär verkleinerbar (z.B. 30s/10s).
+  const UNBROKEN_THRESHOLD_MS = 3 * 60 * 60 * 1000;      // 3h seit letztem manuellem Play-Klick
+  const UNBROKEN_CONFIRM_WINDOW_MS = 2 * 60 * 1000;      // 2min Bestätigungsfenster im Banner
+  let unbrokenSince = null;       // ms-Timestamp des letzten manuellen Play-Klicks/Mode-Wechsels einer Limitless-Session; null = kein Präsenznachweis nötig (keine laufende/pausierte Limitless-Session)
+  let idleConfirmShown = false;   // verhindert ein zweites Banner, während eine Bestätigung bereits offen ist
+  let pendingFocusSessions = [];  // eigene, noch nicht bestätigte/gelöschte Zeilen aus pending_focus_sessions
+  let pendingFocusListOpen = false;
 
   function elapsedSec() { return (mode === 'work' && limitless) ? remaining : totalSec - remaining; }
   function hasProgress() { return (mode === 'work' && limitless) ? remaining > 0 : remaining < totalSec; }
@@ -3099,7 +3142,7 @@
         resumed = true;
       } else {
         pomoDay = null;
-        limitless = limitlessSetting; limitlessCreditedMin = 0;
+        limitless = limitlessSetting; limitlessCreditedMin = 0; unbrokenSince = null;
         if (limitless) { totalSec=0; remaining=0; } else { totalSec=getMin('work')*60; remaining=totalSec; }
       }
     } else {
@@ -3127,6 +3170,7 @@
   // startet manuell (wie jeder andere Moduswechsel auch).
   function interruptWorkForBreak(auto) {
     markTimerActivity();
+    if (!auto) unbrokenSince = Date.now(); // manueller Wechsel in die Pause zählt als Präsenznachweis, der automatische Trigger nicht
     if (hasProgress()) {
       workStash = { totalSec, remaining, limitless, pomoDay, limitlessCreditedMin };
     }
@@ -3144,33 +3188,37 @@
     if (auto) start();
   }
 
+  // Gemeinsamer Kern von completePomo()/checkLimitlessCheckpoint()/
+  // checkDayRollover(): lokale Minuten-Gutschrift + Server-Write (nur wenn
+  // minutes > 0) + Level-Up/Ei/Brutkasten-Checks + Re-Renders.
+  function creditFocusMinutes(key, minutes, label) {
+    const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
+    days[key] = (days[key] || 0) + minutes;
+    save();
+    if (currentUser && minutes > 0) writeOrQueueCredit(key, minutes, label);
+    const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
+    const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
+    const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
+    if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
+    if (crossedLevel15(lvlBefore, lvlAfter)) celebrateLevel15();
+    if (incubatorData) renderIncubator();
+    if (incubatorData2) renderIncubator(2);
+    updateSecondIncubatorVisibility();
+    renderTomatoes(); renderHeatmap(); renderStats();
+  }
+
   function completePomo() {
     const key = pomoDay || todayKey(); // use day when timer started, not when it ended
     pomoDay = null; // reset for next pomo
     const mins = Math.round(totalSec / 60);
-    const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
-    days[key] = (days[key] || 0) + mins;
     totalPomodoros++;
-    save();
     const label = currentLabel.trim() || 'not specified';
     if (currentLabel.trim()) storeLabel(currentLabel.trim());
-    if (currentUser && mins > 0) {
-      writeOrQueueCredit(key, mins, label);
-    }
+    creditFocusMinutes(key, mins, label);
     celebPick([launchConfetti, launchFireworks, launchBalloons])();
     playSound('work');
     const todayPomos = Math.round(days[key] / getMin('work') * 10) / 10;
     toast('Pomodoro #' + totalPomodoros + ' geschafft! ' + todayPomos + ' heute');
-    renderTomatoes(); renderHeatmap(); renderStats();
-    // Level-Up → Ei vergeben
-    const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
-    const { current: lvlAfter  } = getCurrentLevel(Object.values(days).reduce((s, m) => s + m, 0));
-    if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
-    if (crossedLevel15(lvlBefore, lvlAfter)) celebrateLevel15();
-    // Brutkasten-Fortschritt neu berechnen
-    if (incubatorData) renderIncubator();
-    if (incubatorData2) renderIncubator(2);
-    updateSecondIncubatorVisibility();
   }
 
   function checkLimitlessCheckpoint() {
@@ -3194,20 +3242,7 @@
     limitlessCreditedMin = targetCredited;
     const key = pomoDay || todayKey();
     const label = currentLabel.trim() || 'not specified';
-
-    const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
-    days[key] = (days[key] || 0) + delta;
-    save();
-    if (currentUser) writeOrQueueCredit(key, delta, label);
-    const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
-    const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
-    const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
-    if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
-    if (crossedLevel15(lvlBefore, lvlAfter)) celebrateLevel15();
-    if (incubatorData) renderIncubator();
-    if (incubatorData2) renderIncubator(2);
-    updateSecondIncubatorVisibility();
-    renderTomatoes(); renderHeatmap(); renderStats();
+    creditFocusMinutes(key, delta, label);
 
     // credited_min auf dem Server nachführen, damit ein Reload/zweites Gerät nicht doppelt kreditiert
     if (currentUser) saveTimerState({ credited_min: limitlessCreditedMin });
@@ -3238,19 +3273,7 @@
       workStash = null;
       if (elapsedMin > 0) {
         const label = currentLabel.trim() || 'not specified';
-        const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
-        days[key] = (days[key] || 0) + elapsedMin;
-        save();
-        if (currentUser) writeOrQueueCredit(key, elapsedMin, label);
-        const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
-        const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
-        const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
-        if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
-        if (crossedLevel15(lvlBefore, lvlAfter)) celebrateLevel15();
-        if (incubatorData) renderIncubator();
-        if (incubatorData2) renderIncubator(2);
-        updateSecondIncubatorVisibility();
-        renderTomatoes(); renderHeatmap(); renderStats();
+        creditFocusMinutes(key, elapsedMin, label);
       }
       if (currentUser) saveTimerState(stashPayload()); // löscht nur die stash_*-Spalten, lässt den aktiven Pausen-Timer server-seitig unangetastet
     }
@@ -3279,22 +3302,20 @@
     if (claimed && elapsedMin > 0) {
       const key = pomoDay;
       const label = currentLabel.trim() || 'not specified';
-      const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
-      days[key] = (days[key] || 0) + elapsedMin;
-      save();
-      if (currentUser) writeOrQueueCredit(key, elapsedMin, label);
-      const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
-      const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
-      const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
-      if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
-      if (crossedLevel15(lvlBefore, lvlAfter)) celebrateLevel15();
-      if (incubatorData) renderIncubator();
-      if (incubatorData2) renderIncubator(2);
-      updateSecondIncubatorVisibility();
-      renderTomatoes(); renderHeatmap(); renderStats();
+      if (limitless) {
+        // Kein stiller Auto-Credit mehr für eine Limitless-Session, die bis 4
+        // Uhr durchlief — zur Bestätigung zwischenspeichern, analog zum
+        // 3h-Idle-Fall (siehe "Vergessene Limitless-Timer"). Ein Countdown ist
+        // dagegen durch seine feste, selbst gewählte Dauer von sich aus schon
+        // begrenzt (kein "lief unbemerkt stundenlang weiter"-Risiko) und
+        // bleibt daher eine direkte, stille Gutschrift wie zuvor.
+        await stashFocusSession(key, elapsedMin, label, 'day_boundary');
+      } else {
+        creditFocusMinutes(key, elapsedMin, label);
+      }
     }
 
-    pomoDay = null; limitlessCreditedMin = 0;
+    pomoDay = null; limitlessCreditedMin = 0; unbrokenSince = null;
     if (limitless) { totalSec = 0; remaining = 0; }
     else { totalSec = getMin('work') * 60; remaining = totalSec; }
     renderTimer();
@@ -3376,9 +3397,21 @@
     }
     if (mode === 'work' && limitless) {
       checkLimitlessCheckpoint();
+      // Nur wenn checkLimitlessCheckpoint() nicht schon synchron über
+      // checkDayRollover() beendet hat (4-Uhr-Grenze hat Vorrang) — sonst
+      // widersprüchliches/doppeltes Banner für denselben Tick.
+      if (running) checkUnbrokenThreshold();
     } else if (remaining <= 0) {
       onTimerEnd();
     }
+  }
+
+  // Vergessene Limitless-Timer: 3h ohne manuelle Interaktion → Bestätigungs-
+  // Banner statt stillem Weiterlaufen. Siehe UNBROKEN_THRESHOLD_MS.
+  function checkUnbrokenThreshold() {
+    if (!(mode === 'work' && limitless && running)) return;
+    if (unbrokenSince == null || idleConfirmShown) return;
+    if (Date.now() - unbrokenSince >= UNBROKEN_THRESHOLD_MS) triggerUnbrokenConfirm();
   }
 
   /* ── Display unit toggle ── */
@@ -4120,6 +4153,18 @@
     swSend({ type: 'PR_TARGET_SCHEDULE', crossAtMs, prMinutes: prMin });
   }
 
+  // Analog zu schedulePRTargetIfPending() — plant im SW eine one-shot
+  // Benachrichtigung für den Moment, in dem die 3h-Unbroken-Schwelle
+  // überschritten wird, damit auch ein eingefrorener/gedrosselter Tab
+  // rechtzeitig aufweckt. Wird nach jedem Ereignis aufgerufen, das die
+  // Schwelle neu setzt (start(), restoreTimerStateInner()) — TIMER_RESET
+  // (in switchTo() zentral gesendet) löscht den SW-Schedule mit, ein
+  // erneuter Aufruf hier baut ihn danach wieder auf.
+  function scheduleUnbrokenTargetIfPending() {
+    if (unbrokenSince == null) return;
+    swSend({ type: 'UNBROKEN_TARGET_SCHEDULE', crossAtMs: unbrokenSince + UNBROKEN_THRESHOLD_MS });
+  }
+
   /* ── Timer State Persistence ── */
   async function saveTimerState(state) {
     if (!currentUser) return;
@@ -4146,6 +4191,114 @@
       const deleted = await res.json();
       return Array.isArray(deleted) && deleted.length > 0;
     } catch(e) { console.warn('clearTimerState error', e); return true; }
+  }
+
+  // Vergessene Limitless-Timer (3h-Idle bzw. 4-Uhr-Grenze ohne Bestätigung):
+  // statt direkt zu kreditieren, in pending_focus_sessions zwischenspeichern
+  // — der Nutzer bestätigt später manuell über die Liste in der Timer-Card.
+  // Anonyme Nutzer (keine RLS-Tabelle nutzbar) und Netzwerk-/Token-Fehler
+  // fallen auf die bisherige direkte Kreditierung zurück (kein Datenverlust).
+  async function stashFocusSession(key, minutes, label, reason) {
+    if (!currentUser) { creditFocusMinutes(key, minutes, label); return; }
+    const token = await getValidToken();
+    if (!token) { creditFocusMinutes(key, minutes, label); return; }
+    try {
+      const res = await fetch(`${SB}/rest/v1/pending_focus_sessions`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+        body: JSON.stringify({ user_id: currentUser.id, date: key, minutes, label, reason }),
+      });
+      if (!res.ok) { creditFocusMinutes(key, minutes, label); return; }
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows[0]) {
+        pendingFocusSessions.push(rows[0]);
+        renderPendingFocusList();
+      }
+    } catch(e) { console.warn('stashFocusSession error', e); creditFocusMinutes(key, minutes, label); }
+  }
+
+  // ── Zwischengespeicherte Fokus-Sessions (Timer-Card, ausklappbare Liste) ──
+  async function loadPendingFocusSessions() {
+    if (!currentUser) return;
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/pending_focus_sessions?user_id=eq.${currentUser.id}&select=*&order=created_at.asc`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      pendingFocusSessions = Array.isArray(rows) ? rows : [];
+      renderPendingFocusList();
+    } catch(e) { console.warn('loadPendingFocusSessions error', e); }
+  }
+
+  function formatPendingFocusReason(reason) {
+    return reason === 'day_boundary' ? 'über die 4-Uhr-Grenze gelaufen' : '3h ohne Unterbrechung';
+  }
+
+  function renderPendingFocusList() {
+    const section = document.getElementById('pending-focus-section');
+    const list = document.getElementById('pending-focus-list');
+    const countEl = document.getElementById('pending-focus-count');
+    if (!section || !list) return;
+    section.style.display = pendingFocusSessions.length > 0 ? '' : 'none';
+    if (!pendingFocusSessions.length) pendingFocusListOpen = false;
+    if (countEl) countEl.textContent = `(${pendingFocusSessions.length})`;
+    document.getElementById('pending-focus-content')?.classList.toggle('open', pendingFocusListOpen);
+    const btn = document.getElementById('pending-focus-toggle-btn');
+    if (btn) btn.textContent = pendingFocusListOpen ? '▲ zuklappen' : '▼ aufklappen';
+    list.innerHTML = pendingFocusSessions.map(row => `
+      <div class="chall-row">
+        <div class="chall-row-top">
+          <div class="chall-title">${esc(row.date)} · ${esc(formatMinutesShort(row.minutes))} · ${esc(row.label || 'not specified')}</div>
+        </div>
+        <div style="font-size:11px;opacity:0.6;margin-bottom:8px;">${esc(formatPendingFocusReason(row.reason))}</div>
+        <div class="merge-banner-btns" style="justify-content:flex-start;">
+          <button class="merge-btn-yes pending-focus-claim" data-id="${esc(row.id)}">Gutschreiben</button>
+          <button class="merge-btn-no pending-focus-delete" data-id="${esc(row.id)}">Löschen</button>
+        </div>
+      </div>`).join('');
+    list.querySelectorAll('.pending-focus-claim').forEach(el =>
+      el.addEventListener('click', () => claimPendingFocusSession(el.dataset.id, el)));
+    list.querySelectorAll('.pending-focus-delete').forEach(el =>
+      el.addEventListener('click', () => deletePendingFocusSession(el.dataset.id)));
+  }
+
+  // Claim-Mutex wie überall sonst: DELETE ... RETURNING — nur wer die Zeile
+  // wirklich löscht, kreditiert (verhindert Doppelklick + Multi-Device-Race).
+  async function claimPendingFocusSession(id, btnEl) {
+    const row = pendingFocusSessions.find(r => r.id === id);
+    if (!row) return;
+    if (btnEl) btnEl.disabled = true;
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/pending_focus_sessions?id=eq.${id}`, {
+        method: 'DELETE', headers: { ...authHeaders(token), 'Prefer': 'return=representation' },
+      });
+      if (!res.ok) return;
+      const deleted = await res.json();
+      if (!Array.isArray(deleted) || !deleted.length) return; // ein anderes Gerät war schneller
+      pendingFocusSessions = pendingFocusSessions.filter(r => r.id !== id);
+      renderPendingFocusList();
+      creditFocusMinutes(row.date, row.minutes, row.label || 'not specified');
+    } catch(e) {
+      console.warn('claimPendingFocusSession error', e);
+    } finally {
+      if (btnEl) btnEl.disabled = false;
+    }
+  }
+
+  async function deletePendingFocusSession(id) {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      await fetch(`${SB}/rest/v1/pending_focus_sessions?id=eq.${id}`, {
+        method: 'DELETE', headers: authHeaders(token),
+      });
+    } catch(e) { console.warn('deletePendingFocusSession error', e); }
+    pendingFocusSessions = pendingFocusSessions.filter(r => r.id !== id);
+    renderPendingFocusList();
   }
 
   async function loadTimerState() {
@@ -4193,11 +4346,20 @@
         remaining = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         totalSec = 0; running = true;
         tid = setInterval(tick, 250);
+        // Fallback auf startMs für Altzeilen von vor diesem Feature (unbroken_since noch null).
+        unbrokenSince = state.unbroken_since ? new Date(state.unbroken_since).getTime() : startMs;
         if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt: startMs, intervalMs: focusIntervalMin * 60 * 1000 });
         else swSend({ type: 'EYE_BREAK_START', startedAt: startMs });
         schedulePRTargetIfPending(startMs);
         renderTimer();
-        checkLimitlessCheckpoint(); // sofort nachholen, falls viel Zeit vergangen ist
+        if (Date.now() - unbrokenSince >= UNBROKEN_THRESHOLD_MS) {
+          // Schwelle beim Wiederaufwachen bereits überschritten — kein stiller
+          // Checkpoint-Catchup, sofort zur Bestätigung auffordern.
+          triggerUnbrokenConfirm();
+        } else {
+          checkLimitlessCheckpoint(); // sofort nachholen, falls Zeit vergangen ist (Schwelle aber noch nicht erreicht)
+          scheduleUnbrokenTargetIfPending();
+        }
         toast('Timer wird fortgesetzt…');
       } else if (state.paused_remaining != null) {
         totalSec = 0; remaining = state.paused_remaining; running = false;
@@ -4266,10 +4428,12 @@
         if (autoBreaksSetting) swSend({ type: 'AUTO_BREAK_SCHEDULE', startedAt, intervalMs: focusIntervalMin * 60 * 1000 });
         else swSend({ type: 'EYE_BREAK_START', startedAt });
         schedulePRTargetIfPending(startedAt);
+        scheduleUnbrokenTargetIfPending(); // deckt sowohl den manuellen Start (Klick-Handler setzt unbrokenSince) als auch Auto-Resume aus workStash ab
         saveTimerState({
           end_at: null, total_sec: null, mode, paused_remaining: null,
           limitless: true, started_at: new Date(startedAt).toISOString(),
           credited_min: limitlessCreditedMin, pomoday: pomoDay,
+          unbroken_since: unbrokenSince ? new Date(unbrokenSince).toISOString() : null,
           ...stashPayload(), // räumt einen ggf. gerade konsumierten Stash serverseitig mit auf
         });
       } else {
@@ -4300,9 +4464,90 @@
     newNo.addEventListener('click',  () => { banner.classList.remove('open'); });
   }
 
+  // Wie showTimerConfirmBanner(), zusätzlich mit einem 2-Minuten-Countdown —
+  // läuft er ab, wird onResolve(false) aufgerufen (wie "Nein").
+  function showIdleConfirmBanner(msg, onResolve) {
+    const banner = document.getElementById('idle-confirm-banner');
+    document.getElementById('idle-confirm-msg').textContent = msg;
+    banner.classList.add('open');
+    const yesBtn = document.getElementById('idle-confirm-yes');
+    const noBtn  = document.getElementById('idle-confirm-no');
+    const newYes = yesBtn.cloneNode(true);
+    const newNo  = noBtn.cloneNode(true);
+    yesBtn.replaceWith(newYes);
+    noBtn.replaceWith(newNo);
+
+    const countdownEl = document.getElementById('idle-confirm-countdown');
+    let remainingSec = Math.round(UNBROKEN_CONFIRM_WINDOW_MS / 1000);
+    const renderCountdown = () => {
+      if (!countdownEl) return;
+      const m = Math.floor(Math.max(0, remainingSec) / 60);
+      const s = Math.max(0, remainingSec) % 60;
+      countdownEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    };
+    renderCountdown();
+    const iv = setInterval(() => {
+      remainingSec--;
+      renderCountdown();
+      if (remainingSec <= 0) {
+        clearInterval(iv);
+        banner.classList.remove('open');
+        onResolve(false);
+      }
+    }, 1000);
+
+    newYes.addEventListener('click', () => {
+      clearInterval(iv);
+      banner.classList.remove('open');
+      onResolve(true);
+    });
+    newNo.addEventListener('click', () => {
+      clearInterval(iv);
+      banner.classList.remove('open');
+      onResolve(false);
+    });
+  }
+
+  // Vergessene Limitless-Timer: 3h ohne manuelle Interaktion (Präsenznachweis)
+  // → Bestätigungs-Banner mit 2-Minuten-Fenster. "Ja" verlängert die Session
+  // (unbrokenSince neu gesetzt), Timeout/"Nein" hält sie an und speichert den
+  // Fortschritt zur Bestätigung zwischen statt ihn stillschweigend zu kreditieren.
+  function triggerUnbrokenConfirm() {
+    if (idleConfirmShown) return;
+    idleConfirmShown = true;
+    const msg = 'Bist du noch da? Dein Fokus-Timer läuft seit über 3 Stunden ohne Unterbrechung. Ohne Bestätigung wird die Session in 2 Minuten angehalten und zur Bestätigung zwischengespeichert.';
+    showIdleConfirmBanner(msg, (confirmed) => {
+      idleConfirmShown = false;
+      if (confirmed) {
+        unbrokenSince = Date.now();
+        if (currentUser) saveTimerState({ unbroken_since: new Date(unbrokenSince).toISOString() });
+        scheduleUnbrokenTargetIfPending();
+      } else {
+        stopAndStashUnbrokenSession('idle_3h');
+      }
+    });
+  }
+
+  // Strukturell wie finishEarly(), aber ohne completePomo() — der Fortschritt
+  // wird nicht direkt kreditiert, sondern zur Bestätigung zwischengespeichert
+  // (stashFocusSession()). Nur für laufende Limitless-Work-Sessions relevant.
+  async function stopAndStashUnbrokenSession(reason) {
+    const totalElapsedMin = Math.floor(elapsedSec() / 60);
+    const leftoverMin = Math.max(0, totalElapsedMin - limitlessCreditedMin);
+    const key = pomoDay || todayKey();
+    const label = currentLabel.trim() || 'not specified';
+    clearInterval(tid); running = false; startedAt = null;
+    swSend({ type: 'TIMER_RESET' });
+    await clearTimerState();
+    if (leftoverMin > 0) await stashFocusSession(key, leftoverMin, label, reason);
+    pomoDay = null; limitlessCreditedMin = 0; unbrokenSince = null;
+    totalSec = 0; remaining = 0;
+    renderTimer();
+  }
+
   function reset() {
     markTimerActivity();
-    clearInterval(tid); running=false; startedAt=null; pomoDay=null;
+    clearInterval(tid); running=false; startedAt=null; pomoDay=null; unbrokenSince=null;
     if (mode === 'work') { limitless = limitlessSetting; limitlessCreditedMin = 0; }
     if (mode === 'work' && limitless) { totalSec=0; remaining=0; }
     else { totalSec=getMin(mode)*60; remaining=totalSec; }
@@ -4316,7 +4561,7 @@
     markTimerActivity();
     const wasLimitless = mode === 'work' && limitless;
     const totalElapsedMin = Math.floor(elapsedSec() / 60);
-    clearInterval(tid); running = false; startedAt = null;
+    clearInterval(tid); running = false; startedAt = null; unbrokenSince = null;
     swSend({ type: 'TIMER_RESET' });
     await clearTimerState();
     totalSec = wasLimitless
@@ -4370,7 +4615,14 @@
       start(); // Stash restauriert (nur möglich, wenn autoBreaksSetting aktiv war) -> sofort weiterlaufen
     }
   }));
-  document.getElementById('btn-start').addEventListener('mousedown', e => { e.preventDefault(); start(); });
+  document.getElementById('btn-start').addEventListener('mousedown', e => {
+    e.preventDefault();
+    // Präsenznachweis: jeder manuelle Start/Resume-Klick auf eine Limitless-
+    // Work-Session setzt unbrokenSince neu — start() (unten) plant danach
+    // den SW-Alarm über scheduleUnbrokenTargetIfPending().
+    if (!running && mode === 'work' && limitless) unbrokenSince = Date.now();
+    start();
+  });
   document.getElementById('btn-reset').addEventListener('click', async () => {
     await checkDayRollover();
     if (mode === 'work' && hasProgress()) {
@@ -5040,6 +5292,7 @@
     // grüne Punkt nichts an, bevor der Nutzer die Glocke einmal manuell öffnet.
     if (clanRole === 'leader') loadPendingRequests();
     loadTradeNotifications();
+    loadPendingFocusSessions();
 
     // Read local days before server overwrites them (for reconciliation)
     const localRaw = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } })();
@@ -7472,6 +7725,11 @@
     }
   }
   document.getElementById('deckToggle')?.addEventListener('click', toggleEggDeck);
+
+  document.getElementById('pending-focus-toggle')?.addEventListener('click', () => {
+    pendingFocusListOpen = !pendingFocusListOpen;
+    renderPendingFocusList();
+  });
 
   // ── Tauschbörse ──────────────────────────────────────────────────────────
   document.querySelectorAll('#deckBox .market-tab').forEach(btn => {

@@ -56,6 +56,37 @@ function onPRTarget(prMinutes) {
   });
 }
 
+// ── Vergessene Limitless-Timer: 3h-Unbroken-Schwelle ───────────────────────
+// One-shot wie PR-Target, kein Selbst-Reschedule. crossAtMs wird clientseitig
+// berechnet (index.html:scheduleUnbrokenTargetIfPending). Zeigt nur eine
+// Notification — die eigentliche Bestätigungslogik (Banner, Auto-Stop nach
+// 2min) läuft in index.html (checkUnbrokenThreshold/triggerUnbrokenConfirm),
+// sobald der Tab wieder im Vordergrund ist (Klick auf die Notification fokussiert ihn).
+let unbrokenTargetHandle = null;
+
+function clearUnbrokenTarget() {
+  if (unbrokenTargetHandle !== null) { clearTimeout(unbrokenTargetHandle); unbrokenTargetHandle = null; }
+}
+
+function scheduleUnbrokenTarget(crossAtMs) {
+  clearUnbrokenTarget();
+  const delay = crossAtMs - Date.now();
+  if (delay < 0) return; // defensiv, sollte clientseitig nicht vorkommen
+  unbrokenTargetHandle = setTimeout(onUnbrokenTarget, delay);
+}
+
+function onUnbrokenTarget() {
+  unbrokenTargetHandle = null;
+  self.registration.showNotification('⏳ Bist du noch da?', {
+    body: 'Dein Fokus-Timer läuft seit über 3 Stunden ohne Unterbrechung.',
+    icon: 'https://em-content.zobj.net/source/apple/391/tomato_1f345.png',
+    tag: 'pomodoro-unbroken-check',
+    renotify: true,
+    requireInteraction: false,
+    silent: false,
+  });
+}
+
 // ── Automatische Pausen (Limitless, Opt-in) ────────────────────────────────
 // Rekurrierend wie Eye-Break (gleiches 20-Min-Intervall, Selbst-Reschedule),
 // aber zusätzlich mit Client-Wake-Postmessage, damit auch ein eingefrorener
@@ -154,6 +185,7 @@ self.addEventListener('message', e => {
     clearEyeBreak();
     clearPRTarget();
     clearAutoBreak();
+    clearUnbrokenTarget();
   }
   if (type === 'EYE_BREAK_START') {
     scheduleEyeBreak(startedAt);
@@ -163,6 +195,9 @@ self.addEventListener('message', e => {
   }
   if (type === 'PR_TARGET_SCHEDULE') {
     schedulePRTarget(crossAtMs, prMinutes);
+  }
+  if (type === 'UNBROKEN_TARGET_SCHEDULE') {
+    scheduleUnbrokenTarget(crossAtMs);
   }
 });
 
