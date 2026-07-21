@@ -55,7 +55,7 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `get_label_stats(p_user_id)` | Gibt je Label: today_minutes, week_minutes, month_minutes, alltime_minutes |
 | `leaderboard_today()` | Rangliste für heute |
 | `leaderboard_aggregated(date_from)` | Rangliste ab Datum |
-| `get_yesterday_winner()` | Name des gestrigen Tagesersten |
+| `get_yesterday_winner()` | `TABLE(username text, minutes integer)` des gestrigen Tagesersten (clan-scoped über `my_clan_id()`) — seit `20260721000020_yesterday_winner_minutes.sql` inkl. Minuten, davor nur reiner Username-String |
 | `draw_card()` | Würfelt Rarität (40/30/18/9/3 %), wählt Karte, schreibt in `user_cards`, gibt `card_id int` zurück |
 | `sell_card(p_card_id)` | Löscht älteste Kopie aus `user_cards`, schreibt Diamanten gut, gibt neuen Diamanten-Stand zurück. Wirft Fehler wenn < 2 Kopien vorhanden |
 | `respond_to_clan_request(p_request_id, p_accept)` | Leader bestätigt/lehnt Beitrittsanfrage ab; updated `profiles` bei Accept |
@@ -216,7 +216,7 @@ Der 4-Uhr-Reset (oben) fängt den Fall „Laptop zu/Tab eingefroren über Nacht"
 | `pomo_display_unit` | 'pomodoros' \| 'time' | — |
 | `pomo_sound` | ausgewählter Sound-Key | — |
 | `pomo_lb_cache_<period>` | Leaderboard-Liste ohne Winner | 2–10 min |
-| `pomo_lb_winner` | Gestriger Tagessieger (Name) | 1h |
+| `pomo_lb_winner` | Gestriger Tagessieger `{ name, minutes }` | 1h |
 | `pomo_lb_ranks_<period>` | Rang-Snapshot nach letztem Server-Fetch (`{ name: rank }`) | — |
 | `pomo_label_stats_<userId>` | Label-Stats-Array | 5 min |
 | `pomo_egg_preview` | `'1'` wenn Clan-Leader den Placeholder deaktiviert hat | — |
@@ -235,7 +235,7 @@ Der 4-Uhr-Reset (oben) fängt den Fall „Laptop zu/Tab eingefroren über Nacht"
 4. **Wochen-Challenges-Card** (`#challenges-card`) — nur sichtbar für eingeloggte Nutzer (kein Clan-/Public-Gating); Tabs Leicht/Mittel/Schwer, je 3 Progress-Bar-Zeilen mit Belohnungs-Label / „Einlösen"-Button / „✓ eingelöst"
 5. **Ei-Box** (`#eggBox`) — Diamanten-Anzeige, Brutkasten (1 Slot), -1h/Skip-Buttons, aufklappbares 10-Slot-Inventar; hinter Placeholder versteckt (`#egg-placeholder-overlay`)
 6. **Deck-Box** (`#deckBox`) — aufklappbares Karten-Grid, nach Rarität sortiert, Stapel-Optik bei Duplikaten; hinter demselben Placeholder. Kopfzeile zeigt `#deckCount` als `(besessen/gesamt)` — `eggDeck.length` (Anzahl unterschiedlicher besessener Karten, Duplikate zählen nicht mit) `/` `CARD_CATALOG.length` (aktuell 33, wächst automatisch mit neuen Katalog-Karten), gesetzt in `renderEggDeck()`
-7. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border; Live-Timer-Dot (grün, `entry.timer_active` aus `leaderboard_today()`/`leaderboard_aggregated()`); Rang-Änderungs-Indikator (▲ grün / ▼ rot / ● hellblau für Neue) vor dem 🃏-Button, nur nach echtem Server-Fetch sichtbar
+7. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border + Label „Tagessieger · &lt;Vortags-Minuten&gt;" (über `minutesToDisplay()`, respektiert Anzeigeeinheit; Minutenzahl ist unabhängig vom aktiven Tab immer die des Vortags, aus `yesterdayWinnerMinutes`/`get_yesterday_winner()`); Live-Timer-Dot (grün, `entry.timer_active` aus `leaderboard_today()`/`leaderboard_aggregated()`); Rang-Änderungs-Indikator (▲ grün / ▼ rot / ● hellblau für Neue) vor dem 🃏-Button, nur nach echtem Server-Fetch sichtbar
 
 ### Eier & Kartensammlung — Schlüsseldetails
 
