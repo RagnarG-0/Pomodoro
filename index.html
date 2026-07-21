@@ -4776,6 +4776,7 @@
   let lbPeriod = 'alltime';
   let lastLeaderboardData = [];
   let yesterdayWinner = null;
+  let yesterdayWinnerMinutes = null;
 
   function renderLeaderboard(list, prevRanks) {
     lastLeaderboardData = list || [];
@@ -4822,7 +4823,7 @@
       const isYesterdayWinner = !isWins && entry.name === yesterdayWinner;
       const borderStyle = isYesterdayWinner ? 'border: 1.5px solid #c9a227;' : '';
       const winnerLabel = isYesterdayWinner
-        ? `<span style="font-size:10px;color:#c9a227;margin-left:4px;white-space:nowrap;">Tagessieger</span>`
+        ? `<span style="font-size:10px;color:#c9a227;margin-left:4px;white-space:nowrap;">Tagessieger${yesterdayWinnerMinutes != null ? ` · ${minutesToDisplay(yesterdayWinnerMinutes)}` : ''}</span>`
         : '';
 
       let rankDelta = '';
@@ -4884,7 +4885,13 @@
       const cached = cacheGet(cacheKey, CACHE_TTL_LB[lbPeriod]);
       if (cached) {
         const cachedWinner = cacheGet(winnerCacheKey, 60 * 60 * 1000);
-        yesterdayWinner = cachedWinner !== null ? cachedWinner : cached.winner;
+        if (cachedWinner) {
+          yesterdayWinner = cachedWinner.name;
+          yesterdayWinnerMinutes = cachedWinner.minutes ?? null;
+        } else {
+          yesterdayWinner = cached.winner ?? null;
+          yesterdayWinnerMinutes = null;
+        }
         renderLeaderboard(cached.list);
         status.textContent = '';
         return;
@@ -4947,10 +4954,12 @@
           method: 'POST', headers, body: JSON.stringify({}),
         });
         if (ywRes.ok) {
-          const w = await ywRes.json();
-          if (w) {
-            yesterdayWinner = w;
-            cacheSet(winnerCacheKey, w);
+          const rows = await ywRes.json();
+          const w = Array.isArray(rows) ? rows[0] : rows;
+          if (w && w.username) {
+            yesterdayWinner = w.username;
+            yesterdayWinnerMinutes = w.minutes ?? null;
+            cacheSet(winnerCacheKey, { name: w.username, minutes: w.minutes });
             renderLeaderboard(list, refRanks);
           }
         }
