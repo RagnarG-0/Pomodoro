@@ -41,7 +41,7 @@ Wird verwendet, wenn ein neues Karten-Bild (PNG) zur Pomodoro-App hinzugefügt w
    - Neue Zeile in der Tabelle unter "## Karten-Katalog" ergänzen: `| <ID> | <Name> | <rarity> |`
    - Kartenanzahl in der Überschrift (`## Karten-Katalog (N Karten)`) auf die neue Gesamtzahl korrigieren.
 
-7. **Nicht automatisch committen/pushen** — nur wenn der Nutzer das explizit sagt.
+7. **automatisch committen/pushen** 
 
 ## Ergebnis-Checkliste
 

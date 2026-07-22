@@ -362,7 +362,7 @@ Beim erstmaligen Überschreiten der Level-15-Schwelle (`activeLevels[14]`, gleic
 
 ---
 
-## Karten-Katalog (33 Karten)
+## Karten-Katalog (36 Karten)
 
 `CARD_CATALOG` hardcoded im JS. Bildpfad: `CDN/Karten/<rarity>/<name>.png`.
 
@@ -401,6 +401,9 @@ Beim erstmaligen Überschreiten der Level-15-Schwelle (`activeLevels[14]`, gleic
 | 32 | StravaGold | rare |
 | 33 | Gilbert-Syndrom | rare |
 | 34 | UKH-Transport | rare |
+| 35 | Froschi | rare |
+| 36 | OA-Hagel | rare |
+| 37 | Rebecca-Kabel | epic |
 
 Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legendary 9 %, mystic 3 %.
 
