@@ -6077,6 +6077,8 @@
   }
 
   /* ── Bar Chart (last 10 days) ── */
+  let lastBarSessions = null, lastBarDateKeys = null, barChartResizeObserver = null;
+
   async function loadBarChart() {
     const content = document.getElementById('stats-bar-content');
     if (!currentUser) {
@@ -6106,11 +6108,28 @@
         { headers: authHeaders(token) }
       );
       if (!res.ok) throw new Error(res.status);
-      renderBarChart(await res.json(), dateKeys);
+      const sessions = await res.json();
+      lastBarSessions = sessions;
+      lastBarDateKeys = dateKeys;
+      renderBarChart(sessions, dateKeys);
+      ensureBarChartResizeObserver();
     } catch(e) {
       content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Konnte nicht geladen werden.</div>';
       console.warn('loadBarChart error:', e);
     }
+  }
+
+  function ensureBarChartResizeObserver() {
+    if (barChartResizeObserver) return;
+    const content = document.getElementById('stats-bar-content');
+    let debounceTimer = null;
+    barChartResizeObserver = new ResizeObserver(() => {
+      if (!document.getElementById('stats-bar-panel').classList.contains('open')) return;
+      if (!lastBarSessions || !lastBarDateKeys) return;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => renderBarChart(lastBarSessions, lastBarDateKeys), 120);
+    });
+    barChartResizeObserver.observe(content);
   }
 
   function renderBarChart(sessions, dateKeys) {
@@ -6135,12 +6154,20 @@
     const maxHours = Math.ceil(maxMin / 60);
     const scaleMax = maxHours * 60; // snap Y axis to whole hours
 
-    // Layout
-    const leftPad = 26, rightPad = 6, bottomPad = 22, topPad = 8;
-    const svgH = 180;
+    // Layout — bar width/gap adapt to the measured container width so the
+    // full date range always fits without horizontal scrolling.
+    const N = dateKeys.length;
+    const leftPad = 26, rightPad = 6, bottomPad = 40, topPad = 8;
+    const svgH = 200;
     const chartH = svgH - topPad - bottomPad;
-    const barW = 30, gap = 8, slotW = barW + gap;
-    const svgW = leftPad + dateKeys.length * slotW - gap + rightPad;
+    const axisY = topPad + chartH + 6; // rotated label anchor, just below the bars
+    const measuredW = content.clientWidth || 320;
+    const svgW = measuredW;
+    const availW = Math.max(svgW - leftPad - rightPad, 60);
+    const slotW = availW / N;
+    const gap = slotW <= 4 ? 0 : Math.min(3, slotW * 0.22);
+    const barW = Math.min(26, Math.max(0.75, slotW - gap));
+    const rx = barW >= 4 ? 2 : 0;
 
     const DE_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
     const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -6153,13 +6180,28 @@
       grid += `<text x="${leftPad - 4}" y="${(+gy + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${hr}h</text>`;
     }
 
+    // X-axis label thinning: anchor from today, snap interval to "nice" steps
+    const NICE_INTERVALS = [1, 2, 3, 5, 7, 10, 14, 30, 60, 90, 120];
+    const minLabelSpacingPx = 14;
+    const rawInterval = Math.ceil(minLabelSpacingPx / slotW);
+    const labelInterval = NICE_INTERVALS.find(v => v >= rawInterval) || NICE_INTERVALS[NICE_INTERVALS.length - 1];
+    let lastLabeledMonth = null;
+
     // Bars
     let bars = '';
     dateKeys.forEach((key, i) => {
       const x = leftPad + i * slotW;
       const [yr, mo, dy] = key.split('-');
-      const dow = DE_DAYS[new Date(+yr, +mo - 1, +dy).getDay()];
-      bars += `<text x="${(x + barW/2).toFixed(1)}" y="${svgH - 4}" text-anchor="middle" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${dow} ${+dy}</text>`;
+      const fromEnd = N - 1 - i;
+      if (fromEnd % labelInterval === 0) {
+        const dow = DE_DAYS[new Date(+yr, +mo - 1, +dy).getDay()];
+        const label = (+mo !== lastLabeledMonth)
+          ? `${+dy} ${MONTHS_DE[+mo - 1]}`
+          : `${dow} ${+dy}`;
+        lastLabeledMonth = +mo;
+        const lx = (x + barW / 2).toFixed(1);
+        bars += `<text x="${lx}" y="${axisY}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif" transform="rotate(-72 ${lx} ${axisY})">${label}</text>`;
+      }
 
       const dayData = byDate[key];
       const total = Object.values(dayData).reduce((s, v) => s + v, 0);
@@ -6171,7 +6213,7 @@
         if (!m) return;
         const h = Math.max((m / scaleMax) * chartH, 1);
         const barY = (topPad + chartH - yOff - h).toFixed(1);
-        bars += `<rect x="${x}" y="${barY}" width="${barW}" height="${h.toFixed(1)}" fill="${colorMap[label]}" rx="2"><title>${enc(label)}: ${minutesToDisplay(m)}</title></rect>`;
+        bars += `<rect x="${x.toFixed(2)}" y="${barY}" width="${barW.toFixed(2)}" height="${h.toFixed(1)}" fill="${colorMap[label]}" rx="${rx}"><title>${enc(label)}: ${minutesToDisplay(m)}</title></rect>`;
         yOff += h;
       });
     });
@@ -6183,9 +6225,7 @@
     ).join('');
 
     content.innerHTML = `
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-        <svg viewBox="0 0 ${svgW} ${svgH}" style="width:${svgW}px;height:auto;display:block;">${grid}${bars}</svg>
-      </div>
+      <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${bars}</svg>
       <div style="display:flex;flex-wrap:wrap;margin-top:8px;padding:0 2px;">${legendHtml}</div>`;
   }
 
