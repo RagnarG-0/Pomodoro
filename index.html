@@ -3366,6 +3366,50 @@
     localStorage.setItem(PENDING_KEY, JSON.stringify(remaining));
   }
 
+  // Analog zu PENDING_KEY/drainPendingCredits, aber für den Vergessene-Limitless-
+  // Timer-Stash (siehe stashFocusSession() unten): ein fehlgeschlagener Versuch,
+  // pending_focus_sessions zu schreiben, wird lokal gequeued statt (wie früher)
+  // still direkt zu kreditieren — sonst würde genau der Bug wieder auftreten, den
+  // dieses Feature verhindern soll (z.B. abgelaufener Token beim Aufwachen aus dem
+  // Standby führt zu einem Netzwerkfehler, der sonst als "Direkt-Credit" behandelt würde).
+  const PENDING_STASH_KEY = 'pomo_pending_stash_v1';
+
+  function queuePendingStash(date, minutes, label, reason) {
+    const queue = JSON.parse(localStorage.getItem(PENDING_STASH_KEY) || '[]');
+    queue.push({ id: crypto.randomUUID(), date, minutes, label, reason });
+    localStorage.setItem(PENDING_STASH_KEY, JSON.stringify(queue));
+  }
+
+  // Reiner POST-Versuch auf pending_focus_sessions, ohne jeglichen Fallback —
+  // wird sowohl vom ersten Versuch (stashFocusSession) als auch vom Retry
+  // (drainPendingStashQueue) genutzt. Gibt die erzeugte Zeile oder null zurück.
+  async function tryPostPendingFocusSession({ date, minutes, label, reason }) {
+    const token = await getValidToken();
+    if (!token) return null;
+    const res = await fetch(`${SB}/rest/v1/pending_focus_sessions`, {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ user_id: currentUser.id, date, minutes, label, reason }),
+    });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  }
+
+  async function drainPendingStashQueue() {
+    if (!currentUser || !navigator.onLine) return;
+    const queue = JSON.parse(localStorage.getItem(PENDING_STASH_KEY) || '[]');
+    if (!queue.length) return;
+    const remaining = [];
+    for (const entry of queue) {
+      let row = null;
+      try { row = await tryPostPendingFocusSession(entry); } catch(e) { console.warn('drainPendingStashQueue error', e); }
+      if (row) { pendingFocusSessions.push(row); renderPendingFocusList(); }
+      else remaining.push(entry);
+    }
+    localStorage.setItem(PENDING_STASH_KEY, JSON.stringify(remaining));
+  }
+
   async function onTimerEnd() {
     clearInterval(tid); running=false; startedAt=null;
     swSend({ type: 'TIMER_RESET' });
@@ -4196,25 +4240,19 @@
   // Vergessene Limitless-Timer (3h-Idle bzw. 4-Uhr-Grenze ohne Bestätigung):
   // statt direkt zu kreditieren, in pending_focus_sessions zwischenspeichern
   // — der Nutzer bestätigt später manuell über die Liste in der Timer-Card.
-  // Anonyme Nutzer (keine RLS-Tabelle nutzbar) und Netzwerk-/Token-Fehler
-  // fallen auf die bisherige direkte Kreditierung zurück (kein Datenverlust).
+  // Nur anonyme Nutzer (keine RLS-Tabelle nutzbar) fallen auf die direkte
+  // Kreditierung zurück. Netzwerk-/Token-Fehler bei eingeloggten Nutzern queuen
+  // stattdessen lokal (PENDING_STASH_KEY, siehe drainPendingStashQueue) — ein
+  // Direkt-Credit-Fallback hier würde exakt den Bug reproduzieren, den dieses
+  // Feature verhindern soll (z.B. abgelaufener Token direkt nach dem Aufwachen
+  // aus dem Standby, der genau in diesem Moment am wahrscheinlichsten ist).
   async function stashFocusSession(key, minutes, label, reason) {
     if (!currentUser) { creditFocusMinutes(key, minutes, label); return; }
-    const token = await getValidToken();
-    if (!token) { creditFocusMinutes(key, minutes, label); return; }
     try {
-      const res = await fetch(`${SB}/rest/v1/pending_focus_sessions`, {
-        method: 'POST',
-        headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-        body: JSON.stringify({ user_id: currentUser.id, date: key, minutes, label, reason }),
-      });
-      if (!res.ok) { creditFocusMinutes(key, minutes, label); return; }
-      const rows = await res.json();
-      if (Array.isArray(rows) && rows[0]) {
-        pendingFocusSessions.push(rows[0]);
-        renderPendingFocusList();
-      }
-    } catch(e) { console.warn('stashFocusSession error', e); creditFocusMinutes(key, minutes, label); }
+      const row = await tryPostPendingFocusSession({ date: key, minutes, label, reason });
+      if (row) { pendingFocusSessions.push(row); renderPendingFocusList(); }
+      else queuePendingStash(key, minutes, label, reason);
+    } catch(e) { console.warn('stashFocusSession error', e); queuePendingStash(key, minutes, label, reason); }
   }
 
   // ── Zwischengespeicherte Fokus-Sessions (Timer-Card, ausklappbare Liste) ──
@@ -4229,6 +4267,9 @@
       const rows = await res.json();
       pendingFocusSessions = Array.isArray(rows) ? rows : [];
       renderPendingFocusList();
+      if (pendingFocusSessions.length > 0) {
+        toast(`${pendingFocusSessions.length} zwischengespeicherte Fokus-Session(s) warten auf Bestätigung`);
+      }
     } catch(e) { console.warn('loadPendingFocusSessions error', e); }
   }
 
@@ -4352,7 +4393,13 @@
         else swSend({ type: 'EYE_BREAK_START', startedAt: startMs });
         schedulePRTargetIfPending(startMs);
         renderTimer();
-        if (Date.now() - unbrokenSince >= UNBROKEN_THRESHOLD_MS) {
+        // 4-Uhr-Grenze hat Vorrang vor der Idle-Schwelle (wie in checkLimitlessCheckpoint()) —
+        // sonst kann der Idle-Confirm-Banner mit dem armierten tick()/checkDayRollover()
+        // um dieselbe übernächtigte Session wettlaufen (verwaiste timer_state-Zeile, wenn
+        // der Nutzer den Banner danach noch bestätigt).
+        if (todayKey() !== pomoDay) {
+          checkDayRollover();
+        } else if (Date.now() - unbrokenSince >= UNBROKEN_THRESHOLD_MS) {
           // Schwelle beim Wiederaufwachen bereits überschritten — kein stiller
           // Checkpoint-Catchup, sofort zur Bestätigung auffordern.
           triggerUnbrokenConfirm();
@@ -4583,7 +4630,7 @@
     setTimeout(() => { if (switchTo('work', false)) start(); }, 1400);
   }
 
-  window.addEventListener('online', () => { if (currentUser) drainPendingCredits(); });
+  window.addEventListener('online', () => { if (currentUser) { drainPendingCredits(); drainPendingStashQueue(); } });
 
   // Page Visibility API: re-anchor when tab comes back into foreground
   document.addEventListener('visibilitychange', () => {
@@ -5315,6 +5362,7 @@
 
     // Drain sessions that were completed while offline
     await drainPendingCredits();
+    await drainPendingStashQueue();
 
     // Clear stale localStorage — Supabase is now source of truth
     localStorage.removeItem(KEY);
