@@ -1950,10 +1950,12 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
     <div class="hmap-label">🎯 Wochen-Challenges</div>
   </div>
+  <div id="perfect-week-row" class="chall-row" style="margin-bottom:1rem;"></div>
   <div style="display:flex;gap:5px;margin-bottom:1rem;">
     <button class="lb-tab active" data-tier="leicht">Leicht</button>
     <button class="lb-tab" data-tier="mittel">Mittel</button>
     <button class="lb-tab" data-tier="schwer">Schwer</button>
+    <button class="lb-tab" data-tier="meilensteine">Meilensteine</button>
   </div>
   <div id="chall-list"></div>
 </div>
@@ -2026,6 +2028,12 @@
       <div class="deck-grid" id="deckGrid">
         <div class="deck-empty">Noch keine Karten</div>
       </div>
+
+      <div class="market-divider"></div>
+      <div class="market-header">
+        <div class="hmap-label" style="font-size:13px;">🏆 Set-Boni</div>
+      </div>
+      <div id="setBonusList"></div>
 
       <div class="market-divider"></div>
       <div class="market-header">
@@ -3205,6 +3213,7 @@
     if (incubatorData2) renderIncubator(2);
     updateSecondIncubatorVisibility();
     renderTomatoes(); renderHeatmap(); renderStats();
+    renderChallengesCard(); renderPerfectWeekRow();
   }
 
   function completePomo() {
@@ -5380,10 +5389,15 @@
     initLeaderboard();
     // Restore timer if it was running before page reload
     await restoreTimerState();
-    await loadEggData(token);
+    await loadEggData(token); // rendert eggDeck bereits (noch ohne Set-Bonus-Claims, s.u.)
     await loadWeeklyClaims(token);
+    await loadStreakMilestoneClaims(token);
+    await loadPerfectWeekClaim(token);
+    await loadSetBonusClaims(token);
     document.getElementById('challenges-card').style.display = 'block';
     renderChallengesCard();
+    renderPerfectWeekRow();
+    renderSetBonusSection(); // erneut rendern, jetzt mit geladenen Claims
     reconcileBentoLayout(profile);
   }
 
@@ -6855,6 +6869,14 @@
     { id: 37, name:'Rebecca-Kabel',         rarity:'epic',      folder:'epic'      },
   ];
 
+  // Set-Bonus: einmaliger Diamanten-Bonus pro Rarität für "alle Karten
+  // dieser Rarität besitzen". Muss synchron zu den CASE-Werten in
+  // claim_set_bonus() (SQL, supabase/migrations/20260724000002_set_bonus.sql)
+  // gehalten werden. Reward-Höhe folgt der Set-Schwierigkeit (Katalog-Größe
+  // x Ziehquote), nicht der reinen Rarität — "rare" (17 Karten) ist trotz
+  // gemäßigter Ziehquote das schwerste Set.
+  const SET_BONUS_REWARD = { common: 15, legendary: 20, epic: 25, mystic: 35, rare: 50 };
+
   // ─── Wöchentliche Challenges ────────────────────────────────────────────
   // Pool-Reihenfolge = pool_index, muss synchron zur SQL-Seed-Tabelle
   // (weekly_challenges) gehalten werden — analog CARD_CATALOG <-> cards.
@@ -6900,6 +6922,26 @@
 
   let challengesActiveTier = 'leicht';
   let claimedChallengeKeys = new Set();
+
+  // Streak-Meilensteine: muss synchron zum SQL-Seed (streak_milestones,
+  // supabase/migrations/20260724000000_streak_milestones.sql) gehalten werden.
+  const STREAK_MILESTONES = [
+    { days: 7,   reward: 5   },
+    { days: 14,  reward: 10  },
+    { days: 30,  reward: 20  },
+    { days: 60,  reward: 35  },
+    { days: 100, reward: 60  },
+    { days: 200, reward: 120 },
+    { days: 365, reward: 250 },
+  ];
+  let claimedMilestoneDays = new Set();
+
+  // Perfekte Woche: muss synchron zu v_reward in claim_perfect_week() (SQL,
+  // supabase/migrations/20260724000001_perfect_week.sql) gehalten werden.
+  const PERFECT_WEEK_REWARD = 15;
+  let perfectWeekClaimedThisWeek = false;
+
+  let claimedSetBonusRarities = new Set();
 
   // 7 Tage Mo–So der gegebenen Woche, nutzt die bereits geladenen days
   function getWeekDays(weekStartKey) {
@@ -6965,9 +7007,40 @@
     return `${formatMinutesShort(Math.min(progress, challenge.n))} / ${formatMinutesShort(challenge.n)}`;
   }
 
+  function renderMilestonesList() {
+    const list = document.getElementById('chall-list');
+    if (!list) return;
+    const curStreak = computeCurrentStreak(); // bereits geladene days, kein Fetch
+    list.innerHTML = STREAK_MILESTONES.map(ms => {
+      const pct = Math.min(100, (curStreak / ms.days) * 100);
+      const done = curStreak >= ms.days;
+      const claimed = claimedMilestoneDays.has(ms.days);
+      let action;
+      if (claimed) {
+        action = `<span class="chall-check">✓ eingelöst</span>`;
+      } else if (done) {
+        action = `<button class="chall-claim-btn" data-kind="milestone" data-days="${ms.days}">Einlösen</button>`;
+      } else {
+        action = `<span class="chall-reward">${ms.reward} 💎</span>`;
+      }
+      return `
+        <div class="chall-row">
+          <div class="chall-row-top">
+            <div class="chall-title">${ms.days}-Tage-Streak</div>
+            ${action}
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div class="progress-text">${Math.min(curStreak, ms.days)} / ${ms.days} Tage</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
   function renderChallengesCard() {
     const list = document.getElementById('chall-list');
     if (!list) return;
+    if (challengesActiveTier === 'meilensteine') { renderMilestonesList(); return; }
     const weekStartKey = getWeekStartKey();
     const active = getActiveChallengesForWeek(weekStartKey)[challengesActiveTier];
     const reward = CHALLENGE_REWARD[challengesActiveTier];
@@ -7010,7 +7083,16 @@
     });
     document.getElementById('chall-list')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.chall-claim-btn');
-      if (btn) claimChallenge(btn.dataset.key);
+      if (!btn) return;
+      if (btn.dataset.kind === 'milestone') claimStreakMilestone(btn.dataset.days);
+      else claimChallenge(btn.dataset.key);
+    });
+    document.getElementById('perfect-week-row')?.addEventListener('click', (e) => {
+      if (e.target.closest('#perfect-week-claim-btn')) claimPerfectWeek();
+    });
+    document.getElementById('setBonusList')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.chall-claim-btn');
+      if (btn) claimSetBonus(btn.dataset.rarity);
     });
   }
 
@@ -7026,6 +7108,40 @@
     } catch(e) { console.warn('loadWeeklyClaims error:', e); claimedChallengeKeys = new Set(); }
   }
 
+  async function loadStreakMilestoneClaims(token) {
+    if (!currentUser) { claimedMilestoneDays = new Set(); return; }
+    try {
+      const res = await fetch(`${SB}/rest/v1/streak_milestone_claims?user_id=eq.${currentUser.id}&select=days`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      claimedMilestoneDays = new Set(Array.isArray(rows) ? rows.map(r => r.days) : []);
+    } catch(e) { console.warn('loadStreakMilestoneClaims error:', e); claimedMilestoneDays = new Set(); }
+  }
+
+  async function loadPerfectWeekClaim(token) {
+    if (!currentUser) { perfectWeekClaimedThisWeek = false; return; }
+    try {
+      const weekStartKey = getWeekStartKey();
+      const res = await fetch(`${SB}/rest/v1/perfect_week_claims?user_id=eq.${currentUser.id}&week_start=eq.${weekStartKey}&select=week_start`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      perfectWeekClaimedThisWeek = Array.isArray(rows) && rows.length > 0;
+    } catch(e) { console.warn('loadPerfectWeekClaim error:', e); perfectWeekClaimedThisWeek = false; }
+  }
+
+  async function loadSetBonusClaims(token) {
+    if (!currentUser) { claimedSetBonusRarities = new Set(); return; }
+    try {
+      const res = await fetch(`${SB}/rest/v1/set_bonus_claims?user_id=eq.${currentUser.id}&select=rarity`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      claimedSetBonusRarities = new Set(Array.isArray(rows) ? rows.map(r => r.rarity) : []);
+    } catch(e) { console.warn('loadSetBonusClaims error:', e); claimedSetBonusRarities = new Set(); }
+  }
+
   async function claimChallenge(challengeKey) {
     const token = await getValidToken();
     const res = await fetch(`${SB}/rest/v1/rpc/claim_weekly_challenge`, {
@@ -7039,6 +7155,110 @@
     renderEggDiamonds();
     claimedChallengeKeys.add(challengeKey);
     renderChallengesCard();
+  }
+
+  async function claimStreakMilestone(days) {
+    const token = await getValidToken();
+    const res = await fetch(`${SB}/rest/v1/rpc/claim_streak_milestone`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ p_days: Number(days) }),
+    });
+    if (!res.ok) { console.warn('claim_streak_milestone error:', await res.text()); return; }
+    const newDiamonds = await res.json();
+    userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
+    renderEggDiamonds();
+    claimedMilestoneDays.add(Number(days));
+    renderChallengesCard();
+  }
+
+  async function claimPerfectWeek() {
+    const token = await getValidToken();
+    const res = await fetch(`${SB}/rest/v1/rpc/claim_perfect_week`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) { console.warn('claim_perfect_week error:', await res.text()); return; }
+    const newDiamonds = await res.json();
+    userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
+    renderEggDiamonds();
+    perfectWeekClaimedThisWeek = true;
+    renderPerfectWeekRow();
+  }
+
+  async function claimSetBonus(rarity) {
+    const token = await getValidToken();
+    const res = await fetch(`${SB}/rest/v1/rpc/claim_set_bonus`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ p_rarity: rarity }),
+    });
+    if (!res.ok) { console.warn('claim_set_bonus error:', await res.text()); return; }
+    const newDiamonds = await res.json();
+    userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
+    renderEggDiamonds();
+    claimedSetBonusRarities.add(rarity);
+    renderSetBonusSection();
+  }
+
+  function renderPerfectWeekRow() {
+    const row = document.getElementById('perfect-week-row');
+    if (!row) return;
+    const weekStartKey = getWeekStartKey();
+    const wd = getWeekDays(weekStartKey);
+    const fullDays = wd.filter(d => d.minutes > 0).length;
+    const weekOver = todayKey() >= wd[6].key;
+    const pct = Math.min(100, (fullDays / 7) * 100);
+    let action;
+    if (perfectWeekClaimedThisWeek) {
+      action = `<span class="chall-check">✓ eingelöst</span>`;
+    } else if (fullDays === 7 && weekOver) {
+      action = `<button class="chall-claim-btn" id="perfect-week-claim-btn">Einlösen</button>`;
+    } else {
+      action = `<span class="chall-reward">${PERFECT_WEEK_REWARD} 💎</span>`;
+    }
+    row.innerHTML = `
+      <div class="chall-row-top">
+        <div class="chall-title">🌟 Perfekte Woche</div>
+        ${action}
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="progress-text">${fullDays} / 7 Tage</div>
+      </div>`;
+  }
+
+  function renderSetBonusSection() {
+    const list = document.getElementById('setBonusList');
+    if (!list) return;
+    list.innerHTML = EGG_RARITIES.map(r => {
+      const total = CARD_CATALOG.filter(c => c.folder === r.folder).length;
+      const owned = eggDeck.filter(c => c.rarity.folder === r.folder).length;
+      const done = owned >= total;
+      const claimed = claimedSetBonusRarities.has(r.folder);
+      const reward = SET_BONUS_REWARD[r.folder];
+      let action;
+      if (claimed) {
+        action = `<span class="chall-check">✓ eingelöst</span>`;
+      } else if (done) {
+        action = `<button class="chall-claim-btn" data-rarity="${r.folder}">Einlösen</button>`;
+      } else {
+        action = `<span class="chall-reward">${reward} 💎</span>`;
+      }
+      const pct = Math.min(100, (owned / total) * 100);
+      return `
+        <div class="chall-row">
+          <div class="chall-row-top">
+            <div class="chall-title" style="color:${r.color}">${r.name}</div>
+            ${action}
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${r.color}"></div></div>
+            <div class="progress-text">${owned} / ${total} Karten</div>
+          </div>
+        </div>`;
+    }).join('');
   }
 
   // State
@@ -7497,6 +7717,7 @@
     const countEl = document.getElementById('deckCount');
     if (!grid) return;
     if (countEl) countEl.textContent = `(${eggDeck.length}/${CARD_CATALOG.length})`;
+    renderSetBonusSection();
     if (!eggDeck.length) { grid.innerHTML='<div class="deck-empty">Noch keine Karten</div>'; return; }
     grid.innerHTML = '';
     eggDeck.forEach(({ id, src, rarity, count }) => {

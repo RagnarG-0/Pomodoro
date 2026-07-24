@@ -38,6 +38,10 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `trade_offers` | id uuid (PK), listing_id, offerer_id, status (`pending`/`accepted`/`rejected`), created_at, responded_at — ein Gegenangebot auf ein `card_listings`-Angebot |
 | `trade_offer_cards` | trade_offer_id + user_card_id (PK), card_id — welche eigenen Karten Teil eines Gegenangebots sind |
 | `pending_focus_sessions` | id uuid (PK), user_id, date, minutes, label, reason (`idle_3h`/`day_boundary`), created_at — zwischengespeicherte Limitless-Fokuszeit, wartet auf manuelle Bestätigung („Gutschreiben"), siehe „Vergessene Limitless-Timer" |
+| `streak_milestones` | days (PK), reward_diamonds — öffentlicher, tunable Katalog (UPDATE ohne Migration), siehe „Zusätzliche Diamanten-Quellen" |
+| `streak_milestone_claims` | user_id + days (PK), reward_diamonds (Snapshot), claimed_at |
+| `perfect_week_claims` | user_id + week_start (PK), reward_diamonds, claimed_at |
+| `set_bonus_claims` | user_id + rarity (PK), reward_diamonds, claimed_at |
 
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
@@ -72,6 +76,10 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 | `create_trade_offer(p_listing_id, p_offered_card_ids int[])` | Legt ein Gegenangebot an (ein oder mehrere eigene Karten, per `card_id` wie bei `create_listing`, Server wählt konkrete Kopien). Tages-Limit: max. 1 Gegenangebot pro Nutzer pro App-Tag (global). Siehe „Tauschbörse" |
 | `respond_to_trade_offer(p_offer_id, p_accept)` | Nur der Angebotsersteller. Bei Annahme: atomarer Kartentausch (beide Richtungen) + Audit-Log + Cleanup-Kaskade (alle anderen Angebote/Gegenangebote mit denselben Karten werden verworfen). Siehe „Tauschbörse" |
 | `get_incoming_trade_offers()` | Eigene offene eingehende Gegenangebote für die Kopf-Glocke (SECURITY DEFINER) |
+| `calc_current_streak(p_user_id)` | Unbegrenzte (nicht wochenbegrenzte) Variante von `calc_week_streak()`, identische Semantik zu `computeCurrentStreak()`. Nur für `claim_streak_milestone()`, siehe „Zusätzliche Diamanten-Quellen" |
+| `claim_streak_milestone(p_days)` | Prüft Streak-Länge serverseitig neu (`calc_current_streak`), schreibt Claim + Diamanten gut, gibt neuen Diamanten-Stand zurück |
+| `claim_perfect_week()` | Prüft serverseitig, ob alle 7 Tage der aktuellen App-Woche `minutes > 0` haben (Woche muss vorbei sein), schreibt Claim + Diamanten gut |
+| `claim_set_bonus(p_rarity)` | Prüft serverseitig, ob alle Katalog-Karten einer Rarität besessen werden (`cards` vs. `user_cards`), schreibt Claim + Diamanten gut |
 
 ---
 
@@ -107,8 +115,11 @@ unbrokenSince        // ms-Timestamp | null — letzter manueller Play-Klick/Mod
 idleConfirmShown     // boolean — verhindert ein zweites Unbroken-Bestätigungsbanner, während eines bereits offen ist
 pendingFocusSessions // Array — eigene, noch nicht bestätigte/gelöschte Zeilen aus pending_focus_sessions
 pendingFocusListOpen // boolean — Auf-/Zugeklappt-Zustand der Pending-Liste in der Timer-Card
-challengesActiveTier // 'leicht' | 'mittel' | 'schwer' — aktiver Tab in der Wochen-Challenges-Karte
+challengesActiveTier // 'leicht' | 'mittel' | 'schwer' | 'meilensteine' — aktiver Tab in der Wochen-Challenges-Karte
 claimedChallengeKeys // Set<string> — bereits eingelöste challenge_keys der aktuellen Woche
+claimedMilestoneDays // Set<number> — bereits eingelöste Streak-Meilensteine (days), siehe „Zusätzliche Diamanten-Quellen"
+perfectWeekClaimedThisWeek // boolean — „Perfekte Woche"-Bonus für die aktuelle App-Woche bereits eingelöst
+claimedSetBonusRarities    // Set<string> — bereits eingelöste Set-Boni (rarity), siehe „Zusätzliche Diamanten-Quellen"
 newDesignOn   // boolean — Settings-Opt-in „Neues Design" (Bento-Grid ab Desktop-Breite), Default aus, geräte-lokal
 focusModeOn   // boolean — Fokus-Modus (blendet alle Karten außer Timer aus), manuell + automatisch bei mode==='work'
 marketListings // Array — aktive Angebote aller Spieler, aus card_listings (Tab „Alle Angebote")
@@ -253,6 +264,15 @@ Der 4-Uhr-Reset (oben) fängt den Fall „Laptop zu/Tab eingefroren über Nacht"
 - Client-Rendering (`renderChallengesCard()`) und Fortschrittsberechnung (`computeChallengeProgress()`) laufen rein lokal aus bereits geladenen `days`/`offDays`/`offWeekdays` — kein zusätzlicher Fetch pro Anzeige, nur `loadWeeklyClaims()` einmal beim Login
 - **Bugfix (`20260710000000_fix_calc_week_streak.sql`)**: `calc_week_streak()` ließ `v_off_override`/`v_minutes` bei Tagen ohne `study_days`-Zeile auf dem Wert der vorherigen Schleifen-Iteration stehen (PL/pgSQL `SELECT INTO` setzt Variablen bei 0 Treffern nicht auf `NULL` zurück) — konnte eine gültige Streak-Challenge fälschlich mit `threshold_not_met` ablehnen. Variablen werden jetzt vor jedem `SELECT INTO` explizit auf `NULL` zurückgesetzt.
 - **Bugfix `getWeekIndex()`**: parste Datumsstrings ohne Zeitzonen-Suffix (`new Date(str + 'T00:00:00')`) — dadurch floss die lokale Browser-Zeitzone in die Millisekunden-Differenz zum Epoch-Datum ein. Liegen Epoch (Winter, UTC+1) und Zielwoche (Sommer, UTC+2) auf verschiedenen Seiten einer Sommerzeit-Umstellung, verschiebt sich der Tagesabstand um 1h und `Math.floor(diff / 7 Tage)` kann in genau den betroffenen Wochen um 1 zu niedrig ausfallen — Client und Server (reine Kalender-Arithmetik `date - date`, DST-immun) laufen dann bei der Rotation auseinander (`challenge_not_active_this_week` trotz im Frontend als aktiv angezeigter Challenge). Fix: `'T00:00:00Z'`-Suffix erzwingt UTC-Parsing auf beiden Seiten.
+
+### Zusätzliche Diamanten-Quellen (Streak-Meilensteine, Perfekte Woche, Set-Bonus)
+
+Drei weitere, voneinander unabhängige Diamanten-Einnahmequellen neben Tagessiegen und Wochen-Challenges. Alle drei folgen demselben Grundmuster wie `claim_weekly_challenge()`: eine Tabelle `<feature>_claims` (Claim-Mutex via `PRIMARY KEY(user_id, ...)`, `INSERT` läuft vor der `UPDATE profiles`-Gutschrift — ein `UNIQUE`-Violation bricht die Funktion vor der doppelten Gutschrift ab) + eine `SECURITY DEFINER`-RPC `claim_<feature>(...)`, die den Anspruch **serverseitig aus `study_days`/`user_cards` neu berechnet**, nie dem Client vertrauend (Migrationen `20260724000000_streak_milestones.sql`, `20260724000001_perfect_week.sql`, `20260724000002_set_bonus.sql`). Client lädt den Claim-Status beim Login (`loadStreakMilestoneClaims()`/`loadPerfectWeekClaim()`/`loadSetBonusClaims()`, analog `loadWeeklyClaims()`), Fortschrittsanzeige läuft überall rein lokal aus bereits geladenen Daten (kein Extra-Fetch), nur der Claim selbst geht über die RPC.
+
+- **Streak-Meilensteine**: einmaliger Bonus bei 7/14/30/60/100/200/365 Tagen Streak (`STREAK_MILESTONES`, muss synchron zur `streak_milestones`-Tabelle gehalten werden, analog `CHALLENGE_POOL`/`weekly_challenges`). Eigener 4. Tab „Meilensteine" in `#challenges-card` (`renderMilestonesList()`, Progress via `computeCurrentStreak()`). Serverseitige Neuberechnung über `calc_current_streak()` — eine unbegrenzte Variante von `calc_week_streak()` mit identischer Semantik zu `computeCurrentStreak()` (kein Off-Day-Skip, heutiger leerer Tag bricht nicht ab).
+- **Perfekte Woche**: Bonus (15 💎), wenn alle 7 Tage der aktuellen App-Woche `minutes > 0` in `study_days` haben — freie Tage retten nicht (gleiche Designentscheidung wie bei Streaks). Immer sichtbare Zeile `#perfect-week-row` oberhalb der Tier-Tabs in `#challenges-card` (`renderPerfectWeekRow()`, tier-unabhängig), wird zusätzlich aus `creditFocusMinutes()` neu gerendert (kein Fetch), damit der Fortschritt sofort nach jeder Session aktuell ist. `claim_perfect_week()` verlangt serverseitig zusätzlich `today >= week_start + 6` (Woche muss vorbei sein) als Verteidigung in der Tiefe, da `study_days`-Schreibpfade das Datum nicht gegen „heute" validieren (siehe `add_study_minutes` unten).
+- **Set-Bonus**: einmaliger Bonus pro Rarität für „mind. 1 Kopie jeder Katalog-Karte dieser Rarität besitzen" (`SET_BONUS_REWARD`, muss synchron zu den `CASE`-Werten in `claim_set_bonus()` gehalten werden). Reward-Höhe folgt der tatsächlichen Set-Schwierigkeit (Coupon-Collector-Erwartungswert aus Katalog-Größe × Ziehquote), nicht der reinen Rarität-Bezeichnung: common 15💎, legendary 20💎, epic 25💎, mystic 35💎, **rare 50💎** — „rare" (17 Katalog-Karten) ist trotz gemäßigter Ziehquote (30 %) das mit Abstand schwerste Set zu komplettieren, schwerer noch als „mystic" (2 Karten, aber nur 3 % Ziehquote). Neue Sektion `#setBonusList` in der Deck-Box (`renderSetBonusSection()`, Fortschritt aus `eggDeck` vs. `CARD_CATALOG`, gruppiert nach `rarity.folder`), gerendert am Ende von `renderEggDeck()` — bleibt dadurch automatisch synchron mit Schlüpfen/Trade-Annahme/Login, ohne separate Call-Sites pflegen zu müssen.
+- **Bekannte Schwäche (geteilt, kein neues Risiko)**: `add_study_minutes`/direktes PATCH auf `study_days` validieren das Datum nicht gegen „heute" (siehe `add_study_minutes` in „Bekannte Designentscheidungen") — theoretisch könnte ein manipulierter Client zukünftige Tage der laufenden Woche vorab beschreiben. Bestehende Schwäche, die auch die Wochen-Challenges schon haben; „Perfekte Woche" mildert sie zusätzlich über die `week_not_over`-Prüfung, schließt sie aber nicht vollständig.
 
 ### Bento-Grid-Layout (Desktop, Einstellungen-Opt-in)
 
@@ -546,7 +566,7 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 - **Schlüpfen**: `draw_card()` RPC (serverseitig) → INSERT `user_cards`; bei Fehler lokaler Fallback
 - **Karte ins Deck**: DELETE `incubator?user_id=eq.<id>&slot_index=eq.<n>` (nur die Zeile des Slots, aus dem geschlüpft wurde)
 - **Level-Up-Ei**: PATCH `profiles.eggs` via `saveEggProfile()`
-- **Duplikat verkaufen**: `sell_card(p_card_id)` RPC (atomar: DELETE `user_cards` + UPDATE `profiles.diamonds`); nur möglich wenn `count > 1`; Belohnung: common 2 / rare 4 / epic 6 / legendary 8 / mystic 10 💎
+- **Duplikat verkaufen**: `sell_card(p_card_id)` RPC (atomar: DELETE `user_cards` + UPDATE `profiles.diamonds`); nur möglich wenn `count > 1`; Belohnung: common 4 / rare 8 / epic 12 / legendary 16 / mystic 20 💎
 - **Karte zum Tausch anbieten**: `create_listing(p_card_id)` RPC → INSERT `card_listings` (kein Preis)
 - **Angebot zurückziehen**: `cancel_listing(p_listing_id)` RPC (Claim-Mutex-Update `active→cancelled` + Ablehnung offener Gegenangebote)
 - **Gegenangebot machen**: `create_trade_offer(p_listing_id, p_offered_card_ids)` RPC → INSERT `trade_offers` + `trade_offer_cards` (Tages-Limit)
