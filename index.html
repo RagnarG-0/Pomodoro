@@ -5391,6 +5391,7 @@
     await restoreTimerState();
     await loadEggData(token); // rendert eggDeck bereits (noch ohne Set-Bonus-Claims, s.u.)
     await loadWeeklyClaims(token);
+    await loadStreakMilestones(token);
     await loadStreakMilestoneClaims(token);
     await loadPerfectWeekClaim(token);
     await loadSetBonusClaims(token);
@@ -6923,17 +6924,9 @@
   let challengesActiveTier = 'leicht';
   let claimedChallengeKeys = new Set();
 
-  // Streak-Meilensteine: muss synchron zum SQL-Seed (streak_milestones,
-  // supabase/migrations/20260724000000_streak_milestones.sql) gehalten werden.
-  const STREAK_MILESTONES = [
-    { days: 7,   reward: 5   },
-    { days: 14,  reward: 10  },
-    { days: 30,  reward: 20  },
-    { days: 60,  reward: 35  },
-    { days: 100, reward: 60  },
-    { days: 200, reward: 120 },
-    { days: 365, reward: 250 },
-  ];
+  // Streak-Meilensteine: aus Supabase geladen (loadStreakMilestones()), Tabelle
+  // streak_milestones ist die Single Source of Truth für Anzeige UND Claim.
+  let streakMilestones = [];
   let claimedMilestoneDays = new Set();
 
   // Perfekte Woche: muss synchron zu v_reward in claim_perfect_week() (SQL,
@@ -7011,7 +7004,7 @@
     const list = document.getElementById('chall-list');
     if (!list) return;
     const curStreak = computeCurrentStreak(); // bereits geladene days, kein Fetch
-    list.innerHTML = STREAK_MILESTONES.map(ms => {
+    list.innerHTML = streakMilestones.map(ms => {
       const pct = Math.min(100, (curStreak / ms.days) * 100);
       const done = curStreak >= ms.days;
       const claimed = claimedMilestoneDays.has(ms.days);
@@ -7106,6 +7099,18 @@
       const rows = await res.json();
       claimedChallengeKeys = new Set(Array.isArray(rows) ? rows.map(r => r.challenge_key) : []);
     } catch(e) { console.warn('loadWeeklyClaims error:', e); claimedChallengeKeys = new Set(); }
+  }
+
+  async function loadStreakMilestones(token) {
+    try {
+      const res = await fetch(`${SB}/rest/v1/streak_milestones?select=days,reward_diamonds&order=days.asc`, {
+        headers: authHeaders(token),
+      });
+      const rows = await res.json();
+      streakMilestones = Array.isArray(rows)
+        ? rows.map(r => ({ days: r.days, reward: r.reward_diamonds }))
+        : [];
+    } catch (e) { console.warn('loadStreakMilestones error:', e); streakMilestones = []; }
   }
 
   async function loadStreakMilestoneClaims(token) {
@@ -7207,7 +7212,7 @@
     if (!row) return;
     const weekStartKey = getWeekStartKey();
     const wd = getWeekDays(weekStartKey);
-    const fullDays = wd.filter(d => d.minutes > 0).length;
+    const fullDays = wd.filter(d => d.minutes >= 60).length;
     const weekOver = todayKey() >= wd[6].key;
     const pct = Math.min(100, (fullDays / 7) * 100);
     let action;
