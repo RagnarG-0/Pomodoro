@@ -6234,14 +6234,34 @@
       });
     });
 
-    const legendHtml = labels.slice(0, 10).map(l =>
+    // Rolling mean (trailing window) overlay
+    const ROLLING_WINDOW_DAYS = 7;
+    const dayTotals = dateKeys.map(k => Object.values(byDate[k]).reduce((s, v) => s + v, 0));
+    const rollingMean = dayTotals.map((_, i) => {
+      const start = Math.max(0, i - ROLLING_WINDOW_DAYS + 1);
+      const slice = dayTotals.slice(start, i + 1);
+      return slice.reduce((s, v) => s + v, 0) / slice.length;
+    });
+    const linePoints = dateKeys.map((key, i) => {
+      const x = (leftPad + i * slotW + barW / 2).toFixed(1);
+      const y = (topPad + chartH - (rollingMean[i] / scaleMax) * chartH).toFixed(1);
+      return `${x},${y}`;
+    }).join(' ');
+    const rollingLine = `<polyline points="${linePoints}" fill="none" stroke="#dc2626" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`;
+
+    const legendHtml = [
       `<span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
-        <span style="width:8px;height:8px;border-radius:50%;background:${colorMap[l]};flex-shrink:0;"></span>${enc(l)}
-      </span>`
-    ).join('');
+        <span style="width:10px;height:1.5px;border-radius:1px;background:#dc2626;flex-shrink:0;"></span>Ø ${ROLLING_WINDOW_DAYS} Tage
+      </span>`,
+      ...labels.slice(0, 10).map(l =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${colorMap[l]};flex-shrink:0;"></span>${enc(l)}
+        </span>`
+      ),
+    ].join('');
 
     content.innerHTML = `
-      <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${bars}</svg>
+      <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${bars}${rollingLine}</svg>
       <div style="display:flex;flex-wrap:wrap;margin-top:8px;padding:0 2px;">${legendHtml}</div>`;
   }
 
