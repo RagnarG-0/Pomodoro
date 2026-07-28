@@ -8105,12 +8105,24 @@
     fetchMyListings();
   });
 
+  // Request-Sequenz-Guards: mehrere Aufrufer (toggleEggDeck()-Lazy-Load,
+  // openMyListingFromBell(), der Post-Accept-Refresh nach respondToTradeOffer())
+  // können nahezu gleichzeitig eine dieser Funktionen aufrufen. Ohne Guard kann
+  // eine ÄLTERE (z.B. schon vor einem akzeptierten Tausch gestartete) Antwort
+  // NACH der frischen Post-Trade-Antwort eintreffen und deren korrekten Stand
+  // mit veralteten Daten überschreiben — sichtbar als "gehandeltes Angebot
+  // taucht wieder in der Tauschbörse auf". Nur die jeweils zuletzt gestartete
+  // Anfrage darf noch marketListings/myListings schreiben.
+  let marketListingsSeq = 0;
+  let myListingsSeq = 0;
+
   async function fetchMarketListings(force = false) {
     const cacheKey = 'pomo_market_cache';
     if (!force) {
       const cached = cacheGet(cacheKey, CACHE_TTL_MARKET);
       if (cached) { marketListings = cached; renderMarketGrid(); return; }
     }
+    const seq = ++marketListingsSeq;
     try {
       const token = await getValidToken();
       // profiles!card_listings_seller_id_fkey nötig: card_listings hat zwei FKs auf
@@ -8120,26 +8132,38 @@
         `${SB}/rest/v1/card_listings?status=eq.active&select=id,card_id,seller_id,created_at,profiles!card_listings_seller_id_fkey(username)&order=created_at.desc&limit=50`,
         { headers: authHeaders(token) }
       );
-      if (!res.ok) { console.error('fetchMarketListings error:', await res.text()); marketListings = []; renderMarketGrid(); return; }
+      if (!res.ok) {
+        console.error('fetchMarketListings error:', await res.text());
+        if (seq === marketListingsSeq) { marketListings = []; renderMarketGrid(); }
+        return;
+      }
       const rows = await res.json();
+      if (seq !== marketListingsSeq) return; // neuere Anfrage bereits angekommen — verwerfen
       marketListings = Array.isArray(rows) ? rows : [];
       cacheSet(cacheKey, marketListings);
+      renderMarketGrid();
     } catch(e) { console.warn('fetchMarketListings error:', e); }
-    renderMarketGrid();
   }
 
   async function fetchMyListings() {
     if (!currentUser) return;
+    const seq = ++myListingsSeq;
     try {
       const token = await getValidToken();
       const res = await fetch(
         `${SB}/rest/v1/card_listings?seller_id=eq.${currentUser.id}&status=eq.active&select=id,card_id,created_at&order=created_at.desc`,
         { headers: authHeaders(token) }
       );
+      if (!res.ok) {
+        console.error('fetchMyListings error:', await res.text());
+        if (seq === myListingsSeq) { myListings = []; renderMarketGrid(); }
+        return;
+      }
       const rows = await res.json();
+      if (seq !== myListingsSeq) return; // neuere Anfrage bereits angekommen — verwerfen
       myListings = Array.isArray(rows) ? rows : [];
+      renderMarketGrid();
     } catch(e) { console.warn('fetchMyListings error:', e); }
-    renderMarketGrid();
   }
 
   function renderMarketGrid() {
