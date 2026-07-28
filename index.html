@@ -6829,7 +6829,6 @@
   const EGG_TOTAL_MIN = 600;
   const EGG_BUY_COST  = 12;
   const EGG_COLOR_IDS = ['y','b','g','r'];
-  const EGG_STAGE_SCALE = [1.0, 1.02, 1.08, 1.25];
   const EGG_BREAK_L = 'polygon(0 0,50% 0,57% 10%,43% 22%,59% 34%,41% 47%,58% 59%,44% 71%,54% 83%,47% 100%,0 100%)';
   const EGG_BREAK_R = 'polygon(47% 100%,54% 83%,44% 71%,58% 59%,41% 47%,59% 34%,43% 22%,57% 10%,50% 0,100% 0,100% 100%)';
 
@@ -7322,8 +7321,7 @@
   function eggSprite(colorId, stage, px) {
     const f   = eggStageFrame(stage);
     const src = (EGG_STAGES[colorId] || EGG_STAGES['y'])[f];
-    const w   = Math.round(px * EGG_STAGE_SCALE[f]);
-    return `<img src="${src}" width="${w}" style="display:block;">`;
+    return `<img src="${src}" width="${px}" style="display:block;">`;
   }
   function incData(n) { return n === 1 ? incubatorData : incubatorData2; }
   function getEggProgress(n = 1) {
