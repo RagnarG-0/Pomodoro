@@ -1005,7 +1005,7 @@
   .inv-content.open { max-height: 300px; margin-top: 14px; }
   .inv-slots { display: flex; flex-wrap: wrap; gap: 8px; }
   .inv-slot {
-    width: calc(10% - 8px); min-width: 48px; min-height: 68px; background: var(--surface2);
+    width: calc(20% - 8px); min-width: 48px; min-height: 68px; background: var(--surface2);
     border: 1.5px dashed var(--border); border-radius: 8px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     transition: transform 0.1s, opacity 0.15s, background 0.15s;
@@ -1014,20 +1014,20 @@
   .inv-slot.occupied:hover { transform: translateY(-3px); }
   .inv-slot.occupied:active { cursor: grabbing; }
   .inv-slot.dragging-from { opacity: 0.18; }
-  .inv-slot.plus-slot { gap: 2px; }
-  .inv-slot.plus-slot:not(.plus-slot-dual) { cursor: pointer; }
-  .inv-slot.plus-slot:not(.plus-slot-dual):hover { background: rgba(96,165,250,0.1); transform: translateY(-2px); border-color: rgba(96,165,250,0.35); }
-  .plus-icon { font-size: 18px; color: var(--text-muted); opacity: 0.5; line-height: 1; }
-  .plus-cost { font-family: -apple-system, sans-serif; font-size: 9px; color: var(--text-muted); opacity: 0.5; }
 
-  /* Doppel-Kauf-Slot: normales Ei (links) + mystisches Ei (rechts), nebeneinander */
-  .inv-slot.plus-slot-dual { flex-direction: row; padding: 0; gap: 0; overflow: hidden; min-width: 76px; }
-  .plus-btn { flex: 1 1 50%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; cursor: pointer; transition: background 0.15s, transform 0.1s; }
-  .plus-btn-normal:hover { background: rgba(96,165,250,0.15); }
-  .plus-btn-mystic { border-left: 1px dashed var(--border); }
-  .plus-btn-mystic .plus-icon, .plus-btn-mystic .plus-cost { color: #ff4fbf; opacity: 0.65; }
-  .plus-btn-mystic:hover { background: rgba(255,79,191,0.15); box-shadow: inset 0 0 12px rgba(255,79,191,0.25); }
-  .plus-btn-mystic:hover .plus-icon, .plus-btn-mystic:hover .plus-cost { opacity: 1; }
+  /* Ei-Shop (zwischen Brutkasten und Kartensammlung) */
+  .shop-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+  .shop-item {
+    flex: 1 1 140px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 14px 10px; border-radius: 10px; background: var(--surface2);
+    border: 1px solid var(--border); cursor: pointer;
+    transition: transform 0.1s, background 0.15s, border-color 0.15s;
+  }
+  .shop-item:hover { transform: translateY(-2px); background: rgba(96,165,250,0.1); border-color: rgba(96,165,250,0.35); }
+  .shop-item-mystic:hover { background: rgba(255,79,191,0.12); border-color: rgba(255,79,191,0.4); }
+  .shop-item-name { font-size: 12px; font-family: -apple-system, sans-serif; color: var(--text); margin-top: 2px; }
+  .shop-item-price { font-size: 11px; font-family: -apple-system, sans-serif; color: var(--text-muted); }
+  .shop-item-mystic .shop-item-price { color: #ff4fbf; }
 
   /* Deck-Box */
   .deck-toggle-area { cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
@@ -2059,6 +2059,12 @@
         <div class="inv-slots" id="invSlots"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Ei-Shop -->
+  <div class="card" id="eggShopBox">
+    <div class="hmap-label" style="margin-bottom:1rem;">🛒 Shop</div>
+    <div class="shop-grid" id="eggShopGrid"></div>
   </div>
 
   <!-- Deck-Box -->
@@ -4910,6 +4916,9 @@
   const RACE_FINISH_MINUTES = RACE_FIELDS.length * RACE_MIN_PER_FIELD; // 700
   const RACE_FLAG_FIELD     = 14;                                  // Streckenfeld mit der Flagge
   const RACE_FLAG_MINUTES   = RACE_FLAG_FIELD * RACE_MIN_PER_FIELD; // 280
+  const RACE_FINISH_DIAMOND_OFFSETS = [
+    [0, -2.4], [2.1, -0.6], [1.3, 2.2], [-1.3, 2.2], [-2.1, -0.6],
+  ]; // 5 Diamanten in kleiner Fächer-Anordnung um RACE_FINISH_POS (Prozentpunkte)
   const RACE_CAR_COUNT      = 8;
 
   // Aktuell ungenutzt (Rennstrecke zeigt seit 2026-08-05 Profilbilder statt
@@ -5045,7 +5054,10 @@
       diamondsHtml += `<div class="lb-race-diamond" style="left:${fx}%;top:${fy}%;" title="1💎 für den ersten Nutzer auf diesem Feld">💎</div>`;
     }
     if (!raceCheckpointClaimed.finish) {
-      diamondsHtml += `<div class="lb-race-diamond" style="left:${RACE_FINISH_POS[0]}%;top:${RACE_FINISH_POS[1]}%;" title="5💎 für den ersten Nutzer im Ziel">💎</div>`;
+      RACE_FINISH_DIAMOND_OFFSETS.forEach(([dx, dy]) => {
+        const x = RACE_FINISH_POS[0] + dx, y = RACE_FINISH_POS[1] + dy;
+        diamondsHtml += `<div class="lb-race-diamond" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;" title="5💎 für den ersten Nutzer im Ziel">💎</div>`;
+      });
     }
 
     wrap.style.display = 'block';
@@ -7072,6 +7084,7 @@
   const EGG_TOTAL_MIN = 600;
   const EGG_BUY_COST  = 12;
   const EGG_BUY_COST_MYSTIC = 100;
+  const EGG_INVENTORY_SIZE = 5;
   const EGG_COLOR_IDS = ['y','b','g','r'];
   const EGG_BREAK_L = 'polygon(0 0,50% 0,57% 10%,43% 22%,59% 34%,41% 47%,58% 59%,44% 71%,54% 83%,47% 100%,0 100%)';
   const EGG_BREAK_R = 'polygon(47% 100%,54% 83%,44% 71%,58% 59%,41% 47%,59% 34%,43% 22%,57% 10%,50% 0,100% 0,100% 100%)';
@@ -7545,7 +7558,7 @@
   }
 
   // State
-  let eggInventory   = Array(10).fill(null);
+  let eggInventory   = Array(EGG_INVENTORY_SIZE).fill(null);
   let incubatorData  = null; // { color, focus_minutes_at_placement, bonusMin }
   let incubatorData2 = null; // { color, focus_minutes_at_placement, bonusMin } — Slot 2
   let secondIncubatorUnlocked = false; // profiles.second_incubator_purchased
@@ -7596,13 +7609,21 @@
     clearTimeout(eggBannerTimer);
     eggBannerTimer = setTimeout(() => b.classList.remove('visible'), 4000);
   }
+  function showInventoryFullError() {
+    const b = document.getElementById('diamondBanner');
+    if (!b) return;
+    b.textContent = 'Kein Platz im Inventar';
+    b.classList.add('visible');
+    clearTimeout(eggBannerTimer);
+    eggBannerTimer = setTimeout(() => b.classList.remove('visible'), 4000);
+  }
 
   // Inventar
   function renderInventory() {
     const c = document.getElementById('invSlots');
     if (!c) return;
     c.innerHTML = '';
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < EGG_INVENTORY_SIZE; i++) {
       const egg  = eggInventory[i];
       const slot = document.createElement('div');
       if (egg) {
@@ -7617,23 +7638,14 @@
         });
         slot.addEventListener('dragend', () => { slot.classList.remove('dragging-from'); eggDraggedId = null; });
       } else {
-        slot.className = 'inv-slot plus-slot plus-slot-dual';
-        slot.innerHTML  = `
-          <div class="plus-btn plus-btn-normal" title="Normales Ei — zufällige Farbe">
-            <span class="plus-icon">+</span><span class="plus-cost">${EGG_BUY_COST} 💎</span>
-          </div>
-          <div class="plus-btn plus-btn-mystic" title="Mystisches Ei — nur legendäre/mystische Karten">
-            <span class="plus-icon">✦</span><span class="plus-cost">${EGG_BUY_COST_MYSTIC} 💎</span>
-          </div>`;
-        slot.querySelector('.plus-btn-normal').addEventListener('click', (e) => { e.stopPropagation(); buyEgg(); });
-        slot.querySelector('.plus-btn-mystic').addEventListener('click', (e) => { e.stopPropagation(); buyMysticEgg(); });
+        slot.className = 'inv-slot';
       }
       c.appendChild(slot);
     }
   }
   function buyEgg() {
     const freeIdx = eggInventory.findIndex(e => e === null);
-    if (freeIdx === -1) return;
+    if (freeIdx === -1) { showInventoryFullError(); return; }
     if (userDiamonds < EGG_BUY_COST) { showEggDiamondError(); return; }
     userDiamonds -= EGG_BUY_COST;
     eggInventory[freeIdx] = { id: eggNextId++, color: EGG_COLOR_IDS[Math.floor(Math.random() * 4)] };
@@ -7642,13 +7654,35 @@
   }
   function buyMysticEgg() {
     const freeIdx = eggInventory.findIndex(e => e === null);
-    if (freeIdx === -1) return;
+    if (freeIdx === -1) { showInventoryFullError(); return; }
     if (userDiamonds < EGG_BUY_COST_MYSTIC) { showEggDiamondError(); return; }
     userDiamonds -= EGG_BUY_COST_MYSTIC;
     eggInventory[freeIdx] = { id: eggNextId++, color: 'm' };
     renderEggDiamonds(); renderInventory();
     saveEggProfile({ diamonds: userDiamonds, eggs: eggsToProfileString() });
   }
+
+  // Ei-Shop: statischer Inhalt (Bild/Preis ändern sich nie zur Laufzeit),
+  // ruft dieselben Kauf-Funktionen wie zuvor die Inventar-Slots auf.
+  function renderEggShop() {
+    const grid = document.getElementById('eggShopGrid');
+    if (!grid) return;
+    grid.innerHTML = `
+      <div class="shop-item" id="shopBuyNormal" title="Normales Ei — zufällige Farbe">
+        ${eggSprite('y', 0, 64)}
+        <div class="shop-item-name">Normales Ei</div>
+        <div class="shop-item-price">${EGG_BUY_COST} 💎</div>
+      </div>
+      <div class="shop-item shop-item-mystic" id="shopBuyMystic" title="Mystisches Ei — nur legendäre/mystische Karten">
+        ${eggSprite('m', 0, 64)}
+        <div class="shop-item-name">Mystisches Ei</div>
+        <div class="shop-item-price">${EGG_BUY_COST_MYSTIC} 💎</div>
+      </div>`;
+    document.getElementById('shopBuyNormal').addEventListener('click', buyEgg);
+    document.getElementById('shopBuyMystic').addEventListener('click', buyMysticEgg);
+  }
+  renderEggShop();
+
   async function buySecondIncubator() {
     if (secondIncubatorUnlocked || !hasReachedLevel15()) return;
     if (userDiamonds < 30) { showEggDiamondError(); return; }
@@ -8582,8 +8616,8 @@
   function eggsFromProfileString(str) {
     const parts = (str || '').split('-');
     eggInventory = parts.map(p => (p && p !== '0') ? { id: eggNextId++, color: p } : null);
-    while (eggInventory.length < 10) eggInventory.push(null);
-    eggInventory = eggInventory.slice(0, 10);
+    while (eggInventory.length < EGG_INVENTORY_SIZE) eggInventory.push(null);
+    eggInventory = eggInventory.slice(0, EGG_INVENTORY_SIZE);
   }
   function eggsToProfileString() {
     return eggInventory.map(e => e ? e.color : '0').join('-');
@@ -8667,7 +8701,7 @@
 
   // Init
   function initEggs() {
-    eggInventory = Array(10).fill(null);
+    eggInventory = Array(EGG_INVENTORY_SIZE).fill(null);
     renderEggDiamonds();
     renderInventory();
     renderIncubator();
