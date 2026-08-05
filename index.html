@@ -611,7 +611,7 @@
   }
   .lb-racetrack-img { width: 100%; display: block; }
   .lb-race-car {
-    position: absolute; width: 5.5%; transform: translate(-50%, -50%);
+    position: absolute; width: 7.5%; transform: translate(-50%, -50%);
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
   }
   .lb-race-car-me { filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
@@ -1331,6 +1331,7 @@
     body.new-design .bento-row > #challenges-card,
     body.new-design .bento-row > #leaderboard-card { min-width: 240px; }
     body.new-design .bento-row > #egg-section-wrapper { min-width: 320px; }
+    body.new-design .bento-row > #race-track-card { min-width: 320px; }
     body.new-design #time-display { font-size: 92px; }
     body.new-design #watch-svg { width: 176px; height: 176px; }
   }
@@ -1407,7 +1408,8 @@
   body.focus-mode #stats-card,
   body.focus-mode #challenges-card,
   body.focus-mode #egg-section-wrapper,
-  body.focus-mode #leaderboard-card {
+  body.focus-mode #leaderboard-card,
+  body.focus-mode #race-track-card {
     display: none !important;
   }
   body.focus-mode .bento-row {
@@ -2147,12 +2149,18 @@
     <button class="lb-tab lb-tab-alltime active" data-period="alltime">All Time</button>
     <button class="lb-tab lb-tab-alltime" data-period="wins">🏆 Siege</button>
   </div>
-  <div id="lb-racetrack"></div>
   <div id="lb-list" style="font-family:Georgia,serif;"></div>
   <div id="lb-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:0.75rem;min-height:14px;"></div>
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid var(--border);">
     <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 Tagessiege: 1. Platz = 3, 2. Platz = 2, 3. Platz = 1</span>
   </div>
+</div>
+</div>
+<div class="bento-row">
+<!-- Rennstrecke card -->
+<div class="card" id="race-track-card" style="display:none;">
+  <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:1rem;">Rennstrecke</div>
+  <div id="lb-racetrack"></div>
 </div>
 </div>
 
@@ -3777,10 +3785,10 @@
     });
   }
 
-  // Bento-Layout: Nutzer ordnen die 5 nicht-Timer-Kacheln selbst an
+  // Bento-Layout: Nutzer ordnen die 6 nicht-Timer-Kacheln selbst an
   // (Drag/Resize), geräte-lokal in localStorage + (falls eingeloggt) in
   // profiles.bento_layout persistiert. bentoDefaultRows() bildet exakt die
-  // alte hartkodierte 3-Reihen-Struktur ab — es gibt dadurch nur einen
+  // alte hartkodierte Reihen-Struktur ab — es gibt dadurch nur einen
   // Codepfad für Default- und Custom-Layout.
   const BENTO_TILE_META = {
     heatmap:     { elId: 'heatmap-card',        label: 'Heatmap',           icon: '▦' },
@@ -3788,6 +3796,7 @@
     challenges:  { elId: 'challenges-card',     label: 'Wochen-Challenges', icon: '🎯' },
     eggdeck:     { elId: 'egg-section-wrapper', label: 'Ei & Karten',       icon: '🥚' },
     leaderboard: { elId: 'leaderboard-card',    label: 'Rangliste',         icon: '🏆' },
+    racetrack:   { elId: 'race-track-card',     label: 'Rennstrecke',      icon: '🏎️' },
   };
   const BENTO_LAYOUT_KEY = 'pomo_bento_layout_v1';
 
@@ -3796,6 +3805,7 @@
       [{ id: 'heatmap', flex: 1 }, { id: 'stats', flex: 1 }],
       [{ id: 'challenges', flex: 2 }, { id: 'eggdeck', flex: 3 }],
       [{ id: 'leaderboard', flex: 1 }],
+      [{ id: 'racetrack', flex: 1 }],
     ];
   }
 
@@ -4885,13 +4895,38 @@
     return { type: 'field', index: fieldNumber - 1, pos: RACE_FIELDS[fieldNumber - 1] };
   }
 
-  // Rendert die Rennstrecke ins #lb-racetrack-Div. Wird als Teil von
-  // renderLeaderboard() aufgerufen (kein eigener Lade-/Poll-Zyklus) — dadurch
-  // ist die Strecke immer exakt so aktuell wie die Rangliste selbst.
+  // Lädt die heutigen Rangliste-Daten unabhängig vom aktuell in der
+  // Ranglisten-Kachel ausgewählten Zeitraum-Tab — die Rennstrecke ist eine
+  // eigenständige Kachel und zeigt immer die heutigen Positionen live.
+  async function loadRaceTrackData(forceRefresh = false) {
+    if (!supabaseReady()) return;
+    const cacheKey = 'pomo_lb_cache_today';
+    if (!forceRefresh) {
+      const cached = cacheGet(cacheKey, CACHE_TTL_LB.today);
+      if (cached) { renderRaceTrack(cached.list); return; }
+    }
+    try {
+      const token = await getValidToken() || SUPABASE_ANON_KEY;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_today`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) return;
+      const list = await res.json();
+      cacheSet(cacheKey, { list });
+      renderRaceTrack(list);
+    } catch(e) { console.warn('loadRaceTrackData error', e); }
+  }
+
+  // Rendert die Rennstrecke ins #lb-racetrack-Div (eigene Kachel). Läuft
+  // sowohl über loadRaceTrackData() (eigener, tab-unabhängiger Zyklus) als
+  // auch — falls die Ranglisten-Kachel gerade "Heute" anzeigt — direkt aus
+  // renderLeaderboard(), damit ein Tab-Wechsel sofort sichtbar wird.
   function renderRaceTrack(list) {
     const wrap = document.getElementById('lb-racetrack');
     if (!wrap) return;
-    if (lbPeriod !== 'today' || !list || !list.length) {
+    if (!list || !list.length) {
       wrap.style.display = 'none'; wrap.innerHTML = ''; return;
     }
 
@@ -4934,7 +4969,7 @@
 
   function renderLeaderboard(list, prevRanks) {
     lastLeaderboardData = list || [];
-    renderRaceTrack(lastLeaderboardData);
+    if (lbPeriod === 'today') renderRaceTrack(lastLeaderboardData);
     const el = document.getElementById('lb-list');
     const isWins = lbPeriod === 'wins';
     const emptyMsg = {
@@ -5131,10 +5166,19 @@
     }
   }
 
+  // Rangliste + Rennstrecke sind zwei getrennte Kacheln, aber immer gemeinsam
+  // sichtbar/unsichtbar (gleiche Zielgruppe: öffentliches Profil + Clan).
+  function setLeaderboardVisibility(visible) {
+    const v = visible ? 'block' : 'none';
+    document.getElementById('leaderboard-card').style.display = v;
+    document.getElementById('race-track-card').style.display = v;
+  }
+
   function initLeaderboard() {
     if (userName && userPublic && clanRole) {
-      document.getElementById('leaderboard-card').style.display = 'block';
+      setLeaderboardVisibility(true);
       loadLeaderboard(lbPeriod);
+      loadRaceTrackData();
     }
 
     // Period tabs
@@ -5146,11 +5190,14 @@
       });
     });
 
-    document.getElementById('lb-refresh').addEventListener('click', () => loadLeaderboard(undefined, true));
+    document.getElementById('lb-refresh').addEventListener('click', () => {
+      loadLeaderboard(undefined, true);
+      loadRaceTrackData(true);
+    });
 
     // Auto-refresh every 60s when tab is visible
     setInterval(() => {
-      if (userPublic && userName && clanRole && !document.hidden) loadLeaderboard();
+      if (userPublic && userName && clanRole && !document.hidden) { loadLeaderboard(); loadRaceTrackData(); }
     }, 60000);
   }
 
@@ -5162,12 +5209,13 @@
         const feedback = document.getElementById('privacy-feedback');
         if (makePublic && !userPublic) {
           userPublic = true;
-          document.getElementById('leaderboard-card').style.display = clanRole ? 'block' : 'none';
+          setLeaderboardVisibility(!!clanRole);
           loadLeaderboard(lbPeriod);
+          loadRaceTrackData();
           if (feedback) feedback.textContent = 'Du bist jetzt in der Rangliste sichtbar.';
         } else if (!makePublic && userPublic) {
           userPublic = false;
-          document.getElementById('leaderboard-card').style.display = 'none';
+          setLeaderboardVisibility(false);
           if (feedback) feedback.textContent = 'Du wurdest aus der Rangliste entfernt.';
         }
         if (currentUser) {
@@ -5490,7 +5538,7 @@
     document.getElementById('watch-svg').style.opacity = '1';
     document.getElementById('limitless-ring-wrap').style.opacity = '1';
     render();
-    if (userPublic && clanRole) { document.getElementById('leaderboard-card').style.display = 'block'; }
+    if (userPublic && clanRole) { setLeaderboardVisibility(true); }
     initLeaderboard();
     // Restore timer if it was running before page reload
     await restoreTimerState();
@@ -5935,7 +5983,7 @@
       if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
       else { totalSec = getMin(mode) * 60; remaining = totalSec; }
       updateUserChip();
-      document.getElementById('leaderboard-card').style.display = 'none';
+      setLeaderboardVisibility(false);
       render();
       // Reset auth modal to clean login state
       document.getElementById('auth-login').style.display    = 'block';
@@ -6616,7 +6664,7 @@
     updateLeaderUI();
     const token = await getValidToken();
     if (token) await loadClanSettings(token);
-    if (userPublic) document.getElementById('leaderboard-card').style.display = 'block';
+    if (userPublic) setLeaderboardVisibility(true);
     btn.disabled = false;
   });
 
