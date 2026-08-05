@@ -65,7 +65,7 @@ Supabase CLI ist lokal installiert (Homebrew, `supabase/tap`) und mit diesem Pro
 | `leaderboard_today()` | Rangliste für heute |
 | `leaderboard_aggregated(date_from)` | Rangliste ab Datum |
 | `get_yesterday_winner()` | `TABLE(username text, minutes integer)` des gestrigen Tagesersten (clan-scoped über `my_clan_id()`) — seit `20260721000020_yesterday_winner_minutes.sql` inkl. Minuten, davor nur reiner Username-String |
-| `draw_card()` | Würfelt Rarität (40/30/18/9/3 %), wählt Karte, schreibt in `user_cards`, gibt `card_id int` zurück |
+| `draw_card(p_mystic boolean DEFAULT false)` | Würfelt Rarität (Default: 40/30/18/9/3 %; `p_mystic=true`: nur legendary/mystic, 30/70 %), wählt Karte, schreibt in `user_cards`, gibt `card_id int` zurück, siehe „Mystisches Ei" |
 | `sell_card(p_card_id)` | Löscht älteste Kopie aus `user_cards`, schreibt Diamanten gut, gibt neuen Diamanten-Stand zurück. Wirft Fehler wenn < 2 Kopien vorhanden |
 | `respond_to_clan_request(p_request_id, p_accept)` | Leader bestätigt/lehnt Beitrittsanfrage ab; updated `profiles` bei Accept |
 | `remove_clan_member(p_user_id)` | Leader entfernt Mitglied (SECURITY DEFINER) |
@@ -437,7 +437,7 @@ Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legend
 ## Eier-System
 
 ### Farben & Bilder
-4 Ei-Farben: `y` (gelb), `b` (blau), `g` (grün), `r` (rot). Bilder: `CDN/Eier/<farbe>/Stadium_<1-4>.png`.
+4 Ei-Farben: `y` (gelb), `b` (blau), `g` (grün), `r` (rot). Bilder: `CDN/Eier/<farbe>/Stadium_<1-4>.png`. Dazu ein 5. Token `m` (Mystisches Ei, siehe „Mystisches Ei" unten), Bilder unter `CDN/Eier/mystic/Stadium_<1-4>.png`.
 
 ### Brut-Stadien (Ziel = 600 Fokusminuten)
 | Fortschritt | Stadium | Bild |
@@ -459,11 +459,21 @@ Schwellen = `600 × [0.35, 0.70, 1.0]`.
 | Aktion | Kosten |
 |---|---|
 | Neues Ei kaufen | 12 💎 |
+| Mystisches Ei kaufen | 100 💎 |
 | Brutzeit −1h | 1 💎 |
 | Brutzeit überspringen | ⌈verbleibende Stunden⌉ 💎 |
 | Zweiter Brutkasten (einmalig, ab Level 15) | 30 💎 |
 
 Fehler-Banner bei zu wenig Diamanten: „Du bist wohl gesetzlich versichert. Verdiene mehr Diamanten und probiere es nochmal!"
+
+### Mystisches Ei
+
+Zweite, teurere Ei-Variante (100 💎 statt 12 💎) mit garantiert hochwertiger Ziehquote. Datenmodell: **kein separates Feld** — läuft als 5. Token-Wert `'m'` durch dasselbe Single-Char-Farbsystem wie `y/b/g/r` (`eggInventory`-Einträge, `profiles.eggs`-String, `incubator.egg_color`), dadurch keine Änderung an `eggsFromProfileString`/`eggsToProfileString`/`bindIncubatorDragDrop` nötig — nur `EGG_COLORS['m']`/`EGG_STAGES['m']` (Konstanten, index.html) und die `incubator_egg_color_check`-Constraint (`CHECK (egg_color IN ('y','b','g','r','m'))`) mussten erweitert werden.
+
+- **Kauf**: `buyMysticEgg()` (analog `buyEgg()`, aber `color:'m'` statt zufällig aus `EGG_COLOR_IDS`). UI: jeder leere Inventarslot zeigt jetzt zwei Buttons nebeneinander (`.plus-slot-dual`, `.plus-btn-normal`/`.plus-btn-mystic`) statt eines einzelnen „+12💎"-Buttons. `EGG_COLOR_IDS` bleibt bewusst bei 4 Einträgen — `awardEgg()` (Level-Up-Belohnung) darf niemals ein bezahltes Mystic-Ei ausschütten, Mystic-Eier sind ausschließlich käuflich.
+- **Ziehquote**: `draw_card(p_mystic boolean DEFAULT false)` RPC — bei `p_mystic=true` nur `legendary` (30 %) / `mystic` (70 %), keine common/rare/epic (Migration `20260805000000_mystic_egg.sql`). Die alte 0-Parameter-Signatur wurde dabei per `DROP FUNCTION` entfernt statt überladen — zwei gleichzeitig existierende `draw_card`-Signaturen hätten PostgREST bei einem Aufruf mit leerem Body `{}` nicht mehr eindeutig auflösen lassen (`PGRST203`). Der bestehende Client-Call mit `{}` funktioniert dank Default-Parameter unverändert weiter.
+- **Client**: `splitEgg()` leitet `isMystic` aus `incData(n).color === 'm'` ab, sendet `{ p_mystic: isMystic }` an `draw_card`. Der clientseitige Offline-Fallback (`rollEggRarity()`) hat ein Pendant `rollEggRarityMystic()` (30/70 nur legendary/mystic) — **beide** Fallback-Zweige in `splitEgg()` (unbekannte `cardId` UND Netzwerkfehler) müssen bei einem Mystic-Ei diese Variante nutzen, sonst könnte ein Fetch-Fehler trotzdem eine common-Karte liefern.
+- `sell_card()` unverändert — behandelt Rarität bereits generisch, unabhängig von der Ei-Herkunft.
 
 ### Zweiter Brutkasten
 
