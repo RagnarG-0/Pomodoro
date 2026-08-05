@@ -62,7 +62,7 @@ Supabase CLI ist lokal installiert (Homebrew, `supabase/tap`) und mit diesem Pro
 |---|---|
 | `add_study_minutes(p_date, p_minutes)` | Addiert Delta auf study_days (nicht idempotent!) |
 | `get_label_stats(p_user_id)` | Gibt je Label: today_minutes, week_minutes, month_minutes, alltime_minutes |
-| `leaderboard_today()` | Rangliste für heute |
+| `leaderboard_today()` | Rangliste für heute, inkl. `race_car_id` (Rennstrecken-Feature, siehe „Rennstrecke") |
 | `leaderboard_aggregated(date_from)` | Rangliste ab Datum |
 | `get_yesterday_winner()` | `TABLE(username text, minutes integer)` des gestrigen Tagesersten (clan-scoped über `my_clan_id()`) — seit `20260721000020_yesterday_winner_minutes.sql` inkl. Minuten, davor nur reiner Username-String |
 | `draw_card(p_mystic boolean DEFAULT false)` | Würfelt Rarität (Default: 40/30/18/9/3 %; `p_mystic=true`: nur legendary/mystic, 30/70 %), wählt Karte, schreibt in `user_cards`, gibt `card_id int` zurück, siehe „Mystisches Ei" |
@@ -102,6 +102,7 @@ running       // boolean
 currentLabel  // aktuelles Session-Label
 currentStatsPeriod  // 'today' | 'month' | 'alltime' — Label-Stats-Tab
 userDiamonds  // number — aktueller Diamanten-Stand (aus profiles.diamonds)
+userRaceCarId // number | null — profiles.race_car_id (1-8), dauerhaft, siehe „Rennstrecke"
 eggInventory  // Array[10] — null | { id, color } — lokale Kopie aus profiles.eggs
 incubatorData // null | { color, focus_minutes_at_placement, bonusMin } — Slot 1, aus incubator-Tabelle
 incubatorData2       // null | { color, focus_minutes_at_placement, bonusMin } — Slot 2 (nur ab Level 15 + Kauf nutzbar)
@@ -251,7 +252,7 @@ Der 4-Uhr-Reset (oben) fängt den Fall „Laptop zu/Tab eingefroren über Nacht"
 4. **Wochen-Challenges-Card** (`#challenges-card`) — nur sichtbar für eingeloggte Nutzer (kein Clan-/Public-Gating); Tabs Leicht/Mittel/Schwer, je 3 Progress-Bar-Zeilen mit Belohnungs-Label / „Einlösen"-Button / „✓ eingelöst"
 5. **Ei-Box** (`#eggBox`) — Diamanten-Anzeige, Brutkasten (1 Slot), -1h/Skip-Buttons, aufklappbares 10-Slot-Inventar; hinter Placeholder versteckt (`#egg-placeholder-overlay`)
 6. **Deck-Box** (`#deckBox`) — aufklappbares Karten-Grid, nach Rarität sortiert, Stapel-Optik bei Duplikaten; hinter demselben Placeholder. Kopfzeile zeigt `#deckCount` als `(besessen/gesamt)` — `eggDeck.length` (Anzahl unterschiedlicher besessener Karten, Duplikate zählen nicht mit) `/` `CARD_CATALOG.length` (aktuell 33, wächst automatisch mit neuen Katalog-Karten), gesetzt in `renderEggDeck()`
-7. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border + Label „Tagessieger · &lt;Vortags-Minuten&gt;" (über `minutesToDisplay()`, respektiert Anzeigeeinheit; Minutenzahl ist unabhängig vom aktiven Tab immer die des Vortags, aus `yesterdayWinnerMinutes`/`get_yesterday_winner()`); Live-Timer-Dot (grün, `entry.timer_active` aus `leaderboard_today()`/`leaderboard_aggregated()`); Rang-Änderungs-Indikator (▲ grün / ▼ rot / ● hellblau für Neue) vor dem 🃏-Button, nur nach echtem Server-Fetch sichtbar
+7. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border + Label „Tagessieger · &lt;Vortags-Minuten&gt;" (über `minutesToDisplay()`, respektiert Anzeigeeinheit; Minutenzahl ist unabhängig vom aktiven Tab immer die des Vortags, aus `yesterdayWinnerMinutes`/`get_yesterday_winner()`); Live-Timer-Dot (grün, `entry.timer_active` aus `leaderboard_today()`/`leaderboard_aggregated()`); Rang-Änderungs-Indikator (▲ grün / ▼ rot / ● hellblau für Neue) vor dem 🃏-Button, nur nach echtem Server-Fetch sichtbar; im Heute-Tab zusätzlich Rennstrecken-Visualisierung (`#lb-racetrack`) über der Liste + Mini-Auto-Icon neben jedem Namen, siehe „Rennstrecke"
 
 ### Eier & Kartensammlung — Schlüsseldetails
 
@@ -523,6 +524,22 @@ Integriert in die bestehende Deck-Box (`#deckBox`, unterhalb des `#deckGrid`-Kar
 - **Client**: `fetchMarketListings()`/`fetchMyListings()` laden weiterhin lazy beim ersten Aufklappen der Deck-Box (`toggleEggDeck()`, `marketLoaded`-Guard), Cache über `cacheGet`/`cacheSet` mit `CACHE_TTL_MARKET` (30s). Tab-Umschaltung „Alle Angebote"/„Meine Angebote" unverändert über `.market-tab`.
 - **`profiles(username)`-Embed ist mehrdeutig**: `card_listings` hatte zwei FKs auf `profiles` (`seller_id` + `buyer_id`); `buyer_id` ist mit dem Preis-Modell entfallen, `fetchMarketListings()` nutzt weiterhin `profiles!card_listings_seller_id_fkey(username)` zur Disambiguierung (schadet nicht, auch wenn es jetzt nur noch einen FK gibt).
 - **`sell_card()` schließt weiterhin aktiv gelistete Kopien aus** (unverändert) — betrifft nur den separaten Diamanten-Duplikat-Verkauf, nicht die Tauschbörse selbst.
+
+---
+
+## Rennstrecke (Leaderboard „Heute")
+
+Visuelle Ergänzung zur Rangliste im „Heute"-Tab: eine Rennstrecke mit 35 nummerierten Feldern (`Rennstrecke/strecke.png`, 1536×1024), auf der jeder Teilnehmer mit einem persönlichen, dauerhaft zugewiesenen Renn-Auto-Icon (`Rennstrecke/auto_1.png` … `auto_8.png`, 8 Designs) an der Position steht, die seiner heutigen Lernzeit entspricht.
+
+- **Datenmodell**: `profiles.race_car_id` (smallint, 1-8, nullable, `CHECK`-Constraint). Wird **einmalig und dauerhaft** (über alle Tage hinweg gleich, wiedererkennbar wie ein Avatar) beim Login zufällig zugewiesen — `ensureRaceCarAssigned()` (index.html, neben `saveEggProfile()`), aufgerufen aus `onLoginSuccess()` direkt nach dem Laden des Profils. Idempotent (kein erneutes Würfeln, sobald `race_car_id` gesetzt ist), analog zum Random-Assign-Muster von `buyEgg()`/`awardEgg()` mit `EGG_COLOR_IDS`.
+- **`leaderboard_today()` RPC** liefert `race_car_id` zusätzlich zu den bestehenden Feldern (Migration `20260805000010_race_track.sql`). Da sich die `RETURNS TABLE`-Spaltenliste ändert, war `DROP FUNCTION` vor dem `CREATE` nötig (Postgres erlaubt keine Rückgabetyp-Änderung per `CREATE OR REPLACE`) — gleiches Muster wie bei `draw_card()` im Mystic-Ei-Feature. `leaderboard_aggregated()`/`leaderboard_wins()` bleiben unverändert, Autos nur im Heute-Tab.
+- **35 Streckenfelder**: `RACE_FIELDS` (index.html) — Array aus `[xPct, yPct]`-Prozent-Koordinaten relativ zur 1536×1024-Bildgröße, in Fahrreihenfolge (Feld 1 = goldenes Stoppuhr-Icon direkt an der Start/Ziel-Linie, Feld 2 = goldenes Pokal-Icon, Felder 3-35 = graue Ovale den Rundkurs entlang, Feld 14 = Flaggen-Icon am geometrisch gegenüberliegenden Punkt zum Start — alle 35 werden als gleichwertige normale Felder behandelt, keine Sonderlogik). Koordinaten wurden einmalig automatisiert vermessen (Hough-Circle-Detection auf dem Streckenbild + manuelle Sichtprüfung in 8 Ausschnitten, um Lücken auszuschließen) und sind fest im Code hinterlegt — kein Neu-Vermessen nötig, außer das Streckenbild wird ausgetauscht.
+- **Positionierung**: rein prozentual (`raceFieldFor(minutes)` → `{x%, y%}`), keine `getBoundingClientRect()`-Pixelberechnung — Autos (`position:absolute; left:X%; top:Y%` innerhalb von `#lb-racetrack`, `position:relative; width:100%`) skalieren dadurch automatisch mit jeder Bento-Kachelgröße mit, auch beim Live-Resize im Bento-Editor. Einfacheres Pendant zum SVG-`viewBox`-Muster bei `updateDualRingArcs()`.
+- **Feld-Berechnung**: 1 Feld = 20 Minuten (`RACE_MIN_PER_FIELD`), abgerundet (`Math.floor(minutes/20)`) — 60 Min → Feld 3, 65 Min → ebenfalls Feld 3. 0-19 Minuten: Auto steht an der Startlinie (`RACE_START_POS`), noch auf keinem Feld. **Ab ≥700 Minuten** (`RACE_FINISH_MINUTES` = 35×20) parkt das Auto **nicht** auf Feld 35, sondern auf der tatsächlichen „START/ZIEL"-Banner-Grafik (`RACE_FINISH_POS`, separate Position) — der Fall „wirklich 12h gelernt", praktisch nie erreicht.
+- **Mehrfachbelegung**: mehrere Autos auf demselben Feld werden nach `(fieldType, fieldIndex)` gruppiert und um die Feldmitte gestaffelt versetzt (`OFFSET_X`/`OFFSET_Y` in `renderRaceTrack()`), damit sie nicht deckungsgleich übereinanderliegen.
+- **Rendering**: `renderRaceTrack(list)` läuft als fester Teil von `renderLeaderboard()` (direkt nach der bereits bestehenden `lastLeaderboardData = list || []`-Zuweisung) — kein eigener Lade-/Poll-Zyklus, die Strecke ist dadurch immer exakt so aktuell wie die Rangliste selbst. Nur sichtbar wenn `lbPeriod === 'today'`, sonst `#lb-racetrack` komplett ausgeblendet (`display:none`).
+- **Mini-Icon in der Liste**: im Heute-Tab zeigt jede Zeile zusätzlich ein kleines Auto-Icon (`.lb-mini-car`, 18px) direkt neben dem Avatar, damit sich Rangliste und Streckenposition eindeutig demselben Spieler zuordnen lassen. In den anderen Tabs (Woche/Monat/All Time/Siege) nicht sichtbar.
+- **Assets**: Streckenbild und 8 Fahrer-Icons liegen wie `Eier/`/`Karten/` als Top-Level-Ordner im Repo (`Rennstrecke/`), über dieselbe jsDelivr-`CDN`-Konstante ausgeliefert. Die 8 Fahrer-Quellbilder hatten **keinen Alpha-Kanal** (reinweißer Hintergrund, `mode='RGB'`) — anderer Fall als das frühere Mystic-Ei-Transparenzproblem (dort Alpha vorhanden aber technisch opak) — wurden per Flood-Fill von den 4 Bildecken freigestellt (`PIL.ImageDraw.floodfill`, sicher da die Kart-Charaktere den Bildrand nicht berühren).
 
 ---
 
