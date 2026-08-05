@@ -984,10 +984,20 @@
   .inv-slot.occupied:hover { transform: translateY(-3px); }
   .inv-slot.occupied:active { cursor: grabbing; }
   .inv-slot.dragging-from { opacity: 0.18; }
-  .inv-slot.plus-slot { cursor: pointer; gap: 2px; }
-  .inv-slot.plus-slot:hover { background: rgba(96,165,250,0.1); transform: translateY(-2px); border-color: rgba(96,165,250,0.35); }
+  .inv-slot.plus-slot { gap: 2px; }
+  .inv-slot.plus-slot:not(.plus-slot-dual) { cursor: pointer; }
+  .inv-slot.plus-slot:not(.plus-slot-dual):hover { background: rgba(96,165,250,0.1); transform: translateY(-2px); border-color: rgba(96,165,250,0.35); }
   .plus-icon { font-size: 18px; color: var(--text-muted); opacity: 0.5; line-height: 1; }
   .plus-cost { font-family: -apple-system, sans-serif; font-size: 9px; color: var(--text-muted); opacity: 0.5; }
+
+  /* Doppel-Kauf-Slot: normales Ei (links) + mystisches Ei (rechts), nebeneinander */
+  .inv-slot.plus-slot-dual { flex-direction: row; padding: 0; gap: 0; overflow: hidden; min-width: 76px; }
+  .plus-btn { flex: 1 1 50%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; cursor: pointer; transition: background 0.15s, transform 0.1s; }
+  .plus-btn-normal:hover { background: rgba(96,165,250,0.15); }
+  .plus-btn-mystic { border-left: 1px dashed var(--border); }
+  .plus-btn-mystic .plus-icon, .plus-btn-mystic .plus-cost { color: #ff4fbf; opacity: 0.65; }
+  .plus-btn-mystic:hover { background: rgba(255,79,191,0.15); box-shadow: inset 0 0 12px rgba(255,79,191,0.25); }
+  .plus-btn-mystic:hover .plus-icon, .plus-btn-mystic:hover .plus-cost { opacity: 1; }
 
   /* Deck-Box */
   .deck-toggle-area { cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
@@ -6828,6 +6838,7 @@
   const CDN          = 'https://cdn.jsdelivr.net/gh/RagnarG-0/Pomodoro@main';
   const EGG_TOTAL_MIN = 600;
   const EGG_BUY_COST  = 12;
+  const EGG_BUY_COST_MYSTIC = 100;
   const EGG_COLOR_IDS = ['y','b','g','r'];
   const EGG_BREAK_L = 'polygon(0 0,50% 0,57% 10%,43% 22%,59% 34%,41% 47%,58% 59%,44% 71%,54% 83%,47% 100%,0 100%)';
   const EGG_BREAK_R = 'polygon(47% 100%,54% 83%,44% 71%,58% 59%,41% 47%,59% 34%,43% 22%,57% 10%,50% 0,100% 0,100% 100%)';
@@ -6837,12 +6848,14 @@
     b: { name:'Blau', light:'#6EC8F5', dark:'#0C3E8A', glow:'#2196F3' },
     g: { name:'Grün', light:'#8EDA6A', dark:'#1C5C0C', glow:'#4CAF50' },
     r: { name:'Rot',  light:'#F07272', dark:'#6A0A0A', glow:'#F44336' },
+    m: { name:'Mystisch', light:'#f0a3e0', dark:'#5c0a52', glow:'#ff4fbf' },
   };
   const EGG_STAGES = {
     y: [`${CDN}/Eier/yellow/Stadium_1.png`,`${CDN}/Eier/yellow/Stadium_2.png`,`${CDN}/Eier/yellow/Stadium_3.png`,`${CDN}/Eier/yellow/Stadium_4.png`],
     b: [`${CDN}/Eier/blue/Stadium_1.png`,  `${CDN}/Eier/blue/Stadium_2.png`,  `${CDN}/Eier/blue/Stadium_3.png`,  `${CDN}/Eier/blue/Stadium_4.png`],
     g: [`${CDN}/Eier/green/Stadium_1.png`, `${CDN}/Eier/green/Stadium_2.png`, `${CDN}/Eier/green/Stadium_3.png`, `${CDN}/Eier/green/Stadium_4.png`],
     r: [`${CDN}/Eier/red/Stadium_1.png`,   `${CDN}/Eier/red/Stadium_2.png`,   `${CDN}/Eier/red/Stadium_3.png`,   `${CDN}/Eier/red/Stadium_4.png`],
+    m: [`${CDN}/Eier/mystic/Stadium_1.png`,`${CDN}/Eier/mystic/Stadium_2.png`,`${CDN}/Eier/mystic/Stadium_3.png`,`${CDN}/Eier/mystic/Stadium_4.png`],
   };
   const EGG_RARITIES = [
     { name:'Normal',   key:'normal',    folder:'common',    color:'#aaa',    bg:'#28282a', weight:40 },
@@ -7371,9 +7384,16 @@
         });
         slot.addEventListener('dragend', () => { slot.classList.remove('dragging-from'); eggDraggedId = null; });
       } else {
-        slot.className = 'inv-slot plus-slot';
-        slot.innerHTML  = `<span class="plus-icon">+</span><span class="plus-cost">${EGG_BUY_COST} 💎</span>`;
-        slot.addEventListener('click', buyEgg);
+        slot.className = 'inv-slot plus-slot plus-slot-dual';
+        slot.innerHTML  = `
+          <div class="plus-btn plus-btn-normal" title="Normales Ei — zufällige Farbe">
+            <span class="plus-icon">+</span><span class="plus-cost">${EGG_BUY_COST} 💎</span>
+          </div>
+          <div class="plus-btn plus-btn-mystic" title="Mystisches Ei — nur legendäre/mystische Karten">
+            <span class="plus-icon">✦</span><span class="plus-cost">${EGG_BUY_COST_MYSTIC} 💎</span>
+          </div>`;
+        slot.querySelector('.plus-btn-normal').addEventListener('click', (e) => { e.stopPropagation(); buyEgg(); });
+        slot.querySelector('.plus-btn-mystic').addEventListener('click', (e) => { e.stopPropagation(); buyMysticEgg(); });
       }
       c.appendChild(slot);
     }
@@ -7384,6 +7404,15 @@
     if (userDiamonds < EGG_BUY_COST) { showEggDiamondError(); return; }
     userDiamonds -= EGG_BUY_COST;
     eggInventory[freeIdx] = { id: eggNextId++, color: EGG_COLOR_IDS[Math.floor(Math.random() * 4)] };
+    renderEggDiamonds(); renderInventory();
+    saveEggProfile({ diamonds: userDiamonds, eggs: eggsToProfileString() });
+  }
+  function buyMysticEgg() {
+    const freeIdx = eggInventory.findIndex(e => e === null);
+    if (freeIdx === -1) return;
+    if (userDiamonds < EGG_BUY_COST_MYSTIC) { showEggDiamondError(); return; }
+    userDiamonds -= EGG_BUY_COST_MYSTIC;
+    eggInventory[freeIdx] = { id: eggNextId++, color: 'm' };
     renderEggDiamonds(); renderInventory();
     saveEggProfile({ diamonds: userDiamonds, eggs: eggsToProfileString() });
   }
@@ -7585,8 +7614,9 @@
     setTimeout(() => splitEgg(wrap, n), 480);
   }
   function splitEgg(wrapEl, n = 1) {
-    const rect  = wrapEl.getBoundingClientRect();
-    const color = EGG_COLORS[incData(n).color] || EGG_COLORS['y'];
+    const rect     = wrapEl.getBoundingClientRect();
+    const isMystic = incData(n).color === 'm';
+    const color    = EGG_COLORS[incData(n).color] || EGG_COLORS['y'];
     spawnEggChips(rect, color);
     function makeHalf(clip, tx, ty, rot) {
       const d = document.createElement('div');
@@ -7607,7 +7637,7 @@
         const res = await fetch(`${SB}/rest/v1/rpc/draw_card`, {
           method: 'POST',
           headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
+          body: JSON.stringify({ p_mystic: isMystic })
         });
         cardId = await res.json();
       } catch(e) { console.warn('draw_card error, local fallback:', e); }
@@ -7615,9 +7645,9 @@
         const entry  = CARD_CATALOG.find(c => c.id === cardId);
         const rarity = entry && EGG_RARITIES.find(r => r.folder === entry.rarity);
         if (entry && rarity) eggCurrentCard = { ...entry, src: encodeURI(`${CDN}/Karten/${entry.folder}/${entry.name}.png`), rarity };
-        else { const r = rollEggRarity(); eggCurrentCard = rollEggCard(r); }
+        else { const r = isMystic ? rollEggRarityMystic() : rollEggRarity(); eggCurrentCard = rollEggCard(r); }
       } else {
-        const r = rollEggRarity(); eggCurrentCard = rollEggCard(r);
+        const r = isMystic ? rollEggRarityMystic() : rollEggRarity(); eggCurrentCard = rollEggCard(r);
       }
       showHatchOverlay(eggCurrentCard);
     }, 540);
@@ -7641,6 +7671,13 @@
     let cum = 0;
     for (const r of EGG_RARITIES) { cum += r.weight; if (roll < cum) return r; }
     return EGG_RARITIES[0];
+  }
+  // Mystisches Ei: nur legendäre (30%) / mystische (70%) Karten — spiegelt draw_card(p_mystic=true)
+  function rollEggRarityMystic() {
+    const roll = Math.random() * 100;
+    return roll < 30
+      ? EGG_RARITIES.find(r => r.folder === 'legendary')
+      : EGG_RARITIES.find(r => r.folder === 'mystic');
   }
   function rollEggCard(rarity) {
     const pool  = CARD_CATALOG.filter(c => c.folder === rarity.folder);
