@@ -610,12 +610,29 @@
     border-radius: 10px; overflow: hidden; display: none;
   }
   .lb-racetrack-img { width: 100%; display: block; }
-  .lb-race-car {
-    position: absolute; width: 7.5%; transform: translate(-50%, -50%);
+  .lb-race-avatar, .lb-race-avatar-placeholder {
+    position: absolute; width: 7.5%; aspect-ratio: 1/1; border-radius: 50%;
+    transform: translate(-50%, -50%);
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
   }
+  .lb-race-avatar { object-fit: cover; border: 2px solid var(--surface); }
+  .lb-race-avatar-placeholder {
+    background: var(--surface2); border: 2px solid var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(10px, 2vw, 16px); color: var(--text-muted);
+  }
   .lb-race-car-me { filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
-  .lb-mini-car { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
+  .lb-race-diamond {
+    position: absolute; transform: translate(-50%, -50%);
+    font-size: clamp(14px, 2.2vw, 22px);
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+    animation: raceDiamondPulse 1.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes raceDiamondPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50%      { transform: translate(-50%, -50%) scale(1.15); }
+  }
 
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
   #balloon-layer { position: fixed; inset: 0; pointer-events: none; z-index: 150; overflow: hidden; }
@@ -1364,7 +1381,8 @@
     body.bento-edit-mode #stats-card,
     body.bento-edit-mode #challenges-card,
     body.bento-edit-mode #egg-section-wrapper,
-    body.bento-edit-mode #leaderboard-card { position: relative; }
+    body.bento-edit-mode #leaderboard-card,
+    body.bento-edit-mode #race-track-card { position: relative; }
 
     body.bento-edit-mode .bento-row {
       position: relative; min-height: 48px;
@@ -2135,6 +2153,13 @@
 <button id="bento-edit-done-btn" title="Layout-Bearbeitung beenden">✓ Fertig</button>
 
 <div class="bento-row">
+<!-- Rennstrecke card -->
+<div class="card" id="race-track-card" style="display:none;">
+  <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:1rem;">Rennstrecke</div>
+  <div id="lb-racetrack"></div>
+</div>
+</div>
+<div class="bento-row">
 <!-- Leaderboard card -->
 <div class="card" id="leaderboard-card" style="display:none;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
@@ -2154,13 +2179,6 @@
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid var(--border);">
     <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 Tagessiege: 1. Platz = 3, 2. Platz = 2, 3. Platz = 1</span>
   </div>
-</div>
-</div>
-<div class="bento-row">
-<!-- Rennstrecke card -->
-<div class="card" id="race-track-card" style="display:none;">
-  <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:1rem;">Rennstrecke</div>
-  <div id="lb-racetrack"></div>
 </div>
 </div>
 
@@ -3234,14 +3252,24 @@
   // minutes > 0) + Level-Up/Ei/Brutkasten-Checks + Re-Renders.
   function creditFocusMinutes(key, minutes, label) {
     const totalMinsBefore = Object.values(days).reduce((s, m) => s + m, 0);
+    const dayBefore = days[key] || 0;
     days[key] = (days[key] || 0) + minutes;
     save();
     if (currentUser && minutes > 0) writeOrQueueCredit(key, minutes, label);
     const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
+    const dayAfter = days[key];
     const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
     const { current: lvlAfter }  = getCurrentLevel(totalMinsAfter);
     if (lvlAfter.minMinutes > lvlBefore.minMinutes) awardEgg();
     if (crossedLevel15(lvlBefore, lvlAfter)) celebrateLevel15();
+    // Rennstrecken-Checkpoints: nur für "heute" (nicht bei Day-Rollover-Krediten
+    // an den Vortag, key wäre dann pomoDay != todayKey()), edge-getriggert wie
+    // crossedLevel15() — feuert nur beim tatsächlichen Überschreiten, nie
+    // rückwirkend für längst passierte Schwellen.
+    if (currentUser && key === todayKey()) {
+      if (dayBefore < RACE_FLAG_MINUTES && dayAfter >= RACE_FLAG_MINUTES) checkRaceCheckpoint('flag');
+      if (dayBefore < RACE_FINISH_MINUTES && dayAfter >= RACE_FINISH_MINUTES) checkRaceCheckpoint('finish');
+    }
     if (incubatorData) renderIncubator();
     if (incubatorData2) renderIncubator(2);
     updateSecondIncubatorVisibility();
@@ -3804,8 +3832,8 @@
     return [
       [{ id: 'heatmap', flex: 1 }, { id: 'stats', flex: 1 }],
       [{ id: 'challenges', flex: 2 }, { id: 'eggdeck', flex: 3 }],
-      [{ id: 'leaderboard', flex: 1 }],
       [{ id: 'racetrack', flex: 1 }],
+      [{ id: 'leaderboard', flex: 1 }],
     ];
   }
 
@@ -4880,8 +4908,14 @@
   const RACE_FINISH_POS     = [18, 78];    // echte Ziellinien-Grafik (≥700 Min heute)
   const RACE_MIN_PER_FIELD  = 20;
   const RACE_FINISH_MINUTES = RACE_FIELDS.length * RACE_MIN_PER_FIELD; // 700
+  const RACE_FLAG_FIELD     = 14;                                  // Streckenfeld mit der Flagge
+  const RACE_FLAG_MINUTES   = RACE_FLAG_FIELD * RACE_MIN_PER_FIELD; // 280
   const RACE_CAR_COUNT      = 8;
 
+  // Aktuell ungenutzt (Rennstrecke zeigt seit 2026-08-05 Profilbilder statt
+  // Auto-Icons, da 8 Designs bei vielen Nutzern nicht mehr eindeutig sind) —
+  // Funktion und race_car_id-Zuweisung bleiben bestehen für eine mögliche
+  // spätere Einführung individualisierbarer Autos.
   function raceCarIconUrl(carId) {
     return encodeURI(`${CDN}/Rennstrecke/auto_${carId}.png`);
   }
@@ -4895,6 +4929,23 @@
     return { type: 'field', index: fieldNumber - 1, pos: RACE_FIELDS[fieldNumber - 1] };
   }
 
+  // Ob die heutigen Checkpoints (Flaggen-Feld/Ziellinie) schon vergeben sind —
+  // steuert nur, ob der 💎-Marker auf der Strecke angezeigt wird.
+  let raceCheckpointClaimed = { flag: false, finish: false };
+
+  async function loadRaceCheckpointStatus() {
+    try {
+      const token = await getValidToken() || SUPABASE_ANON_KEY;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/race_checkpoint_claims?date=eq.${todayKey()}&select=checkpoint`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      raceCheckpointClaimed = { flag: false, finish: false };
+      (Array.isArray(rows) ? rows : []).forEach(r => { raceCheckpointClaimed[r.checkpoint] = true; });
+    } catch(e) { console.warn('loadRaceCheckpointStatus error', e); }
+  }
+
   // Lädt die heutigen Rangliste-Daten unabhängig vom aktuell in der
   // Ranglisten-Kachel ausgewählten Zeitraum-Tab — die Rennstrecke ist eine
   // eigenständige Kachel und zeigt immer die heutigen Positionen live.
@@ -4903,7 +4954,7 @@
     const cacheKey = 'pomo_lb_cache_today';
     if (!forceRefresh) {
       const cached = cacheGet(cacheKey, CACHE_TTL_LB.today);
-      if (cached) { renderRaceTrack(cached.list); return; }
+      if (cached) { await loadRaceCheckpointStatus(); renderRaceTrack(cached.list); return; }
     }
     try {
       const token = await getValidToken() || SUPABASE_ANON_KEY;
@@ -4915,8 +4966,35 @@
       if (!res.ok) return;
       const list = await res.json();
       cacheSet(cacheKey, { list });
+      await loadRaceCheckpointStatus();
       renderRaceTrack(list);
     } catch(e) { console.warn('loadRaceTrackData error', e); }
+  }
+
+  // Vergibt automatisch den Checkpoint-Diamanten an den ersten Nutzer, der
+  // heute das Flaggen-Feld bzw. die echte Ziellinie erreicht (fire-and-forget,
+  // aufgerufen aus creditFocusMinutes() im Moment des Überschreitens).
+  async function checkRaceCheckpoint(checkpoint) {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/rpc/claim_race_checkpoint`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_checkpoint: checkpoint }),
+      });
+      if (!res.ok) return;
+      const result = await res.json();
+      if (typeof result === 'number') {
+        userDiamonds = result;
+        renderEggDiamonds();
+        raceCheckpointClaimed[checkpoint] = true;
+        renderRaceTrack(lastLeaderboardData);
+        toast(checkpoint === 'flag'
+          ? 'Du warst heute der Erste am Flaggen-Feld! +1 💎'
+          : 'Du warst der Erste im Ziel! +5 💎');
+      }
+    } catch(e) { console.warn('checkRaceCheckpoint error', e); }
   }
 
   // Rendert die Rennstrecke ins #lb-racetrack-Div (eigene Kachel). Läuft
@@ -4930,11 +5008,10 @@
       wrap.style.display = 'none'; wrap.innerHTML = ''; return;
     }
 
-    // Nach Feld gruppieren, damit mehrere Autos auf demselben Feld gestaffelt
-    // statt exakt übereinander gerendert werden.
+    // Nach Feld gruppieren, damit mehrere Avatare auf demselben Feld
+    // gestaffelt statt exakt übereinander gerendert werden.
     const groups = new Map();
     list.forEach(entry => {
-      if (!entry.race_car_id) return; // sollte praktisch nie vorkommen, s. ensureRaceCarAssigned()
       const f = raceFieldFor(entry.minutes ?? 0);
       const key = f.type === 'field' ? `f${f.index}` : f.type;
       if (!groups.has(key)) groups.set(key, { pos: f.pos, entries: [] });
@@ -4952,20 +5029,37 @@
         const x = group.pos[0] + d * OFFSET_X;
         const y = group.pos[1] + d * OFFSET_Y;
         const isMe = entry.name === userName;
-        carsHtml += `<img src="${raceCarIconUrl(entry.race_car_id)}" class="lb-race-car${isMe ? ' lb-race-car-me' : ''}"
-          style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;z-index:${10 + i};"
-          title="${esc(entry.name)} · ${minutesToDisplay(entry.minutes ?? 0)}" alt="${esc(entry.name)}">`;
+        const safeAvatar = safeAvatarUrl(entry.avatar_url);
+        const meClass = isMe ? ' lb-race-car-me' : '';
+        const styleAttr = `left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;z-index:${10 + i};`;
+        const titleAttr = `${esc(entry.name)} · ${minutesToDisplay(entry.minutes ?? 0)}`;
+        carsHtml += safeAvatar
+          ? `<img src="${esc(safeAvatar)}" class="lb-race-avatar${meClass}" style="${styleAttr}" title="${titleAttr}" onerror="this.style.display='none'">`
+          : `<div class="lb-race-avatar-placeholder${meClass}" style="${styleAttr}" title="${titleAttr}">👤</div>`;
       });
     });
 
+    let diamondsHtml = '';
+    if (!raceCheckpointClaimed.flag) {
+      const [fx, fy] = RACE_FIELDS[RACE_FLAG_FIELD - 1];
+      diamondsHtml += `<div class="lb-race-diamond" style="left:${fx}%;top:${fy}%;" title="1💎 für den ersten Nutzer auf diesem Feld">💎</div>`;
+    }
+    if (!raceCheckpointClaimed.finish) {
+      diamondsHtml += `<div class="lb-race-diamond" style="left:${RACE_FINISH_POS[0]}%;top:${RACE_FINISH_POS[1]}%;" title="5💎 für den ersten Nutzer im Ziel">💎</div>`;
+    }
+
     wrap.style.display = 'block';
-    wrap.innerHTML = `<img src="${encodeURI(`${CDN}/Rennstrecke/strecke.png`)}" class="lb-racetrack-img" alt="Rennstrecke">${carsHtml}`;
+    wrap.innerHTML = `<img src="${encodeURI(`${CDN}/Rennstrecke/strecke.png`)}" class="lb-racetrack-img" alt="Rennstrecke">${diamondsHtml}${carsHtml}`;
   }
 
   let lbPeriod = 'alltime';
   let lastLeaderboardData = [];
   let yesterdayWinner = null;
   let yesterdayWinnerMinutes = null;
+
+  function safeAvatarUrl(url) {
+    return (url && url.startsWith('https://')) ? url : null;
+  }
 
   function renderLeaderboard(list, prevRanks) {
     lastLeaderboardData = list || [];
@@ -5006,7 +5100,7 @@
       const alltimeMins = entry.alltime_minutes ?? 0;
       const { current: entryLevel } = getCurrentLevel(alltimeMins);
       const levelTag = `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;white-space:nowrap;">(${esc(entryLevel.label)})</span>`;
-      const safeAvatar = (entry.avatar_url && entry.avatar_url.startsWith('https://')) ? entry.avatar_url : null;
+      const safeAvatar = safeAvatarUrl(entry.avatar_url);
       const avatarHtml = safeAvatar
         ? `<img src="${esc(safeAvatar)}" class="lb-avatar" onerror="this.style.display='none'">`
         : `<div class="lb-avatar-placeholder">👤</div>`;
@@ -5047,13 +5141,9 @@
       const timerDot = entry.timer_active
         ? `<span title="Fokus läuft" style="width:8px;height:8px;border-radius:50%;background:#4caf50;flex-shrink:0;display:inline-block;box-shadow:0 0 4px #4caf5088;"></span>`
         : `<span style="width:8px;flex-shrink:0;display:inline-block;"></span>`;
-      const raceCarTag = (lbPeriod === 'today' && entry.race_car_id)
-        ? `<img src="${raceCarIconUrl(entry.race_car_id)}" class="lb-mini-car" alt="" title="Rennauto">`
-        : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;${isMe ? 'background:var(--surface2);' : ''}${borderStyle}">
         <span style="width:26px;text-align:center;flex-shrink:0;">${rankBadge}</span>
         ${avatarHtml}
-        ${raceCarTag}
         <span style="flex:1;font-size:13px;color:${isMe ? 'var(--accent)' : 'var(--text)'};overflow:hidden;">${esc(entry.name)}${isMe ? ' <span style="font-size:11px;opacity:0.7;">(du)</span>' : ''}${levelTag}${winnerLabel}</span>
         ${rankDelta}
         <button class="lb-deck-btn" data-username="${esc(entry.name)}" title="Kartendeck ansehen">🃏</button>
