@@ -5013,21 +5013,23 @@
   function renderRaceTrack(list) {
     const wrap = document.getElementById('lb-racetrack');
     if (!wrap) return;
-    if (!list || !list.length) {
-      wrap.style.display = 'none'; wrap.innerHTML = ''; return;
-    }
+
+    // Die Strecke selbst (inkl. Checkpoint-Diamanten) wird immer gezeigt,
+    // auch bevor heute überhaupt jemand Fokuszeit gesammelt hat — nur die
+    // Avatare hängen von `list` ab. Vorher versteckte ein leeres `list`
+    // (niemand mit >0 Minuten heute, siehe leaderboard_today()) die ganze
+    // Kachel, was wie "Rennstrecke lädt erst nach dem ersten Eintrag" wirkte.
+    const entries = list || [];
 
     // Nach Feld gruppieren, damit mehrere Avatare auf demselben Feld
     // gestaffelt statt exakt übereinander gerendert werden.
     const groups = new Map();
-    list.forEach(entry => {
+    entries.forEach(entry => {
       const f = raceFieldFor(entry.minutes ?? 0);
       const key = f.type === 'field' ? `f${f.index}` : f.type;
       if (!groups.has(key)) groups.set(key, { pos: f.pos, entries: [] });
       groups.get(key).entries.push(entry);
     });
-
-    if (!groups.size) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
 
     const OFFSET_X = 1.6, OFFSET_Y = 0.9; // Prozentpunkte pro Versatz-Schritt
     let carsHtml = '';
