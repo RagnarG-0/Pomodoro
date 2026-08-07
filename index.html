@@ -4963,7 +4963,7 @@
     const cacheKey = 'pomo_lb_cache_today';
     if (!forceRefresh) {
       const cached = cacheGet(cacheKey, CACHE_TTL_LB.today);
-      if (cached) { await loadRaceCheckpointStatus(); renderRaceTrack(cached.list); return; }
+      if (cached) { await loadRaceCheckpointStatus(); sweepRaceCheckpoints(); renderRaceTrack(cached.list); return; }
     }
     try {
       const token = await getValidToken() || SUPABASE_ANON_KEY;
@@ -4976,6 +4976,7 @@
       const list = await res.json();
       cacheSet(cacheKey, { list });
       await loadRaceCheckpointStatus();
+      sweepRaceCheckpoints();
       renderRaceTrack(list);
     } catch(e) { console.warn('loadRaceTrackData error', e); }
   }
@@ -5004,6 +5005,25 @@
           : 'Du warst der Erste im Ziel! +5 💎');
       }
     } catch(e) { console.warn('checkRaceCheckpoint error', e); }
+  }
+
+  // Sicherheitsnetz zum Edge-Trigger in creditFocusMinutes(): der dortige
+  // Aufruf feuert nur, wenn EIN Tab live einen dayBefore<Schwelle<=dayAfter-
+  // Übertritt im eigenen, lokalen `days`-Stand beobachtet. Das kann eine
+  // serverseitig längst erreichte Schwelle verpassen — z.B. wenn loadStudyDays()
+  // bei Login/Reload bereits einen Wert über der Schwelle lädt (kein Übertritt
+  // sichtbar), oder bei Multi-Tab/-Device-Desync (jeder Tab rechnet mit seinem
+  // eigenen veralteten Stand, keiner sieht den Übertritt). Wird bei jedem
+  // loadRaceTrackData()-Aufruf (Login, manueller Refresh, 60s-Poll) NACH dem
+  // frischen loadRaceCheckpointStatus() ausgeführt und holt jeden noch offenen,
+  // aber laut aktuellem days[todayKey()] bereits erreichten Checkpoint nach.
+  // checkRaceCheckpoint()/claim_race_checkpoint() sind idempotent (Claim-Mutex
+  // server-seitig) — ein überflüssiger Aufruf ist harmlos.
+  function sweepRaceCheckpoints() {
+    if (!currentUser) return;
+    const todayMin = days[todayKey()] || 0;
+    if (!raceCheckpointClaimed.flag && todayMin >= RACE_FLAG_MINUTES) checkRaceCheckpoint('flag');
+    if (!raceCheckpointClaimed.finish && todayMin >= RACE_FINISH_MINUTES) checkRaceCheckpoint('finish');
   }
 
   // Rendert die Rennstrecke ins #lb-racetrack-Div (eigene Kachel). Läuft
