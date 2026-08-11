@@ -3261,7 +3261,17 @@
     const dayBefore = days[key] || 0;
     days[key] = (days[key] || 0) + minutes;
     save();
-    if (currentUser && minutes > 0) writeOrQueueCredit(key, minutes, label);
+    if (currentUser && minutes > 0) {
+      // Sicherheitsnetz: writeOrQueueCredit() queued selbst schon sauber bei
+      // false-Rückgaben von addStudyMinutes()/savePomoSession() — dieser
+      // catch() fängt nur noch echte, unerwartete Exceptions ab (z.B. falls
+      // sbAuth() trotz Abhärtung doch einmal wirft), damit das lokal schon
+      // gebumpte days[key] nie ohne Queue-Eintrag verwaist.
+      writeOrQueueCredit(key, minutes, label).catch(e => {
+        console.warn('writeOrQueueCredit unexpected error:', e);
+        queuePendingCredit(key, minutes, label);
+      });
+    }
     const totalMinsAfter = Object.values(days).reduce((s, m) => s + m, 0);
     const dayAfter = days[key];
     const { current: lvlBefore } = getCurrentLevel(totalMinsBefore);
@@ -3429,17 +3439,33 @@
     if (!studyDone || !sessionDone) queuePendingCredit(date, minutes, label, studyDone, sessionDone);
   }
 
-  async function drainPendingCredits() {
+  // applyLocalDelta: true direkt nach Login/Reload, wo `days` gerade frisch
+  // (und damit ohne dieses Delta) vom Server geladen wurde — der optimistische
+  // Bump aus creditFocusMinutes() lebte nur im Speicher des damaligen Tabs.
+  // Im laufenden Betrieb (z.B. der online-Listener) ist `days` dagegen bereits
+  // seit dem ursprünglichen creditFocusMinutes()-Aufruf hochgezählt; ein
+  // erneuter Bump hier würde doppelt zählen, daher dort false (Default).
+  async function drainPendingCredits(applyLocalDelta = false) {
     if (!currentUser || !navigator.onLine) return;
     const queue = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
     if (!queue.length) return;
     const remaining = [];
+    let changed = false;
     for (const entry of queue) {
       if (!entry.studyDone) entry.studyDone = await addStudyMinutes(entry.date, entry.minutes);
       if (!entry.sessionDone) entry.sessionDone = await savePomoSession(entry.date, entry.minutes, entry.label);
-      if (!entry.studyDone || !entry.sessionDone) remaining.push(entry);
+      if (!entry.studyDone || !entry.sessionDone) {
+        remaining.push(entry);
+      } else if (applyLocalDelta) {
+        days[entry.date] = (days[entry.date] || 0) + entry.minutes;
+        changed = true;
+      }
     }
     localStorage.setItem(PENDING_KEY, JSON.stringify(remaining));
+    if (changed) {
+      renderTomatoes(); renderHeatmap(); renderStats();
+      renderChallengesCard(); renderPerfectWeekRow();
+    }
   }
 
   // Analog zu PENDING_KEY/drainPendingCredits, aber für den Vergessene-Limitless-
@@ -4288,17 +4314,55 @@
   }
 
   /* ── Timer State Persistence ── */
+  // Gemergter Pending-Blob statt additivem Array-Queue (wie PENDING_KEY) —
+  // timer_state ist eine einzelne Zeile mit partiellen Feld-Updates, "letzter
+  // Schreibversuch pro Feld gewinnt" ist hier das richtige Modell.
+  const PENDING_TIMER_KEY = 'pomo_pending_timer_state';
+
+  function getPendingTimerState() {
+    try { return JSON.parse(localStorage.getItem(PENDING_TIMER_KEY) || 'null'); }
+    catch(e) { return null; }
+  }
+
+  function mergePendingTimerState(state) {
+    try {
+      const existing = getPendingTimerState() || {};
+      localStorage.setItem(PENDING_TIMER_KEY, JSON.stringify({ ...existing, ...state }));
+    } catch(e) { console.warn('mergePendingTimerState error', e); }
+  }
+
+  function clearPendingTimerState() {
+    try { localStorage.removeItem(PENDING_TIMER_KEY); } catch(e) {}
+  }
+
   async function saveTimerState(state) {
     if (!currentUser) return;
+    // Synchron vor jedem await lokal absichern — übersteht Tab-Close/Reload
+    // sofort, auch wenn der folgende Request nie ankommt oder der Token-Fetch
+    // hängt (kein beforeunload/keepalive-Umbau nötig für die Absicherung
+    // selbst, keepalive unten schützt nur den eigentlichen fetch()).
+    mergePendingTimerState(state);
     const token = await getValidToken();
-    if (!token) return;
+    if (!token) return; // Blob bleibt stehen, nächster Drain versucht erneut
     try {
-      await fetch(`${SB}/rest/v1/timer_state?on_conflict=user_id`, {
+      const res = await fetch(`${SB}/rest/v1/timer_state?on_conflict=user_id`, {
         method: 'POST',
+        keepalive: true,
         headers: { ...authHeaders(token), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify({ user_id: currentUser.id, updated_at: new Date().toISOString(), ...state }),
       });
+      if (!res.ok) { console.warn('saveTimerState failed:', res.status); return; }
+      clearPendingTimerState();
     } catch(e) { console.warn('saveTimerState error', e); }
+  }
+
+  // Analog drainPendingCredits()/drainPendingStashQueue(): versucht den
+  // gemergten Pending-Blob (falls vorhanden) erneut zu schreiben.
+  async function drainPendingTimerState() {
+    if (!currentUser || !navigator.onLine) return;
+    const pending = getPendingTimerState();
+    if (!pending) return;
+    await saveTimerState(pending);
   }
 
   async function clearTimerState() {
@@ -4435,12 +4499,22 @@
 
   async function restoreTimerState() {
     const state = await loadTimerState();
-    if (!state) return;
+    const pending = getPendingTimerState();
+    if (!state && !pending) return;
+    // Ein lokal gemergter, nie beim Server angekommener Schreibversuch (z.B.
+    // ein gescheiterter Pause-Write) gewinnt über den geladenen Server-Stand
+    // — er repräsentiert die zuletzt bekannte, tatsächliche Absicht. Das ist
+    // der direkte Fix für "Reload läuft weiter, als wäre nie pausiert
+    // worden": der Blob enthält {end_at:null, started_at:null,
+    // paused_remaining:X}, der gemergte State nimmt dadurch korrekt den
+    // Pause-Zweig statt den (fälschlich noch laufenden) Server-Stand.
+    const merged = pending ? { ...(state || {}), ...pending } : state;
     try {
-      await restoreTimerStateInner(state);
+      await restoreTimerStateInner(merged);
     } finally {
       if (mode === 'work' && limitlessSetting && autoBreaksSetting) setFocusMode(true);
     }
+    if (pending) drainPendingTimerState(); // jetzt nachliefern, nicht blockierend für den Restore
   }
 
   async function restoreTimerStateInner(state) {
@@ -4520,8 +4594,10 @@
         syncModeBtns();
         onTimerEnd();
       }
-    } else if (state.paused_remaining) {
-      // Timer was paused — restore paused state
+    } else if (state.paused_remaining != null) {
+      // Timer was paused — restore paused state (!= null statt truthy: ein
+      // bei exakt 0 pausierter Countdown wurde sonst gar nicht restauriert,
+      // analog zum bereits korrekten Limitless-Zweig oben)
       mode = state.mode || 'work';
       totalSec  = state.total_sec;
       remaining = state.paused_remaining;
@@ -4537,7 +4613,10 @@
     if (running) {
       clearInterval(tid); running=false; startedAt=null;
       swSend({ type: 'TIMER_PAUSE' });
-      saveTimerState({
+      // await hier verhindert ein Race bei schnellem Doppel-Klick (Pausieren
+      // ist nicht latenzkritisch) — für Korrektheit nicht mehr zwingend nötig,
+      // da saveTimerState() den State bereits synchron lokal absichert.
+      await saveTimerState({
         end_at: null, total_sec: limitless ? null : totalSec, mode, paused_remaining: remaining,
         limitless, started_at: null, credited_min: limitlessCreditedMin,
         pomoday: mode === 'work' ? pomoDay : null,
@@ -4554,7 +4633,7 @@
         else swSend({ type: 'EYE_BREAK_START', startedAt });
         schedulePRTargetIfPending(startedAt);
         scheduleUnbrokenTargetIfPending(); // deckt sowohl den manuellen Start (Klick-Handler setzt unbrokenSince) als auch Auto-Resume aus workStash ab
-        saveTimerState({
+        await saveTimerState({
           end_at: null, total_sec: null, mode, paused_remaining: null,
           limitless: true, started_at: new Date(startedAt).toISOString(),
           credited_min: limitlessCreditedMin, pomoday: pomoDay,
@@ -4564,7 +4643,7 @@
       } else {
         const endAt = startedAt + totalSec * 1000;
         swSend({ type: 'TIMER_START', endAt, mode, autoResume: !!workStash });
-        saveTimerState({
+        await saveTimerState({
           end_at: new Date(endAt).toISOString(), total_sec: totalSec, mode, paused_remaining: null,
           limitless: false, started_at: null, pomoday: mode === 'work' ? pomoDay : null,
           ...stashPayload(),
@@ -4708,13 +4787,14 @@
     setTimeout(() => { if (switchTo('work', false)) start(); }, 1400);
   }
 
-  window.addEventListener('online', () => { if (currentUser) { drainPendingCredits(); drainPendingStashQueue(); } });
+  window.addEventListener('online', () => { if (currentUser) { drainPendingCredits(); drainPendingStashQueue(); drainPendingTimerState(); } });
 
   // Page Visibility API: re-anchor when tab comes back into foreground
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     if (running && startedAt) tick(); // Re-calculate immediately so display snaps to correct value
     checkDayRollover(); // ggf. 4-Uhr-Grenze nachholen, die während des Backgrounds überschritten wurde
+    if (currentUser) { drainPendingCredits(); drainPendingStashQueue(); drainPendingTimerState(); }
   });
 
   // 4-Uhr-Tagesgrenze-Watchdog: setzt sich nach 2h Inaktivität (kein
@@ -5400,12 +5480,22 @@
   }
 
   async function sbAuth(path, body) {
-    const res = await fetch(`${SB}/auth/v1${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-      body: JSON.stringify(body),
-    });
-    return res.json();
+    try {
+      const res = await fetch(`${SB}/auth/v1${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+        body: JSON.stringify(body),
+      });
+      return await res.json();
+    } catch (e) {
+      // Netzwerkfehler etc. — leeres Objekt statt zu werfen, damit alle
+      // Aufrufer (die bereits truthy auf data.access_token/error_description
+      // prüfen) sauber in ihren bestehenden Fehlerpfad laufen, statt die
+      // ganze Aufrufkette (refreshSession()/getValidToken() → Bug-1-relevante
+      // Schreibpfade) per unbehandelter Exception zu verlassen.
+      console.warn('sbAuth error:', e);
+      return {};
+    }
   }
 
   function getToken() {
@@ -5647,8 +5737,9 @@
     await reconcileStudyDays(localDays);
 
     // Drain sessions that were completed while offline
-    await drainPendingCredits();
+    await drainPendingCredits(true); // days wurde gerade frisch vom Server geladen, s. Kommentar an der Funktion
     await drainPendingStashQueue();
+    await drainPendingTimerState();
 
     // Clear stale localStorage — Supabase is now source of truth
     localStorage.removeItem(KEY);
