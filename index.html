@@ -5884,21 +5884,6 @@
   }
 
   /* ── CSV-Export der eigenen pomodoro_sessions ── */
-  const EXPORT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
-
-  function exportRateLimitKey() {
-    return `pomo_export_last_${currentUser.id}`;
-  }
-
-  function getExportCooldownRemaining() {
-    const raw = localStorage.getItem(exportRateLimitKey());
-    if (!raw) return 0;
-    try {
-      const { ts } = JSON.parse(raw);
-      const remaining = EXPORT_COOLDOWN_MS - (Date.now() - ts);
-      return remaining > 0 ? remaining : 0;
-    } catch(e) { return 0; }
-  }
 
   async function fetchAllSessions(token, fromDate, toDate) {
     const all = [];
@@ -5948,13 +5933,6 @@
       feedback.textContent = 'Bitte gültigen Zeitraum wählen.';
       return;
     }
-    const remaining = getExportCooldownRemaining();
-    if (remaining > 0) {
-      const h = Math.floor(remaining / 3600000);
-      const m = Math.ceil((remaining % 3600000) / 60000);
-      feedback.textContent = `Export erst wieder in ${h}h ${m}min möglich.`;
-      return;
-    }
 
     feedback.textContent = 'Wird exportiert…';
     try {
@@ -5965,7 +5943,6 @@
         return;
       }
       downloadCSV(sessions, `pomodoro_export_${fromDate}_${toDate}.csv`);
-      cacheSet(exportRateLimitKey(), true);
       feedback.textContent = '✓ Export gestartet';
       setTimeout(() => { feedback.textContent = ''; }, 2500);
     } catch(e) {
