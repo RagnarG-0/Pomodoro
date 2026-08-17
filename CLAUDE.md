@@ -391,7 +391,7 @@ Beim erstmaligen Überschreiten der Level-15-Schwelle (`activeLevels[14]`, gleic
 
 ---
 
-## Karten-Katalog (36 Karten)
+## Karten-Katalog (38 Karten)
 
 `CARD_CATALOG` hardcoded im JS. Bildpfad: `CDN/Karten/<rarity>/<name>.png`.
 
@@ -433,6 +433,8 @@ Beim erstmaligen Überschreiten der Level-15-Schwelle (`activeLevels[14]`, gleic
 | 35 | Froschi | rare |
 | 36 | OA-Hagel | rare |
 | 37 | Rebecca-Kabel | epic |
+| 38 | Flappe-Peng | common |
+| 39 | Scheinfreier | epic |
 
 Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legendary 9 %, mystic 3 %.
 
