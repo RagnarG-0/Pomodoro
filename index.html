@@ -4696,19 +4696,19 @@
       if (remainingSec <= 0) {
         clearInterval(iv);
         banner.classList.remove('open');
-        onResolve(false);
+        onResolve(false, true); // timedOut=true — echtes Ausbleiben jeder Reaktion
       }
     }, 1000);
 
     newYes.addEventListener('click', () => {
       clearInterval(iv);
       banner.classList.remove('open');
-      onResolve(true);
+      onResolve(true, false);
     });
     newNo.addEventListener('click', () => {
       clearInterval(iv);
       banner.classList.remove('open');
-      onResolve(false);
+      onResolve(false, false); // bewusstes "Anhalten" ist eine Reaktion, kein Timeout
     });
   }
 
@@ -4720,14 +4720,25 @@
     if (idleConfirmShown) return;
     idleConfirmShown = true;
     const msg = 'Bist du noch da? Dein Fokus-Timer läuft seit über 3 Stunden ohne Unterbrechung. Ohne Bestätigung wird die Session in 2 Minuten angehalten und zur Bestätigung zwischengespeichert.';
-    showIdleConfirmBanner(msg, (confirmed) => {
+    showIdleConfirmBanner(msg, async (confirmed, timedOut) => {
       idleConfirmShown = false;
       if (confirmed) {
         unbrokenSince = Date.now();
         if (currentUser) saveTimerState({ unbroken_since: new Date(unbrokenSince).toISOString() });
         scheduleUnbrokenTargetIfPending();
       } else {
-        stopAndStashUnbrokenSession('idle_3h');
+        // running frisch auswerten statt vom Trigger-Zeitpunkt zu übernehmen —
+        // der Nutzer kann während des 2-Minuten-Fensters manuell pausiert haben,
+        // ohne den Banner zu bedienen (Banner blockiert keine anderen Klicks).
+        const wasRunning = running;
+        await stopAndStashUnbrokenSession('idle_3h');
+        // Zusätzliches Logout nur bei echtem Ausbleiben jeder Reaktion (Timeout,
+        // nicht beim bewussten "Anhalten"-Klick) UND nur, wenn der Timer zum
+        // Zeitpunkt der Entscheidung wirklich noch lief (nicht pausiert war).
+        if (timedOut && wasRunning && currentUser) {
+          toast('Wegen Inaktivität automatisch abgemeldet.');
+          await logout();
+        }
       }
     });
   }
@@ -4747,6 +4758,37 @@
     pomoDay = null; limitlessCreditedMin = 0; unbrokenSince = null;
     totalSec = 0; remaining = 0;
     renderTimer();
+  }
+
+  // Loggt den Nutzer serverseitig (GoTrue /auth/v1/logout) UND lokal aus —
+  // identisch zum manuellen Klick auf "Abmelden" (logout-btn), zusätzlich
+  // aufgerufen vom 3h-Idle-Watchdog bei ausbleibender Reaktion (siehe
+  // triggerUnbrokenConfirm()).
+  async function logout() {
+    const session = getToken();
+    if (session) {
+      await fetch(`${SB}/auth/v1/logout`, {
+        method: 'POST',
+        headers: authHeaders(session.access_token),
+      });
+    }
+    setToken(null);
+    currentUser = null; userName = null; userPublic = false; avatarUrl = null;
+    load(); loadSettings();
+    if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
+    else { totalSec = getMin(mode) * 60; remaining = totalSec; }
+    updateUserChip();
+    setLeaderboardVisibility(false);
+    render();
+    // Reset auth modal to clean login state
+    document.getElementById('auth-login').style.display    = 'block';
+    document.getElementById('auth-register').style.display = 'none';
+    document.querySelector('.auth-tabs').style.display      = 'flex';
+    document.getElementById('migrate-banner').style.display = 'none';
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.auth-tab[data-tab="login"]').classList.add('active');
+    showAuthError('');
+    document.getElementById('auth-overlay').classList.add('open');
   }
 
   function reset() {
@@ -6160,33 +6202,9 @@
       }
     });
 
-    // Logout
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      const session = getToken();
-      if (session) {
-        await fetch(`${SB}/auth/v1/logout`, {
-          method: 'POST',
-          headers: authHeaders(session.access_token),
-        });
-      }
-      setToken(null);
-      currentUser = null; userName = null; userPublic = false; avatarUrl = null;
-      load(); loadSettings();
-      if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
-      else { totalSec = getMin(mode) * 60; remaining = totalSec; }
-      updateUserChip();
-      setLeaderboardVisibility(false);
-      render();
-      // Reset auth modal to clean login state
-      document.getElementById('auth-login').style.display    = 'block';
-      document.getElementById('auth-register').style.display = 'none';
-      document.querySelector('.auth-tabs').style.display      = 'flex';
-      document.getElementById('migrate-banner').style.display = 'none';
-      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-      document.querySelector('.auth-tab[data-tab="login"]').classList.add('active');
-      showAuthError('');
-      document.getElementById('auth-overlay').classList.add('open');
-    });
+    // Logout — extrahiert (statt Inline-Handler), da auch der 3h-Idle-Watchdog
+    // bei ausbleibender Reaktion denselben Ablauf auslöst (siehe triggerUnbrokenConfirm()).
+    document.getElementById('logout-btn').addEventListener('click', logout);
 
     // Try restoring session from localStorage
     const session = getToken();
