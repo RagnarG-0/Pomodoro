@@ -196,6 +196,22 @@
   }
   .clan-member-remove:hover { background: var(--surface2); }
 
+  /* ── Admin ── */
+  #admin-section { display: none; }
+  #admin-timer-list { margin-bottom: 0.5rem; }
+  .admin-timer-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 0; border-bottom: 0.5px solid var(--border);
+    font-size: 12px; color: var(--text);
+  }
+  .admin-timer-row:last-child { border-bottom: none; }
+  .admin-timer-stop {
+    font-size: 11px; padding: 2px 8px; border: 0.5px solid var(--border-strong);
+    border-radius: 6px; background: transparent; color: var(--text-muted);
+    cursor: pointer; font-family: Georgia, serif;
+  }
+  .admin-timer-stop:hover { background: var(--surface2); }
+
   .card {
     background: var(--surface); border: 0.5px solid var(--border);
     border-radius: 16px; padding: 2rem 1.5rem 1.5rem;
@@ -1779,6 +1795,13 @@
       <div id="clan-settings-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
     </div>
 
+    <div id="admin-section">
+      <div class="panel-divider"></div>
+      <div class="panel-section">Admin</div>
+      <button id="toggle-admin-timer-list-btn" style="width:100%;padding:6px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;text-align:left;">Laufende Timer anzeigen ▸</button>
+      <div id="admin-timer-list" style="display:none;margin-top:0.4rem;"></div>
+    </div>
+
     <button id="save-settings-btn" style="width:100%;margin-top:0.5rem;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;transition:background 0.12s;">Einstellungen speichern</button>
     <div id="settings-save-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:6px;"></div>
     <button id="close-panel">Schließen</button>
@@ -2249,6 +2272,7 @@
   // User profile
   let userName = null;
   let userPublic = false;
+  let isAdmin = false;          // profiles.is_admin — App-Owner-Fähigkeit, siehe "Admin"
   let userDiamonds = 0;
   let userRaceCarId = null; // profiles.race_car_id, 1-8, dauerhaft
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
@@ -4416,7 +4440,9 @@
   }
 
   function formatPendingFocusReason(reason) {
-    return reason === 'day_boundary' ? 'über die 4-Uhr-Grenze gelaufen' : '3h ohne Unterbrechung';
+    if (reason === 'day_boundary') return 'über die 4-Uhr-Grenze gelaufen';
+    if (reason === 'admin_stop')   return 'vom Admin beendet';
+    return '3h ohne Unterbrechung';
   }
 
   function renderPendingFocusList() {
@@ -4773,11 +4799,12 @@
       });
     }
     setToken(null);
-    currentUser = null; userName = null; userPublic = false; avatarUrl = null;
+    currentUser = null; userName = null; userPublic = false; isAdmin = false; avatarUrl = null;
     load(); loadSettings();
     if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
     else { totalSec = getMin(mode) * 60; remaining = totalSec; }
     updateUserChip();
+    updateAdminUI();
     setLeaderboardVisibility(false);
     render();
     // Reset auth modal to clean login state
@@ -5727,6 +5754,7 @@
     if (profile) {
       userName    = profile.username;
       userPublic  = profile.public;
+      isAdmin     = !!profile.is_admin;
       displayUnit = profile.display_unit || 'pomodoros';
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
@@ -5762,6 +5790,7 @@
 
     if (clanId) await loadClanSettings(token);
     updateLeaderUI();
+    updateAdminUI();
     // Sofort laden statt erst beim ersten Öffnen der Glocke — sonst zeigt der
     // grüne Punkt nichts an, bevor der Nutzer die Glocke einmal manuell öffnet.
     if (clanRole === 'leader') loadPendingRequests();
@@ -6767,6 +6796,74 @@
     document.getElementById('clan-join-wrap').style.display = noClan ? 'flex' : 'none';
   }
 
+  /* ── Admin ── */
+
+  function updateAdminUI() {
+    document.getElementById('admin-section').style.display = isAdmin ? 'block' : 'none';
+  }
+
+  async function loadRunningTimers() {
+    if (!isAdmin) return;
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/rpc/admin_list_running_timers`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const rows = await res.json();
+      renderRunningTimersList(Array.isArray(rows) ? rows : []);
+    } catch(e) { console.warn('loadRunningTimers error', e); }
+  }
+
+  function fmtAdminTimerStatus(row) {
+    if (row.mode === 'short') return 'Pause';
+    if (row.limitless) {
+      const min = row.started_at
+        ? Math.max(0, Math.floor((Date.now() - new Date(row.started_at).getTime()) / 60000))
+        : Math.floor((row.paused_remaining || 0) / 60);
+      return (row.started_at ? 'läuft seit ' : 'pausiert bei ') + formatMinutesShort(min);
+    }
+    // Countdown: nur zur Anzeige geschätzt — die autoritative Berechnung
+    // passiert serverseitig beim Force-Stop (credit_elapsed_timer_state()).
+    const min = row.end_at
+      ? Math.max(0, Math.floor((row.total_sec - Math.max(0, (new Date(row.end_at).getTime() - Date.now()) / 1000)) / 60))
+      : Math.floor(((row.total_sec || 0) - (row.paused_remaining || 0)) / 60);
+    return (row.end_at ? 'läuft seit ' : 'pausiert bei ') + formatMinutesShort(min);
+  }
+
+  function renderRunningTimersList(rows) {
+    const el = document.getElementById('admin-timer-list');
+    if (!rows.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Keine laufenden Timer</div>'; return; }
+    el.innerHTML = rows.map(r => `
+      <div class="admin-timer-row">
+        <span>${esc(r.username)} — ${esc(fmtAdminTimerStatus(r))}</span>
+        <button class="admin-timer-stop" data-id="${r.user_id}" data-name="${esc(r.username)}">Stoppen</button>
+      </div>`).join('');
+    el.querySelectorAll('.admin-timer-stop').forEach(btn =>
+      btn.addEventListener('click', () => {
+        showTimerConfirmBanner(`Timer von „${btn.dataset.name}" wirklich beenden?`, async () => {
+          await adminForceStopTimer(btn.dataset.id);
+          loadRunningTimers();
+        });
+      }));
+  }
+
+  async function adminForceStopTimer(userId) {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/rpc/admin_force_stop_timer`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_user_id: userId }),
+      });
+      if (res.ok) toast('Timer beendet.');
+      else toast('Fehler beim Beenden.');
+    } catch(e) { console.warn('adminForceStopTimer error', e); }
+  }
+
   async function loadClanList() {
     try {
       const token = await getValidToken();
@@ -7150,6 +7247,17 @@
       list.dataset.loaded = '1';
       loadClanMembers();
     }
+  });
+
+  document.getElementById('toggle-admin-timer-list-btn').addEventListener('click', () => {
+    const list = document.getElementById('admin-timer-list');
+    const btn  = document.getElementById('toggle-admin-timer-list-btn');
+    const open = list.style.display === 'none';
+    list.style.display = open ? 'block' : 'none';
+    btn.textContent = open ? 'Timer ausblenden ▾' : 'Laufende Timer anzeigen ▸';
+    // Immer neu laden (anders als Clan-Mitglieder, die sich selten ändern) —
+    // Timer-Zustände sind hochfrequent.
+    if (open) loadRunningTimers();
   });
 
   document.getElementById('save-clan-settings-btn').addEventListener('click', saveClanSettings);

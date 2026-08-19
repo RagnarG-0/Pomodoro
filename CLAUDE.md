@@ -26,7 +26,7 @@ Supabase CLI ist lokal installiert (Homebrew, `supabase/tap`) und mit diesem Pro
 
 | Tabelle | Inhalt |
 |---|---|
-| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound, second_incubator_purchased, bento_layout |
+| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound, second_incubator_purchased, bento_layout, is_admin |
 | `study_days` | user_id, date, minutes, off |
 | `pomodoro_sessions` | user_id, date, label, duration_minutes |
 | `timer_state` | user_id, end_at, total_sec, mode, paused_remaining, pomoday, limitless, started_at, credited_min, stash_total_sec, stash_paused_remaining, stash_limitless, stash_pomoday, stash_credited_min, unbroken_since |
@@ -41,7 +41,7 @@ Supabase CLI ist lokal installiert (Homebrew, `supabase/tap`) und mit diesem Pro
 | `card_trades` | id uuid (PK), listing_id, seller_id, buyer_id, card_id, user_card_id, trade_offer_id, traded_at — unveränderliches Audit-Log (kein UPDATE/DELETE auf die Zeile selbst), eine Zeile PRO bewegter Karte (seller/buyer = Abgeber/Empfänger dieser einen Karte). `user_card_id`/`listing_id`/`trade_offer_id` sind FKs mit `ON DELETE SET NULL` (seit `20260729000000`/`20260729000010`) — die referenzierte `user_cards`/`card_listings`/`trade_offers`-Zeile darf später gelöscht werden (z. B. `sell_card()`), ohne den Audit-Log-Eintrag zu blockieren oder zu löschen, siehe „Bekannte Designentscheidungen" |
 | `trade_offers` | id uuid (PK), listing_id, offerer_id, status (`pending`/`accepted`/`rejected`), created_at, responded_at — ein Gegenangebot auf ein `card_listings`-Angebot |
 | `trade_offer_cards` | trade_offer_id + user_card_id (PK), card_id — welche eigenen Karten Teil eines Gegenangebots sind |
-| `pending_focus_sessions` | id uuid (PK), user_id, date, minutes, label, reason (`idle_3h`/`day_boundary`), created_at — zwischengespeicherte Limitless-Fokuszeit, wartet auf manuelle Bestätigung („Gutschreiben"), siehe „Vergessene Limitless-Timer" |
+| `pending_focus_sessions` | id uuid (PK), user_id, date, minutes, label, reason (`idle_3h`/`day_boundary`/`admin_stop`), created_at — zwischengespeicherte Limitless-Fokuszeit, wartet auf manuelle Bestätigung („Gutschreiben"), siehe „Vergessene Limitless-Timer" und „Admin" |
 | `streak_milestones` | days (PK), reward_diamonds — öffentlicher, tunable Katalog (UPDATE ohne Migration), siehe „Zusätzliche Diamanten-Quellen" |
 | `streak_milestone_claims` | user_id + days (PK), reward_diamonds (Snapshot), claimed_at |
 | `perfect_week_claims` | user_id + week_start (PK), reward_diamonds, claimed_at |
@@ -51,6 +51,8 @@ Supabase CLI ist lokal installiert (Homebrew, `supabase/tap`) und mit diesem Pro
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
 `profiles.clan_role` ist `'leader'` | `'member'` | null.
+
+`profiles.is_admin` (boolean, Default `false`) ist ein App-Owner-Flag, unabhängig von `clan_role` — siehe „Admin".
 
 `incubator` hat max. 2 Zeilen pro Nutzer (`slot_index` 1/2, PK ist das Paar) — Slot 2 nur nutzbar nach Kauf (`profiles.second_incubator_purchased`, ab Level 15, siehe „Zweiter Brutkasten"). Brut-Fortschritt je Slot = `sum(study_days.minutes) − focus_minutes_at_placement`, Ziel = 600.
 
@@ -86,6 +88,9 @@ Supabase CLI ist lokal installiert (Homebrew, `supabase/tap`) und mit diesem Pro
 | `claim_perfect_week()` | Prüft serverseitig, ob alle 7 Tage der aktuellen App-Woche `minutes >= 60` haben (Woche muss vorbei sein), schreibt Claim + Diamanten gut |
 | `claim_set_bonus(p_rarity)` | Prüft serverseitig, ob alle Katalog-Karten einer Rarität besessen werden (`cards` vs. `user_cards`), schreibt Claim + Diamanten gut |
 | `claim_race_checkpoint(p_checkpoint)` | Automatischer (kein Button) Diamanten-Claim fürs Flaggen-Feld/Ziellinie der Rennstrecke, `p_checkpoint ∈ {'flag','finish'}`, gibt `NULL` zurück wenn schon vergeben, sonst neuen Diamanten-Stand, siehe „Rennstrecke" |
+| `credit_elapsed_timer_state(p_row, p_cutoff, p_reason)` | Interner Helper (kein Client-Aufruf): berechnet aus einer bereits per Claim-Mutex gelöschten `timer_state`-Zeile die fälligen Minuten und kreditiert sie (limitless → `pending_focus_sessions`, sonst direkt `study_days`/`pomodoro_sessions`); gemeinsam genutzt von `reset_stale_work_sessions()` und `admin_force_stop_timer()`, siehe „Admin" |
+| `admin_list_running_timers()` | Nur für `profiles.is_admin=true`, liest sonst still leer: alle offenen `timer_state`-Zeilen (`mode ∈ {'work','short'}`) inkl. `username`, siehe „Admin" |
+| `admin_force_stop_timer(p_user_id)` | Nur für Admins (sonst `RAISE EXCEPTION`): Claim-Mutex-`DELETE` auf die Ziel-Zeile, kreditiert bei `mode='work'` über `credit_elapsed_timer_state()` mit `reason='admin_stop'`, gibt `true`/`false` zurück, siehe „Admin" |
 
 ---
 
@@ -344,6 +349,20 @@ Im Fokus-Modus wird `#timer-card` zu einem echten Vollbild-Overlay (`position:fi
 
 ### Registrierter Clan
 - Clan „Schwitzende Verbindung Halle" — alle `public = true`-Profile als Member
+
+---
+
+## Admin
+
+Minimales, rein additives App-Owner-Konzept — kein allgemeines Rollensystem, betrifft ausschließlich den App-Betreiber selbst. Zweck: einen vergessenen/endlos laufenden Timer eines anderen Nutzers (typischerweise eine Limitless-Session, die niemand mehr beobachtet) manuell stoppen können, ohne auf die automatischen Cron-Mechanismen (4-Uhr-Reset, 3h10min-Idle) warten zu müssen. Migration `20260819000000_admin_force_stop_timer.sql`.
+
+- **`profiles.is_admin`** (boolean, Default `false`) — einziges Gating-Attribut, unabhängig von `clan_role`. Kein Code-Pfad setzt das Flag automatisch; wird einmalig manuell (SQL-Editor oder eigene, ungepushte Mini-Migration) auf dem Owner-Account gesetzt, bewusst **nicht** Teil der additiven Haupt-Migration (vermeidet einen hartkodierten Nutzernamen/UUID im Git-Verlauf).
+- **`credit_elapsed_timer_state(p_row, p_cutoff, p_reason)`**: aus `reset_stale_work_sessions()` extrahierter gemeinsamer Kern (identische 4-Zweig-Logik: limitless laufend/pausiert, Countdown laufend/pausiert) — nimmt eine bereits per Claim-Mutex (`DELETE ... RETURNING`) entfernte `timer_state`-Zeile entgegen und kreditiert sie (limitless → `pending_focus_sessions`, sonst direkt `study_days`/`pomodoro_sessions`). `reset_stale_work_sessions()` selbst ruft diesen Helper jetzt nur noch auf, Verhalten unverändert zur Vorversion.
+- **`admin_list_running_timers()`**: `SECURITY DEFINER`, liest alle offenen `timer_state`-Zeilen (`mode ∈ {'work','short'}`) inkl. `username`, gated über `EXISTS (... is_admin=true)` direkt in der `WHERE`-Klausel — bei Nicht-Admin stilles leeres Resultset statt Fehler (rein lesend, nicht sicherheitskritisch).
+- **`admin_force_stop_timer(p_user_id)`**: `SECURITY DEFINER`, `RAISE EXCEPTION 'Not authorized'` bei fehlendem `is_admin` (Muster wie `remove_clan_member()`), Claim-Mutex-`DELETE` auf die Ziel-Zeile, kreditiert bei `mode='work'` über `credit_elapsed_timer_state(..., now(), 'admin_stop')` — ein `'short'`(Pause)-Fund wird nur gelöscht, keine Gutschrift nötig.
+- **Kreditierungsziel bewusst identisch zu `idle_3h`/`day_boundary`**: ein admin-gestoppter Limitless-Timer landet in `pending_focus_sessions` (dritter `reason`-Wert `admin_stop`, `formatPendingFocusReason()` client-seitig um diesen Zweig ergänzt) — der betroffene Nutzer bestätigt („Gutschreiben") oder verwirft („Löschen") die Minuten selbst über die bereits bestehende Pending-Liste-UI. Kein stiller Fremd-Credit durch den Admin, keine neue UI auf Empfängerseite nötig.
+- **Client**: `isAdmin` (aus `profile.is_admin`, `select=*` liefert die Spalte automatisch mit), `updateAdminUI()` togglet `#admin-section` im Settings-Panel (Muster `updateLeaderUI()`/`#clan-leader-section`). `loadRunningTimers()`/`renderRunningTimersList()`/`adminForceStopTimer()` sind 1:1 nach dem Clan-Mitgliederlisten-Muster (`loadClanMembers()`/`renderClanMemberList()`/`removeClanMember()`) gebaut — Bestätigung vor dem Stoppen über das bestehende `showTimerConfirmBanner()`. Liste lädt bei jedem Aufklappen neu (anders als die selten wechselnde Clan-Mitgliederliste), da Timer-Zustände hochfrequent sind.
+- **RLS-Hinweis**: `timer_state` erlaubt sonst ausschließlich `auth.uid() = user_id` (keine Ausnahme für Admins) — beide neuen RPCs sind `SECURITY DEFINER` und umgehen RLS bewusst serverseitig, exakt wie `remove_clan_member()`/`reset_stale_work_sessions()`. `REVOKE ... FROM anon` ist wie an anderer Stelle im Projekt dokumentiert wirkungslos (PUBLIC-Default-Grant), aber funktional unkritisch, da `auth.uid()` für anon `NULL` ist und der `is_admin`-Check dadurch immer fehlschlägt.
 
 ---
 
