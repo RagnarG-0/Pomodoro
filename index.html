@@ -1800,6 +1800,15 @@
       <div class="panel-section">Admin</div>
       <button id="toggle-admin-timer-list-btn" style="width:100%;padding:6px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;text-align:left;">Laufende Timer anzeigen ▸</button>
       <div id="admin-timer-list" style="display:none;margin-top:0.4rem;"></div>
+
+      <div class="panel-divider" style="margin:0.5rem 0;"></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Lernzeit heute korrigieren</div>
+      <div class="inp-wrap" style="gap:6px;">
+        <input type="text" id="admin-fix-username" placeholder="Benutzername" style="flex:1;font-size:12px;padding:4px 8px;border:0.5px solid var(--border-strong);border-radius:6px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;">
+        <input type="number" id="admin-fix-minutes" placeholder="Min." min="0" max="1440" style="width:64px;font-size:12px;padding:4px 8px;border:0.5px solid var(--border-strong);border-radius:6px;background:var(--surface2);color:var(--text);font-family:Georgia,serif;outline:none;">
+      </div>
+      <button id="admin-fix-minutes-btn" style="width:100%;margin-top:0.4rem;padding:6px;font-size:12px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Setzen</button>
+      <div id="admin-fix-feedback" style="font-size:11px;color:var(--accent);text-align:center;min-height:14px;margin-top:4px;"></div>
     </div>
 
     <button id="save-settings-btn" style="width:100%;margin-top:0.5rem;padding:10px;font-size:13px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-family:Georgia,serif;letter-spacing:0.04em;transition:background 0.12s;">Einstellungen speichern</button>
@@ -6864,6 +6873,45 @@
     } catch(e) { console.warn('adminForceStopTimer error', e); }
   }
 
+  async function adminFixTodayMinutes() {
+    const usernameEl = document.getElementById('admin-fix-username');
+    const minutesEl  = document.getElementById('admin-fix-minutes');
+    const fb = document.getElementById('admin-fix-feedback');
+    const username = usernameEl.value.trim();
+    const targetMin = parseInt(minutesEl.value, 10);
+    fb.textContent = '';
+    if (!username) { fb.textContent = 'Bitte Benutzernamen eingeben.'; return; }
+    if (!Number.isFinite(targetMin) || targetMin < 0 || targetMin > 1440) {
+      fb.textContent = 'Minuten müssen zwischen 0 und 1440 liegen.'; return;
+    }
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const date = todayKey();
+      const lookupRes = await fetch(`${SB}/rest/v1/rpc/admin_lookup_user_day`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_username: username, p_date: date }),
+      });
+      const rows = await lookupRes.json();
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (!row) { fb.textContent = 'Nutzer nicht gefunden.'; return; }
+      showTimerConfirmBanner(`Lernzeit von „${username}" heute von ${row.minutes} auf ${targetMin} Minuten setzen?`, async () => {
+        const setRes = await fetch(`${SB}/rest/v1/rpc/admin_set_study_minutes`, {
+          method: 'POST',
+          headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_user_id: row.user_id, p_date: date, p_minutes: targetMin }),
+        });
+        if (setRes.ok) {
+          toast('Lernzeit aktualisiert.');
+          usernameEl.value = ''; minutesEl.value = ''; fb.textContent = '';
+        } else {
+          fb.textContent = 'Fehler beim Setzen.';
+        }
+      });
+    } catch(e) { console.warn('adminFixTodayMinutes error', e); fb.textContent = 'Fehler.'; }
+  }
+
   async function loadClanList() {
     try {
       const token = await getValidToken();
@@ -7259,6 +7307,8 @@
     // Timer-Zustände sind hochfrequent.
     if (open) loadRunningTimers();
   });
+
+  document.getElementById('admin-fix-minutes-btn').addEventListener('click', adminFixTodayMinutes);
 
   document.getElementById('save-clan-settings-btn').addEventListener('click', saveClanSettings);
 
