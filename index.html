@@ -8361,7 +8361,8 @@
   function showEggCardView({ id, src, rarity, count = 1, market = null, readOnly = false }) {
     const isMyst    = rarity.key === 'mystisch';
     const alreadyOwned = id != null && eggDeck.some(c => c.id === id);
-    const isForeign = !!market && !market.isMine && !alreadyOwned;
+    const isForeign = !!market && !market.isMine && !alreadyOwned; // nur für Blur
+    const canOffer  = !!market && !market.isMine; // Gegenangebot-Button — unabhängig von alreadyOwned, sonst kein Button für bereits besessene fremde Karten
     const canSell   = !market && !readOnly && count > 1;
     const canList   = !market && !readOnly;
     const reward    = CARD_SELL_REWARDS[rarity.key] ?? 0;
@@ -8370,7 +8371,7 @@
     if (market?.isMine) {
       actionHtml = `<button class="card-sell-btn" id="marketCancelBtn">Angebot zurückziehen</button>
         <div id="incomingOffersWrap"></div>`;
-    } else if (isForeign) {
+    } else if (canOffer) {
       actionHtml = `<button class="card-sell-btn" id="tradeOfferBtn">Gegenangebot machen</button>`;
     } else if (canList) {
       actionHtml = `
@@ -8445,7 +8446,7 @@
       });
     }
 
-    if (isForeign) {
+    if (canOffer) {
       document.getElementById('tradeOfferBtn').addEventListener('click', e => {
         e.stopPropagation();
         document.getElementById('cardViewOverlay').classList.remove('visible');
