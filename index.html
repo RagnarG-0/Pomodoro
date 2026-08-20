@@ -3316,6 +3316,8 @@
     // crossedLevel15() — feuert nur beim tatsächlichen Überschreiten, nie
     // rückwirkend für längst passierte Schwellen.
     if (currentUser && key === todayKey()) {
+      if (dayBefore < RACE_CP60_MINUTES && dayAfter >= RACE_CP60_MINUTES) checkRaceCheckpoint('checkpoint60');
+      if (dayBefore < RACE_CP180_MINUTES && dayAfter >= RACE_CP180_MINUTES) checkRaceCheckpoint('checkpoint180');
       if (dayBefore < RACE_FLAG_MINUTES && dayAfter >= RACE_FLAG_MINUTES) checkRaceCheckpoint('flag');
       if (dayBefore < RACE_FINISH_MINUTES && dayAfter >= RACE_FINISH_MINUTES) checkRaceCheckpoint('finish');
     }
@@ -5074,6 +5076,10 @@
   const RACE_FINISH_MINUTES = RACE_FIELDS.length * RACE_MIN_PER_FIELD; // 700
   const RACE_FLAG_FIELD     = 14;                                  // Streckenfeld mit der Flagge
   const RACE_FLAG_MINUTES   = RACE_FLAG_FIELD * RACE_MIN_PER_FIELD; // 280
+  const RACE_CP60_FIELD     = 3;                                    // 60 Min
+  const RACE_CP60_MINUTES   = RACE_CP60_FIELD * RACE_MIN_PER_FIELD;
+  const RACE_CP180_FIELD    = 9;                                    // 180 Min
+  const RACE_CP180_MINUTES  = RACE_CP180_FIELD * RACE_MIN_PER_FIELD;
   const RACE_FINISH_DIAMOND_OFFSETS = [
     [0, -2.4], [2.1, -0.6], [1.3, 2.2], [-1.3, 2.2], [-2.1, -0.6],
   ]; // 5 Diamanten in kleiner Fächer-Anordnung um RACE_FINISH_POS (Prozentpunkte)
@@ -5098,7 +5104,7 @@
 
   // Ob die heutigen Checkpoints (Flaggen-Feld/Ziellinie) schon vergeben sind —
   // steuert nur, ob der 💎-Marker auf der Strecke angezeigt wird.
-  let raceCheckpointClaimed = { flag: false, finish: false };
+  let raceCheckpointClaimed = { flag: false, finish: false, checkpoint60: false, checkpoint180: false };
 
   async function loadRaceCheckpointStatus() {
     try {
@@ -5108,7 +5114,7 @@
       });
       if (!res.ok) return;
       const rows = await res.json();
-      raceCheckpointClaimed = { flag: false, finish: false };
+      raceCheckpointClaimed = { flag: false, finish: false, checkpoint60: false, checkpoint180: false };
       (Array.isArray(rows) ? rows : []).forEach(r => { raceCheckpointClaimed[r.checkpoint] = true; });
     } catch(e) { console.warn('loadRaceCheckpointStatus error', e); }
   }
@@ -5158,9 +5164,12 @@
         renderEggDiamonds();
         raceCheckpointClaimed[checkpoint] = true;
         renderRaceTrack(lastLeaderboardData);
-        toast(checkpoint === 'flag'
-          ? 'Du warst heute der Erste am Flaggen-Feld! +1 💎'
-          : 'Du warst der Erste im Ziel! +5 💎');
+        toast({
+          checkpoint60:  'Du warst heute der Erste bei 60 Minuten! +1 💎',
+          checkpoint180: 'Du warst heute der Erste bei 180 Minuten! +1 💎',
+          flag:          'Du warst heute der Erste am Flaggen-Feld! +1 💎',
+          finish:        'Du warst der Erste im Ziel! +5 💎',
+        }[checkpoint]);
       }
     } catch(e) { console.warn('checkRaceCheckpoint error', e); }
   }
@@ -5180,6 +5189,8 @@
   function sweepRaceCheckpoints() {
     if (!currentUser) return;
     const todayMin = days[todayKey()] || 0;
+    if (!raceCheckpointClaimed.checkpoint60 && todayMin >= RACE_CP60_MINUTES) checkRaceCheckpoint('checkpoint60');
+    if (!raceCheckpointClaimed.checkpoint180 && todayMin >= RACE_CP180_MINUTES) checkRaceCheckpoint('checkpoint180');
     if (!raceCheckpointClaimed.flag && todayMin >= RACE_FLAG_MINUTES) checkRaceCheckpoint('flag');
     if (!raceCheckpointClaimed.finish && todayMin >= RACE_FINISH_MINUTES) checkRaceCheckpoint('finish');
   }
@@ -5229,6 +5240,14 @@
     });
 
     let diamondsHtml = '';
+    if (!raceCheckpointClaimed.checkpoint60) {
+      const [x60, y60] = RACE_FIELDS[RACE_CP60_FIELD - 1];
+      diamondsHtml += `<div class="lb-race-diamond" style="left:${x60}%;top:${y60}%;" title="1💎 für den ersten Nutzer auf diesem Feld">💎</div>`;
+    }
+    if (!raceCheckpointClaimed.checkpoint180) {
+      const [x180, y180] = RACE_FIELDS[RACE_CP180_FIELD - 1];
+      diamondsHtml += `<div class="lb-race-diamond" style="left:${x180}%;top:${y180}%;" title="1💎 für den ersten Nutzer auf diesem Feld">💎</div>`;
+    }
     if (!raceCheckpointClaimed.flag) {
       const [fx, fy] = RACE_FIELDS[RACE_FLAG_FIELD - 1];
       diamondsHtml += `<div class="lb-race-diamond" style="left:${fx}%;top:${fy}%;" title="1💎 für den ersten Nutzer auf diesem Feld">💎</div>`;
