@@ -974,6 +974,16 @@
   .chall-claim-btn:active:not(:disabled) { transform: scale(0.96); }
   .chall-claim-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  /* ── Aufmerksamkeits-Tracking ── */
+  .tired-btn {
+    font-size: 14px; padding: 10px 32px; border-radius: 20px;
+    border: 0.5px solid var(--accent); background: transparent; color: var(--accent);
+    cursor: pointer; font-family: Georgia, serif; transition: background 0.12s, transform 0.1s;
+  }
+  .tired-btn:hover { background: var(--accent); color: #fff; }
+  .tired-btn:active { transform: scale(0.96); }
+  .tired-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .incubator-buttons { display: flex; gap: 10px; margin-top: 12px; }
   .btn-incubator {
     flex: 1; padding: 9px 6px; border-radius: 9px; border: 1px solid var(--border-strong);
@@ -1360,7 +1370,8 @@
       align-self: flex-start;
     }
     body.new-design .bento-row > #heatmap-card,
-    body.new-design .bento-row > #stats-card { min-width: 300px; }
+    body.new-design .bento-row > #stats-card,
+    body.new-design .bento-row > #attention-card { min-width: 300px; }
     body.new-design .bento-row > #challenges-card,
     body.new-design .bento-row > #leaderboard-card { min-width: 240px; }
     body.new-design .bento-row > #egg-section-wrapper { min-width: 320px; }
@@ -1395,6 +1406,7 @@
 
     body.bento-edit-mode #heatmap-card,
     body.bento-edit-mode #stats-card,
+    body.bento-edit-mode #attention-card,
     body.bento-edit-mode #challenges-card,
     body.bento-edit-mode #egg-section-wrapper,
     body.bento-edit-mode #leaderboard-card,
@@ -1440,6 +1452,7 @@
   /* ── Fokus-Modus (Header-Button, unabhängig vom Bento-Grid-Toggle) ── */
   body.focus-mode #heatmap-card,
   body.focus-mode #stats-card,
+  body.focus-mode #attention-card,
   body.focus-mode #challenges-card,
   body.focus-mode #egg-section-wrapper,
   body.focus-mode #leaderboard-card,
@@ -1941,6 +1954,17 @@
     <div class="ltile" style="background:#0F6E56;"></div>
     <div class="ltile" style="background:#085041;"></div>
     <span style="margin-left:2px;">Mehr</span>
+  </div>
+</div>
+
+<!-- Attention/Tired card -->
+<div class="card" id="attention-card" style="display:none;">
+  <div class="hmap-label" style="margin-bottom:1rem;">Aufmerksamkeit</div>
+  <div style="text-align:center;margin-bottom:1rem;">
+    <button class="tired-btn" id="tired-btn">Tired</button>
+  </div>
+  <div id="attention-chart-content">
+    <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>
   </div>
 </div>
 
@@ -2626,6 +2650,27 @@
   }
 
   const MONTHS_DE = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  const DE_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const NICE_INTERVALS = [1, 2, 3, 5, 7, 10, 14, 30, 60, 90, 120];
+
+  // Liste aller Lerntag-Keys (4-Uhr-Berlin-Grenze, wie todayKey()) von
+  // fromDate bis heute (inklusive) — geteilter Helper für Balkendiagramme,
+  // die die komplette Historie als X-Achse zeigen (Statistik- und
+  // Aufmerksamkeits-Karte).
+  function buildDateKeysSinceFromDate(fromDate) {
+    const berlinNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+    if (berlinNow.getHours() < 4) berlinNow.setDate(berlinNow.getDate() - 1);
+    const todayStr = `${berlinNow.getFullYear()}-${String(berlinNow.getMonth()+1).padStart(2,'0')}-${String(berlinNow.getDate()).padStart(2,'0')}`;
+
+    const dateKeys = [];
+    const cur = new Date(fromDate);
+    const end = new Date(todayStr);
+    while (cur <= end) {
+      dateKeys.push(`${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`);
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dateKeys;
+  }
 
   function isOff(dateObj, key) {
     if (offDays[key] === false) return false;      // explicit override: always ON
@@ -3326,6 +3371,13 @@
     updateSecondIncubatorVisibility();
     renderTomatoes(); renderHeatmap(); renderStats();
     renderChallengesCard(); renderPerfectWeekRow();
+    // Aufmerksamkeits-Chart optimistisch nachziehen (kein Fetch) — der reale
+    // Serverwert (created_at) wird beim nächsten loadAttentionChart() ohnehin
+    // nachgezogen, siehe „Aufmerksamkeits-Tracking".
+    if (currentUser && minutes > 0 && lastAttentionSessions) {
+      lastAttentionSessions.push({ date: key, duration_minutes: minutes, created_at: new Date().toISOString() });
+      if (lastAttentionDateKeys) renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, lastAttentionDateKeys);
+    }
   }
 
   function completePomo() {
@@ -3887,6 +3939,7 @@
   // Codepfad für Default- und Custom-Layout.
   const BENTO_TILE_META = {
     heatmap:     { elId: 'heatmap-card',        label: 'Heatmap',           icon: '▦' },
+    attention:   { elId: 'attention-card',      label: 'Aufmerksamkeit',    icon: '😴' },
     stats:       { elId: 'stats-card',          label: 'Statistik',         icon: '📊' },
     challenges:  { elId: 'challenges-card',     label: 'Wochen-Challenges', icon: '🎯' },
     eggdeck:     { elId: 'egg-section-wrapper', label: 'Ei & Karten',       icon: '🥚' },
@@ -3897,7 +3950,7 @@
 
   function bentoDefaultRows() {
     return [
-      [{ id: 'heatmap', flex: 1 }, { id: 'stats', flex: 1 }],
+      [{ id: 'heatmap', flex: 1 }, { id: 'attention', flex: 1 }, { id: 'stats', flex: 1 }],
       [{ id: 'challenges', flex: 2 }, { id: 'eggdeck', flex: 3 }],
       [{ id: 'racetrack', flex: 1 }],
       [{ id: 'leaderboard', flex: 1 }],
@@ -5867,6 +5920,8 @@
     renderChallengesCard();
     renderPerfectWeekRow();
     renderSetBonusSection(); // erneut rendern, jetzt mit geladenen Claims
+    document.getElementById('attention-card').style.display = 'block';
+    await loadAttentionChart();
     reconcileBentoLayout(profile);
   }
 
@@ -6526,17 +6581,7 @@
     if (!token) return;
 
     const FROM_DATE = '2026-05-10';
-    const berlinNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
-    if (berlinNow.getHours() < 4) berlinNow.setDate(berlinNow.getDate() - 1);
-    const todayStr = `${berlinNow.getFullYear()}-${String(berlinNow.getMonth()+1).padStart(2,'0')}-${String(berlinNow.getDate()).padStart(2,'0')}`;
-
-    const dateKeys = [];
-    const cur = new Date(FROM_DATE);
-    const end = new Date(todayStr);
-    while (cur <= end) {
-      dateKeys.push(`${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`);
-      cur.setDate(cur.getDate() + 1);
-    }
+    const dateKeys = buildDateKeysSinceFromDate(FROM_DATE);
 
     try {
       const res = await fetch(
@@ -6605,7 +6650,6 @@
     const barW = Math.min(26, Math.max(0.75, slotW - gap));
     const rx = barW >= 4 ? 2 : 0;
 
-    const DE_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
     const enc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
 
     // Y-axis grid lines and labels
@@ -6617,7 +6661,6 @@
     }
 
     // X-axis label thinning: anchor from today, snap interval to "nice" steps
-    const NICE_INTERVALS = [1, 2, 3, 5, 7, 10, 14, 30, 60, 90, 120];
     const minLabelSpacingPx = 14;
     const rawInterval = Math.ceil(minLabelSpacingPx / slotW);
     const labelInterval = NICE_INTERVALS.find(v => v >= rawInterval) || NICE_INTERVALS[NICE_INTERVALS.length - 1];
@@ -6683,6 +6726,189 @@
     content.innerHTML = `
       <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${bars}${rollingLine}</svg>
       <div style="display:flex;flex-wrap:wrap;margin-top:8px;padding:0 2px;">${legendHtml}</div>`;
+  }
+
+  /* ── Aufmerksamkeits-Tracking (Tired-Button + Tagesverlaufs-Chart) ──
+     Y-Achse ist eine feste 24h-Uhrzeit-Skala (0 = 04:00, 24 = 03:59 des
+     Folgetags Berlin-Zeit), keine datenabhängige Betrags-Skala wie beim
+     Stats-Balkendiagramm oben. Pro Session ein "schwebendes" Zeitbereich-
+     Rechteck: Ende = created_at (Speicherzeitpunkt), Start = Ende minus
+     Sessiondauer, an der 4-Uhr-Grenze geclamped. Pausen werden im Timer
+     nicht gespeichert — das Segment orientiert sich bewusst nur am
+     Speicherzeitpunkt, nicht am tatsächlichen (unbekannten) Sessionstart. */
+  let lastAttentionSessions = null, lastAttentionTiredEvents = null, lastAttentionDateKeys = null;
+  let attentionChartResizeObserver = null;
+  const ATTENTION_FROM_DATE = '2026-05-10'; // identisch zu loadBarChart()'s FROM_DATE
+
+  async function tryPostTiredEvent() {
+    if (!currentUser) return null;
+    const token = await getValidToken();
+    if (!token) return null;
+    try {
+      const res = await fetch(`${SB}/rest/v1/tired_events`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+        body: JSON.stringify({ user_id: currentUser.id, date: todayKey() }),
+      });
+      if (!res.ok) { console.warn('tryPostTiredEvent failed:', res.status); return null; }
+      const rows = await res.json();
+      return rows?.[0] || null;
+    } catch(e) { console.warn('tryPostTiredEvent error:', e); return null; }
+  }
+
+  function initAttentionCard() {
+    document.getElementById('tired-btn').addEventListener('click', async () => {
+      if (!currentUser) return;
+      const btn = document.getElementById('tired-btn');
+      btn.disabled = true;
+      const row = await tryPostTiredEvent();
+      btn.disabled = false;
+      if (row) {
+        toast('Erfasst.');
+        if (lastAttentionTiredEvents) {
+          lastAttentionTiredEvents.push(row);
+          if (lastAttentionDateKeys) renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, lastAttentionDateKeys);
+        }
+      } else {
+        toast('Konnte nicht gespeichert werden.');
+      }
+    });
+  }
+
+  async function loadAttentionChart() {
+    const content = document.getElementById('attention-chart-content');
+    if (!currentUser) return;
+    content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>';
+    const token = await getValidToken();
+    if (!token) return;
+
+    const dateKeys = buildDateKeysSinceFromDate(ATTENTION_FROM_DATE);
+
+    try {
+      const [sessRes, tiredRes] = await Promise.all([
+        fetch(`${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${ATTENTION_FROM_DATE}&select=date,duration_minutes,created_at&order=created_at.asc`, { headers: authHeaders(token) }),
+        fetch(`${SB}/rest/v1/tired_events?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${ATTENTION_FROM_DATE}&select=date,created_at&order=created_at.asc`, { headers: authHeaders(token) }),
+      ]);
+      if (!sessRes.ok || !tiredRes.ok) throw new Error(`${sessRes.status}/${tiredRes.status}`);
+      lastAttentionSessions = await sessRes.json();
+      lastAttentionTiredEvents = await tiredRes.json();
+      lastAttentionDateKeys = dateKeys;
+      renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, dateKeys);
+      ensureAttentionChartResizeObserver();
+    } catch(e) {
+      content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Konnte nicht geladen werden.</div>';
+      console.warn('loadAttentionChart error:', e);
+    }
+  }
+
+  function ensureAttentionChartResizeObserver() {
+    if (attentionChartResizeObserver) return;
+    const content = document.getElementById('attention-chart-content');
+    let debounceTimer = null;
+    attentionChartResizeObserver = new ResizeObserver(() => {
+      if (document.getElementById('attention-card').style.display === 'none') return;
+      if (!lastAttentionSessions || !lastAttentionDateKeys) return;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, lastAttentionDateKeys), 120);
+    });
+    attentionChartResizeObserver.observe(content);
+  }
+
+  // Uhrzeit eines ISO-Timestamps als Dezimalstunde relativ zur 4-Uhr-Grenze
+  // (0 = 04:00, 24 = 03:59 des Folgetags), analog zu todayKey()'s Berlin-
+  // Zeitzonen-Umrechnung.
+  function attentionDecimalHour(isoTimestamp) {
+    const berlin = new Date(new Date(isoTimestamp).toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+    const h = berlin.getHours() + berlin.getMinutes() / 60 + berlin.getSeconds() / 3600;
+    return (h - 4 + 24) % 24;
+  }
+  function fmtClockFromDecimalHour(h) {
+    const real = (4 + h) % 24;
+    const hh = Math.floor(real), mm = Math.round((real - hh) * 60);
+    return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+  }
+
+  function renderAttentionChart(sessions, tiredEvents, dateKeys) {
+    const content = document.getElementById('attention-chart-content');
+
+    const byDate = {}; dateKeys.forEach(k => { byDate[k] = []; });
+    sessions.forEach(s => { if (byDate[s.date]) byDate[s.date].push(s); });
+    const tiredByDate = {}; dateKeys.forEach(k => { tiredByDate[k] = []; });
+    tiredEvents.forEach(t => { if (tiredByDate[t.date]) tiredByDate[t.date].push(t); });
+
+    // Spalten-Geometrie 1:1 aus renderBarChart() übernommen.
+    const N = dateKeys.length;
+    const leftPad = 26, rightPad = 6, bottomPad = 40, topPad = 8;
+    const svgH = 200;
+    const chartH = svgH - topPad - bottomPad;
+    const axisY = topPad + chartH + 6;
+    const measuredW = content.clientWidth || 320;
+    const svgW = measuredW;
+    const availW = Math.max(svgW - leftPad - rightPad, 60);
+    const slotW = availW / N;
+    const gap = slotW <= 4 ? 0 : Math.min(3, slotW * 0.22);
+    const barW = Math.min(26, Math.max(0.75, slotW - gap));
+    const rx = barW >= 4 ? 2 : 0;
+
+    // Y-Gitter: alle 4h (04/08/12/16/20/00/04) statt jeder Einzelstunde —
+    // bei chartH ≈ 152px wären 24 Linien zu eng.
+    let grid = '';
+    for (let h = 0; h <= 24; h += 4) {
+      const gy = (topPad + (h / 24) * chartH).toFixed(1);
+      const clockHour = (4 + h) % 24;
+      grid += `<line x1="${leftPad}" y1="${gy}" x2="${svgW - rightPad}" y2="${gy}" stroke="var(--border)" stroke-width="0.5"/>`;
+      grid += `<text x="${leftPad - 4}" y="${(+gy + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${String(clockHour).padStart(2,'0')}</text>`;
+    }
+
+    // X-Achsen-Label-Ausdünnung — 1:1 aus renderBarChart() übernommen.
+    const minLabelSpacingPx = 14;
+    const rawInterval = Math.ceil(minLabelSpacingPx / slotW);
+    const labelInterval = NICE_INTERVALS.find(v => v >= rawInterval) || NICE_INTERVALS[NICE_INTERVALS.length - 1];
+    let lastLabeledMonth = null;
+
+    let marks = '';
+    dateKeys.forEach((key, i) => {
+      const x = leftPad + i * slotW;
+      const [yr, mo, dy] = key.split('-');
+      const fromEnd = N - 1 - i;
+      if (fromEnd % labelInterval === 0) {
+        const dow = DE_DAYS[new Date(+yr, +mo - 1, +dy).getDay()];
+        const label = (+mo !== lastLabeledMonth) ? `${+dy} ${MONTHS_DE[+mo - 1]}` : `${dow} ${+dy}`;
+        lastLabeledMonth = +mo;
+        const lx = (x + barW / 2).toFixed(1);
+        marks += `<text x="${lx}" y="${axisY}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif" transform="rotate(-72 ${lx} ${axisY})">${label}</text>`;
+      }
+
+      // Segmente: Ende = created_at, Start = Ende - duration_minutes/60,
+      // an der 4-Uhr-Grenze (0) geclamped.
+      (byDate[key] || []).forEach(s => {
+        const endH = attentionDecimalHour(s.created_at);
+        const durH = (+s.duration_minutes || 0) / 60;
+        const startH = Math.max(endH - durH, 0);
+        const y1 = topPad + (startH / 24) * chartH;
+        const y2 = topPad + (endH / 24) * chartH;
+        const h = Math.max(y2 - y1, 1);
+        marks += `<rect x="${x.toFixed(2)}" y="${y1.toFixed(1)}" width="${barW.toFixed(2)}" height="${h.toFixed(1)}" fill="var(--accent)" rx="${rx}"><title>${fmtClockFromDecimalHour(startH)} – ${fmtClockFromDecimalHour(endH)} (${minutesToDisplay(s.duration_minutes)})</title></rect>`;
+      });
+
+      // Tired-Punkte, mittig in der Tages-Spalte.
+      (tiredByDate[key] || []).forEach(t => {
+        const h2 = attentionDecimalHour(t.created_at);
+        const cy = topPad + (h2 / 24) * chartH;
+        marks += `<circle cx="${(x + barW / 2).toFixed(1)}" cy="${cy.toFixed(1)}" r="2.4" fill="#dc2626"><title>Tired · ${fmtClockFromDecimalHour(h2)}</title></circle>`;
+      });
+    });
+
+    content.innerHTML = `
+      <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${marks}</svg>
+      <div style="display:flex;flex-wrap:wrap;margin-top:8px;padding:0 2px;">
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:8px;height:8px;border-radius:2px;background:var(--accent);flex-shrink:0;"></span>Fokuszeit
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#dc2626;flex-shrink:0;"></span>Tired
+        </span>
+      </div>`;
   }
 
   async function renameLabelInDb(oldLabel, newLabel) {
@@ -7358,6 +7584,7 @@
   initBentoEditMode();
   initFocusMode();
   initChallengesCard();
+  initAttentionCard();
   initPrivacyToggle();
   initAvatarUpload();
   initLabelInput();
