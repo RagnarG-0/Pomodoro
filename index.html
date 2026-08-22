@@ -7022,11 +7022,15 @@
     const barW = Math.min(26, Math.max(0.75, slotW - gap));
     const rx = barW >= 4 ? 2 : 0;
 
+    // Y-Achse invertiert: h=0 (04:00) unten an der X-Achse, h=24 (04:00 des
+    // Folgetags) oben — der Tag verläuft von unten nach oben.
+    const yForHour = h => topPad + chartH - (h / 24) * chartH;
+
     // Y-Gitter: alle 4h (04/08/12/16/20/00/04) statt jeder Einzelstunde —
     // bei chartH ≈ 152px wären 24 Linien zu eng.
     let grid = '';
     for (let h = 0; h <= 24; h += 4) {
-      const gy = (topPad + (h / 24) * chartH).toFixed(1);
+      const gy = yForHour(h).toFixed(1);
       const clockHour = (4 + h) % 24;
       grid += `<line x1="${leftPad}" y1="${gy}" x2="${svgW - rightPad}" y2="${gy}" stroke="var(--border)" stroke-width="0.5"/>`;
       grid += `<text x="${leftPad - 4}" y="${(+gy + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${String(clockHour).padStart(2,'0')}</text>`;
@@ -7057,16 +7061,18 @@
         const endH = attentionDecimalHour(s.created_at);
         const durH = (+s.duration_minutes || 0) / 60;
         const startH = Math.max(endH - durH, 0);
-        const y1 = topPad + (startH / 24) * chartH;
-        const y2 = topPad + (endH / 24) * chartH;
-        const h = Math.max(y2 - y1, 1);
-        marks += `<rect x="${x.toFixed(2)}" y="${y1.toFixed(1)}" width="${barW.toFixed(2)}" height="${h.toFixed(1)}" fill="var(--accent)" rx="${rx}"><title>${fmtClockFromDecimalHour(startH)} – ${fmtClockFromDecimalHour(endH)} (${minutesToDisplay(s.duration_minutes)})</title></rect>`;
+        // Invertierte Achse: die spätere Uhrzeit (endH) liegt weiter oben
+        // (kleinerer y-Wert), die frühere (startH) weiter unten.
+        const yTop = yForHour(endH);
+        const yBottom = yForHour(startH);
+        const h = Math.max(yBottom - yTop, 1);
+        marks += `<rect x="${x.toFixed(2)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(2)}" height="${h.toFixed(1)}" fill="var(--accent)" rx="${rx}"><title>${fmtClockFromDecimalHour(startH)} – ${fmtClockFromDecimalHour(endH)} (${minutesToDisplay(s.duration_minutes)})</title></rect>`;
       });
 
       // Tired-Punkte, mittig in der Tages-Spalte.
       (tiredByDate[key] || []).forEach(t => {
         const h2 = attentionDecimalHour(t.created_at);
-        const cy = topPad + (h2 / 24) * chartH;
+        const cy = yForHour(h2);
         marks += `<circle cx="${(x + barW / 2).toFixed(1)}" cy="${cy.toFixed(1)}" r="2.4" fill="#dc2626"><title>Tired · ${fmtClockFromDecimalHour(h2)}</title></circle>`;
       });
     });
