@@ -1384,7 +1384,8 @@
   #bento-layout-editor-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .bento-edit-grip,
-  .bento-edit-resize-handle {
+  .bento-edit-resize-handle,
+  .bento-edit-remove-btn {
     display: none; position: absolute; z-index: 5;
     align-items: center; justify-content: center;
     background: var(--surface2); border: 0.5px solid var(--border-strong);
@@ -1399,10 +1400,16 @@
     bottom: 4px; right: 4px; width: 18px; height: 18px; border-radius: 5px;
     cursor: nwse-resize;
   }
+  .bento-edit-remove-btn {
+    top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 8px;
+    cursor: pointer; font-size: 12px;
+  }
+  .bento-edit-remove-btn:hover { background: #ef4444; border-color: #ef4444; color: #fff; }
 
   @media (min-width: 1024px) {
     body.bento-edit-mode .bento-edit-grip,
-    body.bento-edit-mode .bento-edit-resize-handle { display: flex; }
+    body.bento-edit-mode .bento-edit-resize-handle,
+    body.bento-edit-mode .bento-edit-remove-btn { display: flex; }
 
     body.bento-edit-mode #heatmap-card,
     body.bento-edit-mode #stats-card,
@@ -1448,6 +1455,15 @@
     cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.22);
   }
   body.bento-edit-mode #bento-edit-done-btn { display: flex; }
+
+  #bento-removed-panel {
+    display: none; position: fixed; bottom: clamp(1rem, 4vw, 2rem); left: clamp(1rem, 4vw, 2rem);
+    z-index: 500; max-width: 260px; max-height: 50vh; overflow-y: auto;
+    padding: 0.75rem; border-radius: 12px;
+    background: var(--surface); border: 0.5px solid var(--border-strong);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.22); font-family: Georgia, serif;
+  }
+  body.bento-edit-mode #bento-removed-panel.has-items { display: block; }
 
   /* ── Fokus-Modus (Header-Button, unabhängig vom Bento-Grid-Toggle) ── */
   body.focus-mode #heatmap-card,
@@ -2213,6 +2229,19 @@
 </div>
 
 <button id="bento-edit-done-btn" title="Layout-Bearbeitung beenden">✓ Fertig</button>
+
+<!-- Permanenter, unsichtbarer Halte-Container für per Bento-Editor entfernte
+     Kacheln (siehe applyBentoState/removeBentoTile). Kacheln werden per
+     appendChild hierher verschoben statt gelöscht, damit Inhalt/Listener
+     erhalten bleiben. display:none wirkt unabhängig von body.new-design/
+     bento-edit-mode — entfernte Kacheln bleiben dadurch überall verborgen
+     (auch mobiler Stack ohne "Neues Design", auch nach Server-Sync). -->
+<div id="bento-removed-pool" style="display:none;"></div>
+
+<div id="bento-removed-panel">
+  <div class="bell-section-label">Entfernte Kacheln</div>
+  <div id="bento-removed-list"></div>
+</div>
 
 <div class="bento-row">
 <!-- Rennstrecke card -->
@@ -3948,6 +3977,11 @@
   };
   const BENTO_LAYOUT_KEY = 'pomo_bento_layout_v1';
 
+  // Kacheln, die im Editor nie entfernbar sind (Ei-Box/Brutkasten + Rangliste,
+  // vom Nutzer explizit ausgenommen). Der Fokustimer (#timer-card) ist ohnehin
+  // nie Teil des Bento-Tile-Systems und braucht keine Sonderbehandlung hier.
+  const BENTO_NON_REMOVABLE = ['eggdeck', 'leaderboard'];
+
   function bentoDefaultRows() {
     return [
       [{ id: 'heatmap', flex: 1 }, { id: 'attention', flex: 1 }, { id: 'stats', flex: 1 }],
@@ -3958,7 +3992,10 @@
   }
 
   // height ist optional (Kachel-Höhe in px, per Resize-Ecke gesetzt) — fehlt/null
-  // bedeutet natürliche Höhe. Alte gespeicherte Layouts ohne height bleiben gültig.
+  // bedeutet natürliche Höhe. Validiert nur Form/Werte der rows-Struktur selbst
+  // (keine Kachel doppelt platziert) — ob JEDE Kachel irgendwo vorkommt (platziert
+  // ODER entfernt), prüft isValidBentoState(), da rows jetzt eine echte Teilmenge
+  // aller Kacheln sein darf (Rest steckt in state.removed).
   function isValidBentoRows(parsed) {
     if (!Array.isArray(parsed) || !parsed.length) return false;
     const seen = new Set();
@@ -3967,49 +4004,94 @@
       for (const e of row) {
         if (!e || !BENTO_TILE_META[e.id] || typeof e.flex !== 'number' || e.flex <= 0) return false;
         if (e.height != null && (typeof e.height !== 'number' || e.height <= 0)) return false;
+        if (seen.has(e.id)) return false;
         seen.add(e.id);
       }
     }
-    return seen.size === Object.keys(BENTO_TILE_META).length;
+    return true;
   }
 
-  function loadBentoLayout() {
+  // Vollständiger Zustand = rows (platzierte Kacheln) + removed (entfernte
+  // Kacheln). Jede der 7 BENTO_TILE_META-IDs muss GENAU EINMAL vorkommen —
+  // entweder in rows ODER in removed, nie beides, nie keins. eggdeck/leaderboard
+  // dürfen nie in removed stehen (BENTO_NON_REMOVABLE).
+  function isValidBentoState(state) {
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+    if (!isValidBentoRows(state.rows)) return false;
+    if (!Array.isArray(state.removed)) return false;
+
+    const placedIds = new Set();
+    state.rows.forEach(row => row.forEach(e => placedIds.add(e.id)));
+
+    const removedSet = new Set();
+    for (const id of state.removed) {
+      if (typeof id !== 'string' || !BENTO_TILE_META[id]) return false;
+      if (BENTO_NON_REMOVABLE.includes(id)) return false;
+      if (placedIds.has(id) || removedSet.has(id)) return false;
+      removedSet.add(id);
+    }
+
+    const allIds = Object.keys(BENTO_TILE_META);
+    if (placedIds.size + removedSet.size !== allIds.length) return false;
+    return allIds.every(id => placedIds.has(id) || removedSet.has(id));
+  }
+
+  function bentoDefaultState() {
+    return { rows: bentoDefaultRows(), removed: [] };
+  }
+
+  // Rückwärtskompatibel: ältere Installationen haben unter BENTO_LAYOUT_KEY ein
+  // bloßes rows-Array gespeichert (Format vor der "Kachel entfernen"-Funktion).
+  // Wird transparent in { rows, removed: [] } gehoben, bevor isValidBentoState prüft.
+  function normalizeBentoState(parsed) {
+    if (Array.isArray(parsed)) return { rows: parsed, removed: [] };
+    if (parsed && typeof parsed === 'object') return { rows: parsed.rows, removed: parsed.removed };
+    return null;
+  }
+
+  function loadBentoState() {
     try {
       const raw = localStorage.getItem(BENTO_LAYOUT_KEY);
-      if (!raw) return bentoDefaultRows();
-      const parsed = JSON.parse(raw);
-      return isValidBentoRows(parsed) ? parsed : bentoDefaultRows();
-    } catch { return bentoDefaultRows(); }
+      if (!raw) return bentoDefaultState();
+      const normalized = normalizeBentoState(JSON.parse(raw));
+      return isValidBentoState(normalized) ? normalized : bentoDefaultState();
+    } catch { return bentoDefaultState(); }
   }
 
-  function saveBentoLayout(rows) { localStorage.setItem(BENTO_LAYOUT_KEY, JSON.stringify(rows)); }
+  function saveBentoState(state) { localStorage.setItem(BENTO_LAYOUT_KEY, JSON.stringify(state)); }
 
   // Speichert lokal + (eingeloggt) serverseitig. saveEggProfile() ist ein
   // bereits bestehender generischer profiles-PATCH-Helper (id=eq.<uid>),
   // hier ohne Egg-Bezug wiederverwendet statt eigenen Fetch-Code zu schreiben.
-  function persistBentoLayout(rows) {
-    saveBentoLayout(rows);
-    if (currentUser) saveEggProfile({ bento_layout: rows });
+  // Gleiche Spalte profiles.bento_layout wie zuvor (JSONB, keine Migration
+  // nötig) — hält jetzt { rows, removed } statt bloß rows.
+  function persistBentoState(state) {
+    saveBentoState(state);
+    if (currentUser) saveEggProfile({ bento_layout: state });
   }
 
-  function bentoRowsEqual(a, b) {
-    const norm = rows => (rows || []).map(row => row.map(e => ({ id: e.id, flex: e.flex, height: e.height ?? null })));
+  function bentoStateEqual(a, b) {
+    const norm = state => ({
+      rows: (state?.rows || []).map(row => row.map(e => ({ id: e.id, flex: e.flex, height: e.height ?? null }))),
+      removed: [...(state?.removed || [])].sort(),
+    });
     return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
   }
 
   // Beim Login: Server gewinnt nur bei echter Diskrepanz (kein Auto-Push beim
   // bloßen Login, falls der Server noch nie etwas gespeichert hat — profile.bento_layout
   // ist dann null/undefined und wir rühren den lokalen Stand nicht an).
-  function reconcileBentoLayout(profile) {
+  function reconcileBentoState(profile) {
     if (!profile || profile.bento_layout == null) return;
-    if (!isValidBentoRows(profile.bento_layout)) return;
-    const localRows = loadBentoLayout();
-    if (bentoRowsEqual(profile.bento_layout, localRows)) return;
-    saveBentoLayout(profile.bento_layout);
-    applyCustomBentoLayout(profile.bento_layout);
+    const serverState = normalizeBentoState(profile.bento_layout);
+    if (!isValidBentoState(serverState)) return;
+    const localState = loadBentoState();
+    if (bentoStateEqual(serverState, localState)) return;
+    saveBentoState(serverState);
+    applyBentoState(serverState);
   }
 
-  // Verschiebt die 5 ECHTEN Kachel-Elemente (appendChild, kein Klonen) in frische
+  // Verschiebt die ECHTEN Kachel-Elemente (appendChild, kein Klonen) in frische
   // .bento-row-Wrapper. Rührt style.display der Kacheln selbst nicht an.
   function applyCustomBentoLayout(rows) {
     const oldRows = Array.from(document.querySelectorAll('.bento-row'));
@@ -4043,10 +4125,29 @@
     if (document.body.classList.contains('bento-edit-mode')) renderBentoEditGaps();
   }
 
+  // Orchestriert den vollen Zustand: parkt zuerst jede Kachel, die nicht in
+  // state.rows vorkommt, im permanenten Halte-Container (siehe #bento-removed-pool)
+  // — sicher, weil applyCustomBentoLayout() im Anschluss alle alten .bento-row-
+  // Wrapper komplett entfernt (inkl. allem, was noch darin hängt); ohne dieses
+  // Parken würde eine entfernte Kachel dabei nicht nur unsichtbar, sondern
+  // komplett aus dem DOM gelöscht (Inhalt-/Listener-Verlust).
+  function applyBentoState(state) {
+    const pool = document.getElementById('bento-removed-pool');
+    const placedIds = new Set();
+    state.rows.forEach(row => row.forEach(e => placedIds.add(e.id)));
+    Object.entries(BENTO_TILE_META).forEach(([tileId, meta]) => {
+      if (placedIds.has(tileId)) return;
+      const tileEl = document.getElementById(meta.elId);
+      if (tileEl && pool) pool.appendChild(tileEl);
+    });
+    applyCustomBentoLayout(state.rows);
+  }
+
   /* ── Bento Edit Mode: Drag/Resize direkt auf den echten Kacheln, kein Overlay ── */
   const BENTO_MIN_FLEX = 0.3;
   const BENTO_MIN_HEIGHT = 140;
-  let bentoEditRows = null;   // Arbeitskopie von loadBentoLayout(), nur während bento-edit-mode aktiv
+  let bentoEditRows = null;      // Arbeitskopie von loadBentoState().rows, nur während bento-edit-mode aktiv
+  let bentoEditRemoved = null;   // Arbeitskopie von loadBentoState().removed, nur während bento-edit-mode aktiv
   let bentoDrag = null;
   let bentoResize = null;
 
@@ -4085,6 +4186,18 @@
       handle.title = 'Ziehen zum Skalieren';
       handle.addEventListener('pointerdown', e => startBentoTileResize(e, tileId));
       tileEl.appendChild(handle);
+
+      // Entfernen-Button (✕) nur für Kacheln außerhalb BENTO_NON_REMOVABLE —
+      // oben rechts (Griff belegt oben links, Resize-Handle unten rechts).
+      if (!BENTO_NON_REMOVABLE.includes(tileId)) {
+        const removeBtn = document.createElement('div');
+        removeBtn.className = 'bento-edit-remove-btn';
+        removeBtn.dataset.tileId = tileId;
+        removeBtn.title = 'Kachel entfernen';
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', e => { e.stopPropagation(); removeBentoTile(tileId); });
+        tileEl.appendChild(removeBtn);
+      }
     });
   }
 
@@ -4113,6 +4226,21 @@
 
   function clearBentoHotStates() {
     document.querySelectorAll('.bento-edit-hot').forEach(el => el.classList.remove('bento-edit-hot'));
+  }
+
+  // Entfernt eine Kachel-ID aus rows (mutiert in-place: leere Zeilen werden
+  // entfernt) und gibt den entfernten Eintrag zurück, oder null falls nicht
+  // vorhanden. Gemeinsame Splice-Logik für Drag-Ende und Remove-Button.
+  function spliceOutOfBentoRows(rows, tileId) {
+    for (let r = rows.length - 1; r >= 0; r--) {
+      const idx = rows[r].findIndex(t => t.id === tileId);
+      if (idx !== -1) {
+        const entry = rows[r].splice(idx, 1)[0];
+        if (rows[r].length === 0) rows.splice(r, 1);
+        return entry;
+      }
+    }
+    return null;
   }
 
   /* ── Drag to reorder / regroup ── */
@@ -4163,11 +4291,7 @@
     clearBentoHotStates();
 
     const tileId = bentoDrag.tileId;
-    let removedEntry = null;
-    for (let r = bentoEditRows.length - 1; r >= 0; r--) {
-      const idx = bentoEditRows[r].findIndex(t => t.id === tileId);
-      if (idx !== -1) { removedEntry = bentoEditRows[r].splice(idx, 1)[0]; if (bentoEditRows[r].length === 0) bentoEditRows.splice(r, 1); break; }
-    }
+    let removedEntry = spliceOutOfBentoRows(bentoEditRows, tileId);
     if (!removedEntry) removedEntry = { id: tileId, flex: 1 };
     removedEntry.flex = 1; // height bleibt erhalten, nur die Breite wird beim Verschieben zurückgesetzt
 
@@ -4187,8 +4311,53 @@
       bentoEditRows.push([removedEntry]);
     }
     bentoDrag = null;
-    applyCustomBentoLayout(bentoEditRows);
-    persistBentoLayout(bentoEditRows);
+    applyBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+    persistBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+  }
+
+  // Entfernt eine Kachel dauerhaft aus dem sichtbaren Grid und parkt sie im
+  // Halte-Container (#bento-removed-pool) — sofort angewendet + persistiert,
+  // kein separater Speichern-Schritt (gleiches Muster wie Drag/Resize).
+  function removeBentoTile(tileId) {
+    if (BENTO_NON_REMOVABLE.includes(tileId)) return;
+    if (bentoEditRemoved.includes(tileId)) return;
+    spliceOutOfBentoRows(bentoEditRows, tileId);
+    bentoEditRemoved.push(tileId);
+    applyBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+    persistBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+    renderBentoRemovedList();
+  }
+
+  function restoreBentoTile(tileId) {
+    const idx = bentoEditRemoved.indexOf(tileId);
+    if (idx === -1) return;
+    bentoEditRemoved.splice(idx, 1);
+    bentoEditRows.push([{ id: tileId, flex: 1 }]); // eigene neue Zeile, analog Drag-Fallback ohne Drop-Ziel
+    applyBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+    persistBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+    renderBentoRemovedList();
+  }
+
+  // Rendert die schwebende Liste entfernter Kacheln (#bento-removed-panel).
+  // Sichtbarkeit ist CSS-getrieben (body.bento-edit-mode + .has-items), hier
+  // nur Inhalt + Toggle der .has-items-Klasse. Kein esc() nötig — icon/label
+  // sind statische, hartkodierte Werte aus BENTO_TILE_META, keine Nutzereingabe.
+  function renderBentoRemovedList() {
+    const panel = document.getElementById('bento-removed-panel');
+    const list = document.getElementById('bento-removed-list');
+    if (!panel || !list) return;
+    panel.classList.toggle('has-items', bentoEditRemoved.length > 0);
+    list.innerHTML = bentoEditRemoved.map(id => {
+      const meta = BENTO_TILE_META[id];
+      if (!meta) return '';
+      return `
+        <div class="bell-request-row">
+          <span>${meta.icon} ${meta.label}</span>
+          <button class="bell-req-accept bento-restore-btn" data-tile-id="${id}">Zurückholen</button>
+        </div>`;
+    }).join('');
+    list.querySelectorAll('.bento-restore-btn').forEach(btn =>
+      btn.addEventListener('click', () => restoreBentoTile(btn.dataset.tileId)));
   }
 
   /* ── Resize (Ecken-Handle): Breite ggü. rechtem Nachbar, Höhe frei ── */
@@ -4237,8 +4406,8 @@
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup', onUp);
       bentoResize = null;
-      applyCustomBentoLayout(bentoEditRows);
-      persistBentoLayout(bentoEditRows);
+      applyBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+      persistBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
     }
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup', onUp);
@@ -4255,10 +4424,13 @@
     document.getElementById('overlay')?.classList.remove('open');
     document.getElementById('gear-btn')?.classList.remove('open');
     if (focusModeOn) setFocusMode(false);
-    bentoEditRows = JSON.parse(JSON.stringify(loadBentoLayout()));
+    const state = JSON.parse(JSON.stringify(loadBentoState()));
+    bentoEditRows = state.rows;
+    bentoEditRemoved = state.removed;
     ensureBentoEditChromeInjected();
     document.body.classList.add('bento-edit-mode');
     renderBentoEditGaps();
+    renderBentoRemovedList(); // Liste beim Öffnen sofort befüllen
   }
 
   function exitBentoEditMode() {
@@ -5922,7 +6094,7 @@
     renderSetBonusSection(); // erneut rendern, jetzt mit geladenen Claims
     document.getElementById('attention-card').style.display = 'block';
     await loadAttentionChart();
-    reconcileBentoLayout(profile);
+    reconcileBentoState(profile);
   }
 
   function showMigrationPrompt(session, localDays) {
@@ -7580,7 +7752,7 @@
   initAutoBreaksSetting();
   initFocusIntervalSetting();
   initNewDesignSetting();
-  applyCustomBentoLayout(loadBentoLayout());
+  applyBentoState(loadBentoState());
   initBentoEditMode();
   initFocusMode();
   initChallengesCard();
