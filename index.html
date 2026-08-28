@@ -8796,7 +8796,7 @@
       actionHtml = `<button class="card-sell-btn" id="marketCancelBtn">Angebot zurückziehen</button>
         <div id="incomingOffersWrap"></div>`;
     } else if (canOffer) {
-      actionHtml = `<button class="card-sell-btn" id="tradeOfferBtn">Gegenangebot machen</button>`;
+      actionHtml = `<div id="tradeOfferActionWrap"></div>`;
     } else if (canList) {
       actionHtml = `
         ${canSell ? `
@@ -8871,11 +8871,7 @@
     }
 
     if (canOffer) {
-      document.getElementById('tradeOfferBtn').addEventListener('click', e => {
-        e.stopPropagation();
-        document.getElementById('cardViewOverlay').classList.remove('visible');
-        showTradeOfferPicker(market.listingId);
-      });
+      renderTradeOfferAction(market.listingId);
     }
 
     if (market?.isMine) {
@@ -8909,6 +8905,17 @@
       if (entry.count <= 0) eggDeck = eggDeck.filter(c => c.id !== cardId);
     }
     renderEggDeck(null, false);
+    // Server zieht bei einem Verkauf automatisch alle eigenen aktiven
+    // Angebote dieser Karte zurück (inkl. offener Gegenangebote darauf) —
+    // lokale Listen und die Glocke synchron nachziehen, statt auf den
+    // nächsten Poll zu warten.
+    cacheDel('pomo_market_cache');
+    myListings = myListings.filter(l => l.card_id !== cardId);
+    marketListings = marketListings.filter(l => !(l.card_id === cardId && l.seller_id === currentUser?.id));
+    renderMarketGrid();
+    fetchMyListings();
+    fetchMarketListings(true);
+    loadTradeNotifications();
     return true;
   }
   document.getElementById('cardViewOverlay')?.addEventListener('click', () => {
@@ -9057,7 +9064,7 @@
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        if (body.message === 'daily_offer_limit_reached') toast('Du kannst nur ein Gegenangebot pro Tag machen.');
+        if (body.message === 'offer_already_pending') toast('Du hast für dieses Angebot bereits ein Gegenangebot laufen.');
         else if (body.message === 'listing_not_available') toast('Angebot ist nicht mehr verfügbar');
         else if (body.message === 'card_not_available') toast('Eine gewählte Karte ist nicht verfügbar');
         else toast('Gegenangebot fehlgeschlagen');
@@ -9065,6 +9072,60 @@
       }
       return true;
     } catch(e) { console.error('create_trade_offer error:', e); return false; }
+  }
+
+  async function fetchMyPendingOfferForListing(listingId) {
+    if (!currentUser) return null;
+    try {
+      const token = await getValidToken();
+      const res = await fetch(
+        `${SB}/rest/v1/trade_offers?listing_id=eq.${listingId}&offerer_id=eq.${currentUser.id}&status=eq.pending&select=id&limit=1`,
+        { headers: authHeaders(token) }
+      );
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return rows[0] || null;
+    } catch(e) { console.warn('fetchMyPendingOfferForListing error:', e); return null; }
+  }
+
+  async function cancelTradeOffer(offerId) {
+    try {
+      const token = await getValidToken();
+      const res = await fetch(`${SB}/rest/v1/rpc/cancel_trade_offer`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ p_offer_id: offerId }),
+      });
+      if (!res.ok) { console.error('cancel_trade_offer error:', await res.text()); return false; }
+      return true;
+    } catch(e) { console.error('cancel_trade_offer error:', e); return false; }
+  }
+
+  // Zeigt je nach eigenem Angebotsstatus auf diesem Listing entweder
+  // "Gegenangebot machen" oder "Gegenangebot zurückziehen" — asynchron
+  // nachgeladen, analog renderIncomingOffers() auf der Verkäufer-Seite.
+  async function renderTradeOfferAction(listingId) {
+    const wrap = document.getElementById('tradeOfferActionWrap');
+    if (!wrap) return;
+    const myOffer = await fetchMyPendingOfferForListing(listingId);
+    if (!document.getElementById('tradeOfferActionWrap')) return; // Overlay inzwischen geschlossen
+    if (myOffer) {
+      wrap.innerHTML = `<button class="card-sell-btn" id="tradeOfferCancelBtn">Gegenangebot zurückziehen</button>`;
+      document.getElementById('tradeOfferCancelBtn').addEventListener('click', async e => {
+        e.stopPropagation();
+        e.target.disabled = true;
+        const ok = await cancelTradeOffer(myOffer.id);
+        if (ok) { toast('Gegenangebot zurückgezogen'); renderTradeOfferAction(listingId); }
+        else { toast('Konnte Gegenangebot nicht zurückziehen'); e.target.disabled = false; }
+      });
+    } else {
+      wrap.innerHTML = `<button class="card-sell-btn" id="tradeOfferBtn">Gegenangebot machen</button>`;
+      document.getElementById('tradeOfferBtn').addEventListener('click', e => {
+        e.stopPropagation();
+        document.getElementById('cardViewOverlay').classList.remove('visible');
+        showTradeOfferPicker(listingId);
+      });
+    }
   }
 
   function toggleEggDeck() {
