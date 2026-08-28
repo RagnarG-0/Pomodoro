@@ -2324,6 +2324,7 @@
 
   const KEY = 'pomo_heatmap_v3';
   const LABELS_KEY = 'pomo_labels_v1';
+  const CURRENT_LABEL_KEY = 'pomo_current_label_v1'; // zuletzt verwendetes Session-Label, geräte-lokal, übersteht Reload
   const CIRC = 2 * Math.PI * 68;
   const CIRC_RING = 2 * Math.PI * 72; // Ring-Radius 72 (dicker als der kleine Uhr-Radius 68) — Fokus-Modus UND normale Timer-Karte (Limitless-Doppel-Ring)
   const CIRC_RING_INNER = 2 * Math.PI * 56; // innerer Ring (Pausen-Fortschritt) des Limitless-Doppel-Rings
@@ -2344,7 +2345,7 @@
   let clanMinFocus = 1;
   let clanMaxFocus = 300;
 
-  let currentLabel = '';
+  let currentLabel = localStorage.getItem(CURRENT_LABEL_KEY) || '';
   let currentLabelStatsData = [];
   let currentStatsPeriod = 'alltime';
 
@@ -6524,6 +6525,7 @@
     const input = document.getElementById('session-label');
     const dropdown = document.getElementById('label-dropdown');
     const saveBtn = document.getElementById('label-save-btn');
+    input.value = currentLabel; // zuletzt verwendetes Label nach Reload wiederherstellen
 
     function showDropdown(filter) {
       const all = getStoredLabels();
@@ -6540,6 +6542,7 @@
           e.preventDefault(); // prevent blur before click
           input.value = opt.textContent;
           currentLabel = opt.textContent;
+          localStorage.setItem(CURRENT_LABEL_KEY, currentLabel);
           if (!running && remaining === totalSec && mode === 'work' && !limitless) { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
           dropdown.classList.remove('open');
           saveBtn.classList.add('saved');
@@ -6560,6 +6563,7 @@
     saveBtn.addEventListener('click', () => {
       const val = input.value.trim();
       currentLabel = val;
+      localStorage.setItem(CURRENT_LABEL_KEY, currentLabel);
       if (!running && remaining === totalSec && mode === 'work' && !limitless) { totalSec = getMin('work') * 60; remaining = totalSec; renderTimer(); }
       if (val) storeLabel(val);
       saveBtn.classList.add('saved');
@@ -7122,7 +7126,7 @@
       if (seen.has(l)) return false; seen.add(l); return true;
     });
     localStorage.setItem(LABELS_KEY, JSON.stringify(labels));
-    if (currentLabel === oldLabel) currentLabel = newLabel;
+    if (currentLabel === oldLabel) { currentLabel = newLabel; localStorage.setItem(CURRENT_LABEL_KEY, currentLabel); }
     const inp = document.getElementById('session-label');
     if (inp && inp.value.trim() === oldLabel) inp.value = newLabel;
   }

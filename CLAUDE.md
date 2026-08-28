@@ -242,6 +242,7 @@ Der 4-Uhr-Reset (oben) fängt den Fall „Laptop zu/Tab eingefroren über Nacht"
 | `pomo_settings_v1` | work/short/long/longafter Minuten | — |
 | `pomo_session` | Supabase Session (access+refresh token) | — |
 | `pomo_labels_v1` | Letzte 40 verwendete Labels (Array) | — |
+| `pomo_current_label_v1` | Zuletzt verwendetes Session-Label (Plain-String), geräte-lokal — übersteht Reload, `currentLabel`-Initialwert | — |
 | `pomo_display_unit` | 'pomodoros' \| 'time' | — |
 | `pomo_sound` | ausgewählter Sound-Key | — |
 | `pomo_lb_cache_<period>` | Leaderboard-Liste ohne Winner | 2–10 min |
