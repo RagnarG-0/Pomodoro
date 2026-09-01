@@ -5170,6 +5170,14 @@
     if (running && startedAt) tick(); // Re-calculate immediately so display snaps to correct value
     checkDayRollover(); // ggf. 4-Uhr-Grenze nachholen, die während des Backgrounds überschritten wurde
     if (currentUser) { drainPendingCredits(); drainPendingStashQueue(); drainPendingTimerState(); }
+    // Aufmerksamkeits-Chart hatte bisher GAR keinen Re-Sync außer beim
+    // Login — Sessions, die in einem anderen Tab/Gerät abgeschlossen
+    // wurden (nur DER "gewinnende" Tab bekommt den optimistischen Push,
+    // siehe completePomo()s Claim-Mutex), blieben in dieser Ansicht für
+    // immer unsichtbar, bis manuell neu geladen (Bugfix: Nutzer meldete
+    // fehlende Fokuszeiten ab einem bestimmten Zeitpunkt, obwohl die Daten
+    // korrekt in der DB standen).
+    if (currentUser) loadAttentionChart();
   });
 
   // 4-Uhr-Tagesgrenze-Watchdog: setzt sich nach 2h Inaktivität (kein
@@ -7201,12 +7209,28 @@
         toast('Konnte nicht gespeichert werden.');
       }
     });
+
+    // Periodischer Re-Sync, gleiches Muster wie das 60s-Leaderboard-Polling
+    // (index.html initLeaderboard()) — deckt den Fall ab, dass der Tab
+    // durchgehend sichtbar bleibt (kein visibilitychange-Event) während
+    // Sessions in einem anderen Tab/Gerät abgeschlossen werden.
+    setInterval(() => {
+      if (currentUser && !document.hidden) loadAttentionChart();
+    }, 60000);
   }
 
+  // Läuft sowohl beim Login (dann echtes Erstladen) als auch als stiller
+  // Re-Sync (visibilitychange, periodischer Poll, siehe initAttentionCard())
+  // — der Lade-/Fehler-Platzhalter ersetzt den Chart-Inhalt deshalb NUR beim
+  // allerersten Laden (lastAttentionSessions noch null), sonst bliebe bei
+  // jedem stillen Refresh kurz der ganze Chart weg (Flacker) bzw. ein
+  // vorübergehender Netzwerkfehler würde einen bereits korrekt angezeigten
+  // Chart grundlos durch eine Fehlermeldung ersetzen.
   async function loadAttentionChart() {
     const content = document.getElementById('attention-chart-content');
     if (!currentUser) return;
-    content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>';
+    const isFirstLoad = !lastAttentionSessions;
+    if (isFirstLoad) content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>';
     const token = await getValidToken();
     if (!token) return;
 
@@ -7224,7 +7248,7 @@
       renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, dateKeys);
       ensureAttentionChartResizeObserver();
     } catch(e) {
-      content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Konnte nicht geladen werden.</div>';
+      if (isFirstLoad) content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Konnte nicht geladen werden.</div>';
       console.warn('loadAttentionChart error:', e);
     }
   }
