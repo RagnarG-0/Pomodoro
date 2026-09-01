@@ -674,7 +674,7 @@
   .lb-wildcard {
     position: absolute;
     width: 2.7%; aspect-ratio: 5 / 7; /* schmaler & höher als die 7.5%-breiten runden Renn-Avatare */
-    transform: translate(-50%, -100%); /* Fuß der Karte steht auf dem Gebäude-Ankerpunkt */
+    transform: translate(-50%, -50%); /* Karte zentriert sich auf dem Gebäude-Ankerpunkt (Polygon-Schwerpunkt) */
     padding: 1.5px;
     border-radius: 5px; border: 0.75px solid var(--card-color, var(--accent));
     background:
@@ -5355,7 +5355,8 @@
   // Drei reale Hallenser Bibliotheken, als Gebäude im Streckenbild
   // abgebildet. `points` sind die Gebäude-Silhouetten (Prozent-Koordinaten
   // wie RACE_FIELDS) für die Hover-Hotspot-Kontur, `anchorPct` ist der
-  // Fußpunkt, an dem eine dort eingecheckte Wild Card "steht". Beides von
+  // geometrische Schwerpunkt des Polygons — dort zentriert sich eine dort
+  // eingecheckte Wild Card (`transform:translate(-50%,-50%)`). Beides von
   // Hand im Silhouetten-Editor (Rennstrecke/polygon-editor.html) nachgezogen
   // — bei einem Austausch des Streckenbilds dort neu kalibrieren.
   //
@@ -5367,15 +5368,15 @@
   // der beiden anderen Bibliotheken"-Check-in-Punkt.
   const LIBRARY_BUILDINGS = [
     {
-      key: 'steintor', name: 'Steintor', anchorPct: [23.12, 35.1],
+      key: 'steintor', name: 'Steintor', anchorPct: [32.19, 31.71],
       points: [[27.33,20.54],[42.85,24.68],[42.92,37.6],[36.95,43.91],[21.24,37.45],[21.34,24.4]],
     },
     {
-      key: 'neuwerk', name: 'Auswärts / zu Hause', anchorPct: [71.22, 46.38],
+      key: 'neuwerk', name: 'Auswärts / zu Hause', anchorPct: [78.11, 43.43],
       points: [[69.69,36.81],[73.89,33.2],[77.06,32.09],[82.91,34.25],[86.4,36.56],[86.37,51.27],[79.92,55],[69.5,50.25]],
     },
     {
-      key: 'juri', name: 'Juri', anchorPct: [46.59, 72.62],
+      key: 'juri', name: 'Juri', anchorPct: [57.25, 70.71],
       points: [[44.83,62.75],[52.25,59.75],[60.47,63.25],[61.58,62.75],[67.42,65.38],[67.67,68.88],[70.58,70],[71,75.75],[65.33,81.63],[58.5,78.88],[56.25,80.38],[44.58,74.13]],
     },
   ];
@@ -5617,8 +5618,8 @@
     </svg>`;
 
     // Wild Cards: eingecheckte Spieler nach Gebäude gruppiert (gleiches
-    // Gruppierungs-/Fächer-Prinzip wie die Renn-Avatare oben), am Fußpunkt
-    // (anchorPct) des jeweiligen Gebäudes platziert.
+    // Gruppierungs-/Fächer-Prinzip wie die Renn-Avatare oben), am Ankerpunkt
+    // (anchorPct, Polygon-Schwerpunkt) des jeweiligen Gebäudes platziert.
     const libGroups = new Map();
     (libraryCheckins || []).forEach(entry => {
       const b = LIBRARY_BUILDINGS.find(x => x.key === entry.library);
@@ -5632,7 +5633,7 @@
       const n = group.entries.length;
       const colors = LIBRARY_COLORS[group.building.key];
       group.entries.forEach((entry, i) => {
-        const d = i - (n - 1) / 2; // um den Fußpunkt zentriert gefächert
+        const d = i - (n - 1) / 2; // um den Ankerpunkt zentriert gefächert
         const x = group.building.anchorPct[0] + d * LIB_OFFSET_X;
         const y = group.building.anchorPct[1];
         const isMe = entry.name === userName;
