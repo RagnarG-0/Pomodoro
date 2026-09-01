@@ -3472,7 +3472,10 @@
     // nachgezogen, siehe „Aufmerksamkeits-Tracking".
     if (currentUser && minutes > 0 && lastAttentionSessions) {
       lastAttentionSessions.push({ date: key, duration_minutes: minutes, created_at: new Date().toISOString() });
-      if (lastAttentionDateKeys) renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, lastAttentionDateKeys);
+      // refreshedAttentionDateKeys() statt lastAttentionDateKeys direkt: bei
+      // seit gestern offenem Tab fehlte "heute" sonst in der beim Login
+      // gebauten, inzwischen veralteten Liste (Bugfix).
+      renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, refreshedAttentionDateKeys());
     }
   }
 
@@ -7147,6 +7150,21 @@
   let attentionChartResizeObserver = null;
   const ATTENTION_FROM_DATE = '2026-05-10'; // identisch zu loadBarChart()'s FROM_DATE
 
+  // Baut lastAttentionDateKeys frisch (statt die evtl. seit Login veraltete
+  // Liste weiterzuverwenden) und gibt sie zurück. Wichtig für Tabs, die über
+  // die 4-Uhr-Grenze hinweg offen bleiben: ohne das fehlte "heute" in der
+  // beim letzten Login gebauten Liste, und optimistisch nachgezogene
+  // Sessions/Tired-Klicks des neuen Tages hätten keine Spalte zum Rendern —
+  // renderAttentionChart()s byDate[key]-Guard verwirft sie dann still (Bug,
+  // gefunden weil heutige Fokuszeiten trotz vorhandener DB-Zeilen nicht im
+  // Chart auftauchten). Bewusst bei JEDEM optimistischen Update neu gebaut,
+  // nicht nur einmalig nach Erkennen eines Rollovers — minimal, robust,
+  // Kosten vernachlässigbar (paar hundert Tage Schleifendurchläufe).
+  function refreshedAttentionDateKeys() {
+    lastAttentionDateKeys = buildDateKeysSinceFromDate(ATTENTION_FROM_DATE);
+    return lastAttentionDateKeys;
+  }
+
   async function tryPostTiredEvent() {
     if (!currentUser) return null;
     const token = await getValidToken();
@@ -7174,7 +7192,10 @@
         toast('Erfasst.');
         if (lastAttentionTiredEvents) {
           lastAttentionTiredEvents.push(row);
-          if (lastAttentionDateKeys) renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, lastAttentionDateKeys);
+          // refreshedAttentionDateKeys() statt lastAttentionDateKeys direkt,
+          // siehe Kommentar bei der Definition (Bugfix: veraltete Liste bei
+          // seit gestern offenem Tab).
+          renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, refreshedAttentionDateKeys());
         }
       } else {
         toast('Konnte nicht gespeichert werden.');
