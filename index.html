@@ -638,12 +638,30 @@
     font-size: clamp(10px, 2vw, 16px); color: var(--text-muted);
   }
   .lb-race-car-me { filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
-  /* Farbiger Rand für die Top 3 der heutigen Rangliste (Gold/Silber/
-     Bronze) — Rang wird in renderRaceTrack() aus den bereits sortierten
-     Einträgen berechnet, gleiche Gleichstand-Logik wie renderLeaderboard(). */
-  .lb-race-rank-1 { border-color: #ffd700; }
-  .lb-race-rank-2 { border-color: #c0c0c0; }
-  .lb-race-rank-3 { border-color: #cd7f32; }
+  /* Farbiger Schimmer-Rand für die Top 3 der heutigen Rangliste (Gold/
+     Silber/Bronze) — Rang wird in renderRaceTrack() aus den bereits
+     sortierten Einträgen berechnet, gleiche Gleichstand-Logik wie
+     renderLeaderboard(). Gold-Ton identisch zum bestehenden „Tagessieger"-
+     Rand im Leaderboard-Card (#c9a227, siehe isYesterdayWinner).
+     Conic-Gradient statt Volltonfarbe simuliert den metallischen Glanz der
+     🥇🥈🥉-Emoji (dunklere Kante, helles Glanzlicht gegenüber) — als
+     Custom Property hinterlegt, damit sie sowohl auf dem <img>-Avatar als
+     auch auf dem 👤-Platzhalter-Div (eigene Füllfarbe) genutzt werden kann. */
+  .lb-race-rank-1 { --rank-gradient: conic-gradient(from 200deg, #8a6a12, #c9a227 25%, #f7e199 50%, #c9a227 75%, #8a6a12 100%); }
+  .lb-race-rank-2 { --rank-gradient: conic-gradient(from 200deg, #7a7a7a, #c0c0c0 25%, #f2f2f2 50%, #c0c0c0 75%, #7a7a7a 100%); }
+  .lb-race-rank-3 { --rank-gradient: conic-gradient(from 200deg, #5c3a1a, #8b5a2b 25%, #c98d55 50%, #8b5a2b 75%, #5c3a1a 100%); }
+  /* <img>-Avatar: das Bild selbst überdeckt den Innenbereich, der
+     transparente Rand lässt den Gradient nur im Rand-Ring durchscheinen. */
+  .lb-race-avatar.lb-race-rank-1, .lb-race-avatar.lb-race-rank-2, .lb-race-avatar.lb-race-rank-3 {
+    border-color: transparent; background: var(--rank-gradient) border-box;
+  }
+  /* 👤-Platzhalter-Div: zweiter Hintergrund-Layer (padding-box) erhält die
+     bisherige Füllfarbe var(--surface2) im Innenbereich, der Gradient
+     bleibt auf den Rand-Ring (border-box) beschränkt. */
+  .lb-race-avatar-placeholder.lb-race-rank-1, .lb-race-avatar-placeholder.lb-race-rank-2, .lb-race-avatar-placeholder.lb-race-rank-3 {
+    border-color: transparent;
+    background: linear-gradient(var(--surface2), var(--surface2)) padding-box, var(--rank-gradient) border-box;
+  }
   .lb-race-diamond {
     position: absolute; transform: translate(-50%, -50%);
     font-size: clamp(14px, 2.2vw, 22px);
