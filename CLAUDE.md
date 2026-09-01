@@ -22,6 +22,12 @@ Key:  sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj  (anon/public)
 
 Supabase CLI ist lokal installiert (Homebrew, `supabase/tap`) und mit diesem Projekt verlinkt (`supabase link`, Ref `cmbyzzfjzrhdxylopqkt`). Neue `.sql`-Dateien in `supabase/migrations/` werden direkt per `supabase db push` angewendet — kein manuelles Copy-Paste in den SQL-Editor mehr nötig (Stand 2026-07-29, davor wurden alle Migrationen manuell eingefügt). `supabase migration list` zeigt den Sync-Status (Local vs. Remote), `supabase db push --dry-run` previewt ohne Anwenden. Bei destruktiven/datenverändernden Migrationen (`DROP TABLE`/`DROP COLUMN`, Backfills auf bestehende Zeilen) vorher explizit gegenlesen lassen statt direkt zu pushen — additive Änderungen (neue Spalte/Funktion, Constraint-Fixes) können direkt gepusht werden.
 
+### Datenbank-Größe / pg_cron-Housekeeping
+
+Free-Tier-Limit: 0,5 GB Datenbankgröße. Stand 2026-09-01 (~121 Tage seit Start): ~49 MB Gesamtgröße, davon **`cron.job_run_details` allein ~32 MB (~65 %)** — das reine Ausführungs-Log von `pg_cron` (ein Eintrag pro Lauf von `reset-stale-work-sessions`/`daily-winners`, beide alle 5 Minuten), das die Extension nie automatisch aufräumt und das in keinerlei Verbindung zu App-Tabellen steht (keine FKs zu `pomodoro_sessions`/`study_days` o.ä.). Die eigentlichen App-Daten wuchsen zu diesem Zeitpunkt nur mit ~0,14 MB/Tag — bei linearer Fortschreibung würde allein `cron.job_run_details` das Limit-Wachstum dominieren, nicht die App-Nutzung.
+
+**`prune-cron-job-run-details`** (Migration `20260901010000_prune_cron_job_run_details.sql`, `pg_cron`, täglich `30 3 * * *`): löscht `cron.job_run_details`-Zeilen älter als 7 Tage (reicht zum Nachvollziehen eines aktuellen Cron-Problems). Analoges, bereits länger bestehendes Muster: **`cleanup-study-log`** (nicht per Migrationsdatei im Repo dokumentiert, direkt in Supabase eingerichtet, stündlich `0 * * * *`) löscht `study_days_log`-Zeilen älter als 48h (das Audit-Log des `study_days_audit`-Triggers, siehe „Admin" → Lernzeit-Korrektur).
+
 ### Tabellen
 
 | Tabelle | Inhalt |
