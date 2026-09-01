@@ -7641,6 +7641,20 @@
     return 20;
   }
 
+  // Lineare RGB-Interpolation zwischen zwei Hex-Farben, t ∈ [0,1].
+  function lerpHexColor(hexA, hexB, t) {
+    const a = [1, 3, 5].map(i => parseInt(hexA.slice(i, i + 2), 16));
+    const b = [1, 3, 5].map(i => parseInt(hexB.slice(i, i + 2), 16));
+    const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+  // Rot-Verlauf fürs Risiko-Histogramm: hell (niedriges Risiko) bis dunkel
+  // (hohes Risiko) — Tailwind red-100 -> red-900 als angenehm lesbarer,
+  // durchgängig roter Verlauf (kein Umweg über Grau-/Orangetöne).
+  function riskBarColor(t) {
+    return lerpHexColor('#fee2e2', '#7f1d1d', t);
+  }
+
   function renderAttentionRiskHistogram(tiredEvents) {
     const container = document.getElementById('attention-histogram-content');
     if (!container) return;
@@ -7705,11 +7719,18 @@
       const y = yForRisk(b.risk);
       const h = axisY - y;
       const x = leftPad + b.i * binW + gap / 2;
-      // Balken innerhalb eines erkannten Risiko-Intervalls kräftig rot,
-      // außerhalb gedämpft (fill-opacity statt color-mix — breiter
-      // Browser-Support in SVG-Präsentationsattributen).
-      const opacity = isInRiskInterval(b.center) ? 1 : 0.22;
-      barsHtml += `<rect x="${x.toFixed(2)}" y="${y.toFixed(1)}" width="${barW.toFixed(2)}" height="${Math.max(h,0).toFixed(1)}" fill="#dc2626" fill-opacity="${opacity}" rx="1.5"><title>${fmtClockFromDecimalHour(b.center/60)} · ${b.risk.toFixed(2)}× Ø-Risiko</title></rect>`;
+      // Balkenfarbe verdunkelt sich kontinuierlich mit dem Risikowert (hell
+      // = niedriges, dunkel = hohes relatives Risiko) — Skala an axisMax
+      // gekoppelt, deckt sich also direkt mit der Balkenhöhe (ein Balken
+      // ganz oben an der Achse ist immer auch der dunkelste). Die
+      // KDE-Intervall-Zugehörigkeit (statistisch erkanntes Risiko-Fenster)
+      // ist davon unabhängig und wird stattdessen über einen dünnen
+      // Rahmen markiert, statt wie vorher über fill-opacity — sonst würde
+      // die Abdunklung bei „außerhalb"-Balken kaum noch sichtbar sein.
+      const t = Math.max(0, Math.min(1, b.risk / axisMax));
+      const fill = riskBarColor(t);
+      const strokeAttr = isInRiskInterval(b.center) ? ' stroke="#450a0a" stroke-width="0.6"' : '';
+      barsHtml += `<rect x="${x.toFixed(2)}" y="${y.toFixed(1)}" width="${barW.toFixed(2)}" height="${Math.max(h,0).toFixed(1)}" fill="${fill}"${strokeAttr} rx="1.5"><title>${fmtClockFromDecimalHour(b.center/60)} · ${b.risk.toFixed(2)}× Ø-Risiko${isInRiskInterval(b.center) ? ' · Risiko-Intervall' : ''}</title></rect>`;
     });
 
     // Risiko-Y-Gitterlinien (0×/1×/2×/… je nach axisStep) + hervorgehobene
@@ -7755,10 +7776,10 @@
       <svg viewBox="0 0 ${svgW} ${svgH2}" style="width:100%;height:${svgH2}px;display:block;">${grid}${barsHtml}${clusterHtml}</svg>
       <div style="display:flex;flex-wrap:wrap;margin-top:4px;padding:0 2px;">
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
-          <span style="width:8px;height:8px;border-radius:2px;background:#dc2626;flex-shrink:0;"></span>Risiko-Intervall (KDE)
+          <span style="width:24px;height:8px;border-radius:2px;background:linear-gradient(90deg,#fee2e2,#7f1d1d);flex-shrink:0;"></span>Risiko (hell→dunkel)
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
-          <span style="width:8px;height:8px;border-radius:2px;background:#dc2626;opacity:0.22;flex-shrink:0;"></span>außerhalb
+          <span style="width:8px;height:8px;border-radius:2px;background:#dc2626;border:1px solid #450a0a;flex-shrink:0;"></span>Risiko-Intervall (KDE)
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
           <span style="width:10px;height:3px;border-radius:2px;background:#64b5f6;flex-shrink:0;"></span>DBSCAN-Cluster
