@@ -105,10 +105,13 @@
 <script>
 (function () {
   const COLORS = { steintor: '#d9483c', neuwerk: '#d1a13c', juri: '#3ba8c4' };
+  // Synchron zu LIBRARY_BUILDINGS in index.html gehalten — "Zurücksetzen"
+  // im Tool geht damit auf den aktuellen Live-Stand, nicht auf die
+  // allererste grobe Schätzung.
   const DEFAULTS = {
-    steintor: { name: 'Steintor', anchorPct: [32, 47], points: [[22,21],[43,20],[44,34],[41,47],[23,47],[20,29]] },
-    neuwerk:  { name: 'Neuwerk',  anchorPct: [77, 58], points: [[68,31],[84,30],[85,44],[82,58],[71,57],[68,42]] },
-    juri:     { name: 'Juri',     anchorPct: [57, 80], points: [[46,59],[66,57],[69,66],[68,80],[50,81],[45,70]] },
+    steintor: { name: 'Steintor', anchorPct: [23.12, 35.1], points: [[27.33,20.54],[42.85,24.68],[42.92,37.6],[36.95,43.91],[21.24,37.45],[21.34,24.4]] },
+    neuwerk:  { name: 'Auswärts / zu Hause', anchorPct: [71.22, 46.38], points: [[69.69,36.81],[73.89,33.2],[77.06,32.09],[82.91,34.25],[86.4,36.56],[86.37,51.27],[79.92,55],[69.5,50.25]] },
+    juri:     { name: 'Juri', anchorPct: [46.59, 72.62], points: [[44.83,62.75],[52.25,59.75],[60.47,63.25],[61.58,62.75],[67.42,65.38],[67.67,68.88],[70.58,70],[71,75.75],[65.33,81.63],[58.5,78.88],[56.25,80.38],[44.58,74.13]] },
   };
   const ORDER = ['steintor', 'neuwerk', 'juri'];
 

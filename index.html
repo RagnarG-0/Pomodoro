@@ -5358,13 +5358,20 @@
   // Fußpunkt, an dem eine dort eingecheckte Wild Card "steht". Beides von
   // Hand im Silhouetten-Editor (Rennstrecke/polygon-editor.html) nachgezogen
   // — bei einem Austausch des Streckenbilds dort neu kalibrieren.
+  //
+  // `key: 'neuwerk'` bleibt bewusst unverändert (DB-Wert in
+  // profiles.library_checkin, CHECK-Constraint, Migration
+  // 20260901000000_library_checkin.sql) — nur die Anzeige (`name`) wurde
+  // umfunktioniert, da die reale Neuwerk-Bibliothek im Sommer geschlossen
+  // ist. Das Gebäude im Bild dient jetzt als generischer "nicht in einer
+  // der beiden anderen Bibliotheken"-Check-in-Punkt.
   const LIBRARY_BUILDINGS = [
     {
       key: 'steintor', name: 'Steintor', anchorPct: [23.12, 35.1],
       points: [[27.33,20.54],[42.85,24.68],[42.92,37.6],[36.95,43.91],[21.24,37.45],[21.34,24.4]],
     },
     {
-      key: 'neuwerk', name: 'Neuwerk', anchorPct: [71.22, 46.38],
+      key: 'neuwerk', name: 'Auswärts / zu Hause', anchorPct: [71.22, 46.38],
       points: [[69.69,36.81],[73.89,33.2],[77.06,32.09],[82.91,34.25],[86.4,36.56],[86.37,51.27],[79.92,55],[69.5,50.25]],
     },
     {
