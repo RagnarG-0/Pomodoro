@@ -650,6 +650,54 @@
     50%      { transform: translate(-50%, -50%) scale(1.15); }
   }
 
+  /* Bibliotheks-Check-in: Hover-Hotspots + Wild Cards auf den drei
+     Gebäuden im Streckenbild (siehe LIBRARY_BUILDINGS). */
+  .lb-library-hover-layer {
+    position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+  }
+  .lb-library-hotspot {
+    fill: transparent; stroke: transparent; stroke-width: 0.6;
+    vector-effect: non-scaling-stroke; /* konstante Randstärke unabhängig von der Kachelbreite */
+    pointer-events: all; cursor: pointer;
+    transition: stroke 0.15s ease, filter 0.15s ease;
+  }
+  .lb-library-hotspot:hover,
+  .lb-library-hotspot.lb-library-mine {
+    stroke: #fff;
+    filter: drop-shadow(0 0 5px rgba(255,255,255,0.85));
+  }
+  .lb-library-hotspot.lb-library-mine { stroke-width: 0.9; }
+
+  /* Wild Card: rechteckige, kleinere Panini-Sticker-Karte — Gegenstück zu
+     .lb-race-avatar, aber bewusst NICHT rund, damit beides klar
+     unterscheidbar bleibt. */
+  .lb-wildcard {
+    position: absolute;
+    width: 5.4%; aspect-ratio: 5 / 7; /* schmaler & höher als die 7.5%-breiten runden Renn-Avatare */
+    transform: translate(-50%, -100%); /* Fuß der Karte steht auf dem Gebäude-Ankerpunkt */
+    display: flex; flex-direction: column; padding: 3px; gap: 2px;
+    border-radius: 5px; border: 1.5px solid var(--card-color, var(--accent));
+    background:
+      linear-gradient(115deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 24%, rgba(255,255,255,0) 76%, rgba(255,255,255,0.25) 100%),
+      linear-gradient(160deg, var(--card-bg, #1b1b1d), #000);
+    box-shadow: 0 0 6px var(--card-color, var(--accent)), 0 2px 5px rgba(0,0,0,0.4);
+    cursor: default;
+  }
+  .lb-wildcard-photo {
+    flex: 1 1 auto; min-height: 0; border-radius: 3px; overflow: hidden;
+    background: var(--surface2); display: flex; align-items: center; justify-content: center;
+  }
+  .lb-wildcard-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .lb-wildcard-placeholder { font-size: clamp(9px, 1.6vw, 14px); color: var(--text-muted); }
+  .lb-wildcard-name {
+    font-family: -apple-system, sans-serif; font-size: clamp(6px, 1vw, 9px); font-weight: 700;
+    color: #fff; text-align: center; letter-spacing: 0.02em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    padding: 1.5px 2px; border-radius: 2px; flex: none;
+    background: var(--card-color, var(--accent));
+  }
+  .lb-wildcard-me { box-shadow: 0 0 0 2px #fff, 0 0 10px var(--accent), 0 2px 5px rgba(0,0,0,0.4); }
+
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
   #balloon-layer { position: fixed; inset: 0; pointer-events: none; z-index: 150; overflow: hidden; }
   .balloon {
@@ -5311,6 +5359,36 @@
   ]; // 5 Diamanten in kleiner Fächer-Anordnung um RACE_FINISH_POS (Prozentpunkte)
   const RACE_CAR_COUNT      = 8;
 
+  // ─── Bibliotheks-Check-in (Wild Cards) ────────────────────────────────
+  // Drei reale Hallenser Bibliotheken, als Gebäude im Streckenbild
+  // abgebildet. `points` sind grobe Sechseck-Silhouetten (Prozent-
+  // Koordinaten wie RACE_FIELDS) für die Hover-Hotspot-Kontur, `anchorPct`
+  // ist der Fußpunkt, an dem eine dort eingecheckte Wild Card "steht".
+  // Beides wurde per Sichtprüfung im Browser kalibriert (gleiche Methodik
+  // wie RACE_FIELDS) — bei einem Austausch des Streckenbilds neu vermessen.
+  const LIBRARY_BUILDINGS = [
+    {
+      key: 'steintor', name: 'Steintor', anchorPct: [32, 47],
+      points: [[22,21],[43,20],[44,34],[41,47],[23,47],[20,29]],
+    },
+    {
+      key: 'neuwerk', name: 'Neuwerk', anchorPct: [77, 58],
+      points: [[68,31],[84,30],[85,44],[82,58],[71,57],[68,42]],
+    },
+    {
+      key: 'juri', name: 'Juri', anchorPct: [57, 80],
+      points: [[46,59],[66,57],[69,66],[68,80],[50,81],[45,70]],
+    },
+  ];
+  // Farbcodierung pro Gebäude, gleiches --card-color/--card-bg-Idiom wie
+  // .deck-card (EGG_RARITIES) — macht auf einen Blick erkennbar, welche
+  // Wild Card zu welchem Gebäude gehört.
+  const LIBRARY_COLORS = {
+    steintor: { color: '#d9483c', bg: '#241210' }, // rotes Backsteingebäude
+    neuwerk:  { color: '#d1a13c', bg: '#241a05' }, // ockerfarbenes Türmchengebäude
+    juri:     { color: '#3ba8c4', bg: '#06232a' }, // moderner Glas-/Betonbau
+  };
+
   // Aktuell ungenutzt (Rennstrecke zeigt seit 2026-08-05 Profilbilder statt
   // Auto-Icons, da 8 Designs bei vielen Nutzern nicht mehr eindeutig sind) —
   // Funktion und race_car_id-Zuweisung bleiben bestehen für eine mögliche
@@ -5345,6 +5423,32 @@
     } catch(e) { console.warn('loadRaceCheckpointStatus error', e); }
   }
 
+  // Eigener Bibliotheks-Check-in von HEUTE, oder null. Wird beim Login aus
+  // dem Profil entpackt (nur übernommen, falls library_checkin_date ===
+  // todayKey(), siehe onLoginSuccess()) und danach optimistisch von
+  // setLibraryCheckin() gepflegt.
+  let userLibraryCheckin = null; // 'steintor' | 'neuwerk' | 'juri' | null
+
+  // Alle heute eingecheckten Clan-Mitglieder (inkl. eigenem Eintrag),
+  // Ergebnis von get_library_checkins(). Immer live geladen (kein
+  // localStorage-Cache, analog loadRaceCheckpointStatus()).
+  let libraryCheckins = []; // [{ name, avatar_url, library }]
+
+  async function loadLibraryCheckins() {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/rpc/get_library_checkins`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      libraryCheckins = Array.isArray(rows) ? rows : [];
+    } catch(e) { console.warn('loadLibraryCheckins error', e); }
+  }
+
   // Lädt die heutigen Rangliste-Daten unabhängig vom aktuell in der
   // Ranglisten-Kachel ausgewählten Zeitraum-Tab — die Rennstrecke ist eine
   // eigenständige Kachel und zeigt immer die heutigen Positionen live.
@@ -5353,7 +5457,7 @@
     const cacheKey = 'pomo_lb_cache_today';
     if (!forceRefresh) {
       const cached = cacheGet(cacheKey, CACHE_TTL_LB.today);
-      if (cached) { await loadRaceCheckpointStatus(); sweepRaceCheckpoints(); renderRaceTrack(cached.list); return; }
+      if (cached) { await loadRaceCheckpointStatus(); await loadLibraryCheckins(); sweepRaceCheckpoints(); renderRaceTrack(cached.list); return; }
     }
     try {
       const token = await getValidToken() || SUPABASE_ANON_KEY;
@@ -5366,6 +5470,7 @@
       const list = await res.json();
       cacheSet(cacheKey, { list });
       await loadRaceCheckpointStatus();
+      await loadLibraryCheckins();
       sweepRaceCheckpoints();
       renderRaceTrack(list);
     } catch(e) { console.warn('loadRaceTrackData error', e); }
@@ -5485,8 +5590,53 @@
       });
     }
 
+    // Bibliotheks-Hover-Hotspots: eine SVG-Ebene mit einem <polygon> pro
+    // Gebäude. viewBox 0 0 100 100 + preserveAspectRatio="none" bildet die
+    // Prozent-Punkte 1:1 auf die tatsächliche (nicht-quadratische) Fläche
+    // von #lb-racetrack ab — exakt wie die left:X%/top:Y%-Positionierung
+    // der übrigen Overlay-Elemente hier, nur als Polygon statt Punkt.
+    const libraryHoverHtml = `<svg class="lb-library-hover-layer" viewBox="0 0 100 100" preserveAspectRatio="none">
+      ${LIBRARY_BUILDINGS.map(b => {
+        const mineClass = b.key === userLibraryCheckin ? ' lb-library-mine' : '';
+        return `<polygon data-library="${b.key}" class="lb-library-hotspot${mineClass}" points="${b.points.map(p => p.join(',')).join(' ')}"><title>${esc(b.name)}</title></polygon>`;
+      }).join('')}
+    </svg>`;
+
+    // Wild Cards: eingecheckte Spieler nach Gebäude gruppiert (gleiches
+    // Gruppierungs-/Fächer-Prinzip wie die Renn-Avatare oben), am Fußpunkt
+    // (anchorPct) des jeweiligen Gebäudes platziert.
+    const libGroups = new Map();
+    (libraryCheckins || []).forEach(entry => {
+      const b = LIBRARY_BUILDINGS.find(x => x.key === entry.library);
+      if (!b) return;
+      if (!libGroups.has(b.key)) libGroups.set(b.key, { building: b, entries: [] });
+      libGroups.get(b.key).entries.push(entry);
+    });
+    const LIB_OFFSET_X = 3.6; // Prozentpunkte Versatz pro zusätzlicher Karte
+    let wildCardsHtml = '';
+    libGroups.forEach(group => {
+      const n = group.entries.length;
+      const colors = LIBRARY_COLORS[group.building.key];
+      group.entries.forEach((entry, i) => {
+        const d = i - (n - 1) / 2; // um den Fußpunkt zentriert gefächert
+        const x = group.building.anchorPct[0] + d * LIB_OFFSET_X;
+        const y = group.building.anchorPct[1];
+        const isMe = entry.name === userName;
+        const safeAvatar = safeAvatarUrl(entry.avatar_url);
+        const meClass = isMe ? ' lb-wildcard-me' : '';
+        const styleAttr = `left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;z-index:${40 + i};--card-color:${colors.color};--card-bg:${colors.bg};`;
+        const titleAttr = `${esc(entry.name)} · ${esc(group.building.name)}`;
+        wildCardsHtml += `<div class="lb-wildcard${meClass}" style="${styleAttr}" title="${titleAttr}">
+          <div class="lb-wildcard-photo">${safeAvatar
+            ? `<img src="${esc(safeAvatar)}" alt="" onerror="this.style.display='none'">`
+            : `<span class="lb-wildcard-placeholder">👤</span>`}</div>
+          <div class="lb-wildcard-name">${esc(entry.name)}</div>
+        </div>`;
+      });
+    });
+
     wrap.style.display = 'block';
-    wrap.innerHTML = `<img src="${encodeURI(`${CDN}/Rennstrecke/strecke.png`)}" class="lb-racetrack-img" alt="Rennstrecke">${diamondsHtml}${carsHtml}`;
+    wrap.innerHTML = `<img src="${encodeURI(`${CDN}/Rennstrecke/strecke.png`)}" class="lb-racetrack-img" alt="Rennstrecke">${libraryHoverHtml}${diamondsHtml}${carsHtml}${wildCardsHtml}`;
   }
 
   let lbPeriod = 'alltime';
@@ -5706,6 +5856,20 @@
       setLeaderboardVisibility(true);
       loadLeaderboard(lbPeriod);
       loadRaceTrackData();
+    }
+
+    // Bibliotheks-Check-in: EINMAL auf den persistenten #lb-racetrack-Knoten
+    // gebunden (nicht auf ein Kind!), da renderRaceTrack() bei jedem Aufruf
+    // wrap.innerHTML komplett neu baut — Event-Delegation via closest()
+    // überlebt das. initLeaderboard() wird bei jedem Login neu aufgerufen
+    // (siehe Kommentar bei den Tab-Click-Handlern unten) — mehrfaches Binden
+    // ist hier harmlos, da setLibraryCheckin() ein idempotenter Toggle ist.
+    const trackWrap = document.getElementById('lb-racetrack');
+    if (trackWrap) {
+      trackWrap.addEventListener('click', (e) => {
+        const hotspot = e.target.closest('[data-library]');
+        if (hotspot) setLibraryCheckin(hotspot.dataset.library);
+      });
     }
 
     // Period tabs
@@ -6016,6 +6180,14 @@
       secondIncubatorUnlocked = !!profile.second_incubator_purchased;
       userRaceCarId = profile.race_car_id || null;
       ensureRaceCarAssigned(); // fire-and-forget, blockiert den Login-Flow nicht
+      // Nur übernehmen, wenn der Check-in von HEUTE ist (Berlin, 4-Uhr-Grenze)
+      // — ein Wert von gestern bleibt in der DB stehen (kein Reset-Cron,
+      // get_library_checkins() filtert serverseitig ohnehin nach Datum),
+      // wird hier aber lokal ignoriert, damit die eigene Wild Card nicht
+      // kurz veraltet aufscheint, bevor der erste loadLibraryCheckins()
+      // durch ist.
+      userLibraryCheckin = (profile.library_checkin && profile.library_checkin_date === todayKey())
+        ? profile.library_checkin : null;
       if (profile.eggs) eggsFromProfileString(profile.eggs);
       renderEggDiamonds(); renderInventory();
       displayUnit = profile.display_unit || 'pomodoros';
@@ -9445,6 +9617,32 @@
     const carId = 1 + Math.floor(Math.random() * RACE_CAR_COUNT);
     userRaceCarId = carId;
     await saveEggProfile({ race_car_id: carId });
+  }
+
+  // Bibliotheks-Check-in: direkter Klick-Toggle ohne Zwischenbestätigung
+  // (nicht-destruktive, jederzeit änderbare Aktion). Klick auf das aktuell
+  // gewählte Gebäude hebt den Check-in auf, Klick auf ein anderes Gebäude
+  // verschiebt die eigene Wild Card dorthin. Optimistisches lokales Update +
+  // Re-Render, danach fire-and-forget PATCH — kein Rollback bei Fehlschlag
+  // (rein kosmetisches Feature, gleiches Risikoprofil wie andere
+  // saveEggProfile()-Aufrufe im Projekt).
+  async function setLibraryCheckin(key) {
+    if (!currentUser || !userName) return;
+    const building = LIBRARY_BUILDINGS.find(b => b.key === key);
+    if (!building) return;
+
+    const newVal = (userLibraryCheckin === key) ? null : key;
+    userLibraryCheckin = newVal;
+    libraryCheckins = libraryCheckins.filter(e => e.name !== userName);
+    if (newVal) libraryCheckins.push({ name: userName, avatar_url: avatarUrl, library: newVal });
+    renderRaceTrack(lastLeaderboardData);
+
+    await saveEggProfile({
+      library_checkin: newVal,
+      library_checkin_date: newVal ? todayKey() : null,
+    });
+
+    toast(newVal ? `Eingecheckt in der Bibliothek ${building.name}!` : `Check-in in der Bibliothek ${building.name} aufgehoben.`);
   }
 
   // Level-Up Ei vergeben
