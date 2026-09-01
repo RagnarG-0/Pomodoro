@@ -7285,9 +7285,16 @@
   // Intervall-Konvention (KDE wie DBSCAN): {start, end} in Minuten seit
   // 4:00; end < start bedeutet, das Intervall wraps über die 4-Uhr-Grenze.
   const ATTENTION_PERIOD_MIN = 1440;                // 24h, Periodizität für alle Wrap-around-Berechnungen
-  const ATTENTION_KDE_BANDWIDTH_OVERRIDE_MIN = null; // null = automatisch (Silverman's Rule); Zahl = manueller Override
+  // Silverman's Rule glättet bei der tatsächlichen Datenmenge (kleines n,
+  // mehrgipflige Verteilung) nachweislich zu stark (getestet mit 34 echten
+  // Tired-Klicks: Silverman-Default landete bei ~90 min und verschmolz alle
+  // Peaks zu einem Klumpen) — 8/12/15 min gegen die echten Daten verglichen,
+  // 12 min als bester Kompromiss (erkennbare, saubere Peak-Struktur, nicht
+  // übermäßig verrauscht wie bei 8, nicht übermäßig verschmiert wie bei 15)
+  // gewählt. Jederzeit hier direkt nachjustierbar.
+  const ATTENTION_KDE_BANDWIDTH_OVERRIDE_MIN = 12;   // null = automatisch (Silverman's Rule); Zahl = manueller Override
   const ATTENTION_KDE_GRID_STEP_MIN = 5;             // Auflösung der KDE-Auswertung (288 Punkte über 24h)
-  const ATTENTION_HISTOGRAM_BIN_MIN = 30;            // Balkenbreite im Risiko-Histogramm
+  const ATTENTION_HISTOGRAM_BIN_MIN = 15;            // Balkenbreite im Risiko-Histogramm
   const ATTENTION_PEAK_MIN_HEIGHT_FRACTION = 0.15;   // Peak muss ≥ 15% der globalen Maximaldichte sein (Rausch-Filter)
   const ATTENTION_INTERVAL_THRESHOLD_FRACTION = 0.5; // Intervallgrenze = 50% der jeweiligen Peak-Höhe (Halbwertsbreite)
   const ATTENTION_DBSCAN_EPS_MIN = 25;               // zirkulärer Distanz-Schwellenwert
@@ -7624,6 +7631,16 @@
   // mitaufgerufen — läuft dadurch bei jedem bestehenden Aufrufer automatisch
   // mit (Login, ResizeObserver, optimistisches Update nach Tired-Klick/
   // Timer-Ende), ohne dass diese Stellen einzeln angefasst werden müssen.
+  // "Schöne" Schrittweite für die Risiko-Y-Achse, sodass bei jedem
+  // Maximalwert ca. 4-6 Gitterlinien entstehen (analog zum Intervall-
+  // Auswahl-Prinzip von NICE_INTERVALS, nur für die Risiko-Skala statt für
+  // Tage-Abstände).
+  function niceAxisStep(maxVal) {
+    const steps = [0.5, 1, 2, 3, 5, 10, 20];
+    for (const s of steps) { if (maxVal / s <= 6) return s; }
+    return 20;
+  }
+
   function renderAttentionRiskHistogram(tiredEvents) {
     const container = document.getElementById('attention-histogram-content');
     if (!container) return;
@@ -7662,29 +7679,54 @@
     const gap = binW <= 4 ? 0 : Math.min(2, binW * 0.15);
     const barW = Math.max(0.75, binW - gap);
 
+    // Relatives Risiko statt Peak-Normierung: die Dichte einer perfekten
+    // Gleichverteilung über 24h wäre konstant 1/ATTENTION_PERIOD_MIN, also
+    // ist density*ATTENTION_PERIOD_MIN exakt der Faktor gegenüber dem
+    // Tagesdurchschnitt (1.0 = durchschnittliches Risiko). Deutlich
+    // aussagekräftiger als "Anteil vom höchsten Balken", das JEDEN Datensatz
+    // unabhängig vom tatsächlichen Risikoniveau bis 100% ausreizt.
     const bins = [];
     for (let i = 0; i < nBins; i++) {
       const center = i * ATTENTION_HISTOGRAM_BIN_MIN + ATTENTION_HISTOGRAM_BIN_MIN / 2;
-      bins.push({ i, center, density: circularGaussianKdeDensity(center, tiredMinutes, kde.bandwidth) });
+      const density = circularGaussianKdeDensity(center, tiredMinutes, kde.bandwidth);
+      bins.push({ i, center, risk: density * ATTENTION_PERIOD_MIN });
     }
-    const maxBinDensity = Math.max(1e-9, ...bins.map(b => b.density));
+    // Untergrenze 1 statt 0, damit die Achse auch bei durchgehend
+    // unterdurchschnittlichem Risiko (kleines maxRisk) die Ø-Linie noch
+    // sinnvoll mit anzeigt, statt sie ggf. über den sichtbaren Bereich
+    // hinauszuschieben.
+    const maxRisk = Math.max(1, ...bins.map(b => b.risk));
+    const axisStep = niceAxisStep(maxRisk);
+    const axisMax = Math.ceil(maxRisk / axisStep) * axisStep;
+    const yForRisk = r => axisY - (r / axisMax) * chartH;
 
     let barsHtml = '';
     bins.forEach(b => {
-      const relHeight = b.density / maxBinDensity; // 0..1, nur für die Anzeige normiert
-      const h = relHeight * chartH;
+      const y = yForRisk(b.risk);
+      const h = axisY - y;
       const x = leftPad + b.i * binW + gap / 2;
-      const y = axisY - h;
       // Balken innerhalb eines erkannten Risiko-Intervalls kräftig rot,
       // außerhalb gedämpft (fill-opacity statt color-mix — breiter
       // Browser-Support in SVG-Präsentationsattributen).
       const opacity = isInRiskInterval(b.center) ? 1 : 0.22;
-      barsHtml += `<rect x="${x.toFixed(2)}" y="${y.toFixed(1)}" width="${barW.toFixed(2)}" height="${Math.max(h,0).toFixed(1)}" fill="#dc2626" fill-opacity="${opacity}" rx="1.5"><title>${fmtClockFromDecimalHour(b.center/60)} · relative Dichte ${(relHeight*100).toFixed(0)}%</title></rect>`;
+      barsHtml += `<rect x="${x.toFixed(2)}" y="${y.toFixed(1)}" width="${barW.toFixed(2)}" height="${Math.max(h,0).toFixed(1)}" fill="#dc2626" fill-opacity="${opacity}" rx="1.5"><title>${fmtClockFromDecimalHour(b.center/60)} · ${b.risk.toFixed(2)}× Ø-Risiko</title></rect>`;
     });
+
+    // Risiko-Y-Gitterlinien (0×/1×/2×/… je nach axisStep) + hervorgehobene
+    // gestrichelte Referenzlinie bei genau 1.0 (Tagesdurchschnitt) — macht
+    // auf einen Blick sichtbar, was über/unter dem Durchschnitt liegt.
+    let grid = '';
+    for (let r = 0; r <= axisMax + 1e-9; r += axisStep) {
+      const gy = yForRisk(r).toFixed(1);
+      grid += `<line x1="${leftPad}" y1="${gy}" x2="${svgW - rightPad}" y2="${gy}" stroke="var(--border)" stroke-width="0.5"/>`;
+      grid += `<text x="${leftPad - 4}" y="${(+gy + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${r.toFixed(axisStep < 1 ? 1 : 0)}×</text>`;
+    }
+    const yAvg = yForRisk(1).toFixed(1);
+    grid += `<line x1="${leftPad}" y1="${yAvg}" x2="${svgW - rightPad}" y2="${yAvg}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>`;
+    grid += `<text x="${svgW - rightPad}" y="${(+yAvg - 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)" font-style="italic">Ø</text>`;
 
     // Stunden-Gitterlinien, gleiche Konvention (04/08/12/16/20/00/04) wie im
     // Punktdiagramm oben, hier vertikal auf der X-Achse statt horizontal.
-    let grid = '';
     for (let h = 0; h <= 24; h += 4) {
       const gx = xForMinute(h * 60).toFixed(1);
       const clockHour = (4 + h) % 24;
