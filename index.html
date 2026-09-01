@@ -638,6 +638,12 @@
     font-size: clamp(10px, 2vw, 16px); color: var(--text-muted);
   }
   .lb-race-car-me { filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
+  /* Farbiger Rand für die Top 3 der heutigen Rangliste (Gold/Silber/
+     Bronze) — Rang wird in renderRaceTrack() aus den bereits sortierten
+     Einträgen berechnet, gleiche Gleichstand-Logik wie renderLeaderboard(). */
+  .lb-race-rank-1 { border-color: #ffd700; }
+  .lb-race-rank-2 { border-color: #c0c0c0; }
+  .lb-race-rank-3 { border-color: #cd7f32; }
   .lb-race-diamond {
     position: absolute; transform: translate(-50%, -50%);
     font-size: clamp(14px, 2.2vw, 22px);
@@ -5556,6 +5562,22 @@
     if (list) raceTodayList = list;
     const entries = raceTodayList;
 
+    // Rang-Farben für die heutigen Top 3 (Gold/Silber/Bronze) — gleiche
+    // Rang-Logik mit Gleichstand-Behandlung wie in renderLeaderboard()
+    // (Standard-Ranking: punktgleiche Einträge teilen sich den Rang, der
+    // nächste distinkte Eintrag springt auf seine tatsächliche Position,
+    // z.B. zwei Erste → beide Gold, nächster Eintrag ist Rang 3/Bronze,
+    // kein Silber). `entries` kommt bereits sortiert aus leaderboard_today()
+    // (ORDER BY minutes DESC), reine Index-basierte Neuberechnung reicht.
+    const rankByName = new Map();
+    let rank = 1;
+    entries.forEach((entry, i) => {
+      const sameAsPrev = i > 0 && entry.minutes === entries[i - 1]?.minutes;
+      if (i > 0 && !sameAsPrev) rank = i + 1;
+      if (rank <= 3) rankByName.set(entry.name, rank);
+    });
+    const RANK_CLASS = { 1: ' lb-race-rank-1', 2: ' lb-race-rank-2', 3: ' lb-race-rank-3' };
+
     // Nach Feld gruppieren, damit mehrere Avatare auf demselben Feld
     // gestaffelt statt exakt übereinander gerendert werden.
     const groups = new Map();
@@ -5577,11 +5599,13 @@
         const isMe = entry.name === userName;
         const safeAvatar = safeAvatarUrl(entry.avatar_url);
         const meClass = isMe ? ' lb-race-car-me' : '';
+        const rankClass = RANK_CLASS[rankByName.get(entry.name)] || '';
         const styleAttr = `left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;z-index:${10 + i};`;
-        const titleAttr = `${esc(entry.name)} · ${minutesToDisplay(entry.minutes ?? 0)}`;
+        const rankSuffix = rankByName.has(entry.name) ? ` · #${rankByName.get(entry.name)}` : '';
+        const titleAttr = `${esc(entry.name)} · ${minutesToDisplay(entry.minutes ?? 0)}${rankSuffix}`;
         carsHtml += safeAvatar
-          ? `<img src="${esc(safeAvatar)}" class="lb-race-avatar${meClass}" style="${styleAttr}" title="${titleAttr}" onerror="this.style.display='none'">`
-          : `<div class="lb-race-avatar-placeholder${meClass}" style="${styleAttr}" title="${titleAttr}">👤</div>`;
+          ? `<img src="${esc(safeAvatar)}" class="lb-race-avatar${meClass}${rankClass}" style="${styleAttr}" title="${titleAttr}" onerror="this.style.display='none'">`
+          : `<div class="lb-race-avatar-placeholder${meClass}${rankClass}" style="${styleAttr}" title="${titleAttr}">👤</div>`;
       });
     });
 
