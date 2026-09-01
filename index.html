@@ -2768,6 +2768,36 @@
     return dateKeys;
   }
 
+  // Generische PostgREST-Pagination in 1000er-Schritten (server-seitiges
+  // Default-Zeilenlimit) — geteilter Helper (Muster ursprünglich aus
+  // fetchAllSessions() beim CSV-Export übernommen), genutzt von
+  // loadStudyDays(), loadBarChart(), loadAttentionChart() und dem
+  // Karten-Deck-Laden. OHNE Pagination schneidet PostgREST bei mehr als
+  // 1000 Zeilen still die NEUESTEN Zeilen ab (bei `order=...asc` steht der
+  // aktuellste Datensatz am Ende) — so gefunden: bei genau 1010
+  // `pomodoro_sessions`-Zeilen fehlten im Aufmerksamkeits-Chart exakt die
+  // letzten 10 (heutige Sessions ab einer bestimmten Uhrzeit), während
+  // `tired_events` (damals nur 35 Zeilen, weit unter dem Limit) unauffällig
+  // korrekt blieb. `urlBase` MUSS ein `order=`-Parameter enthalten, sonst
+  // garantiert Postgres keine stabile Zeilenreihenfolge über mehrere
+  // limit/offset-Requests hinweg (Risiko für doppelte/übersprungene Zeilen
+  // zwischen Seiten).
+  async function fetchAllPaginated(urlBase, token) {
+    const all = [];
+    let offset = 0;
+    const PAGE = 1000;
+    while (true) {
+      const sep = urlBase.includes('?') ? '&' : '?';
+      const res = await fetch(`${urlBase}${sep}limit=${PAGE}&offset=${offset}`, { headers: authHeaders(token) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const page = await res.json();
+      all.push(...page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
+
   function isOff(dateObj, key) {
     if (offDays[key] === false) return false;      // explicit override: always ON
     if (offDays[key] === true)  return true;       // manually struck out
@@ -6127,12 +6157,17 @@
     }
   }
 
-  // Load all study days from Supabase into local `days` object
+  // Load all study days from Supabase into local `days` object. Eine Zeile
+  // pro Kalendertag (nicht pro Session) — erreicht die PostgREST-1000-
+  // Zeilen-Grenze dadurch erst nach Jahren, aber fetchAllPaginated() statt
+  // einem einzelnen fetch() kostet nichts und verhindert denselben Bug wie
+  // im Aufmerksamkeits-Chart (siehe CLAUDE.md) auch hier vorbeugend.
   async function loadStudyDays(token) {
-    const res = await fetch(`${SB}/rest/v1/study_days?user_id=eq.${currentUser.id}&select=date,minutes,off`, {
-      headers: authHeaders(token),
-    });
-    const rows = await res.json();
+    // order=date.asc ist hier nicht nur kosmetisch, sondern nötig für
+    // stabile Pagination — ohne ORDER BY garantiert Postgres keine
+    // konsistente Zeilenreihenfolge über mehrere limit/offset-Requests
+    // hinweg (Risiko für doppelte/übersprungene Zeilen zwischen Seiten).
+    const rows = await fetchAllPaginated(`${SB}/rest/v1/study_days?user_id=eq.${currentUser.id}&select=date,minutes,off&order=date.asc`, token);
     days = {}; offDays = {};
     for (const row of rows) {
       if (row.minutes > 0) days[row.date] = row.minutes;
@@ -7002,12 +7037,14 @@
     const dateKeys = buildDateKeysSinceFromDate(FROM_DATE);
 
     try {
-      const res = await fetch(
+      // fetchAllPaginated() statt einzelnem fetch() — sonst schneidet
+      // PostgREST bei mehr als 1000 Zeilen seit FROM_DATE die neuesten
+      // Zeilen still ab (identischer Bug wie im Aufmerksamkeits-Chart,
+      // siehe „Aufmerksamkeits-Tracking" in CLAUDE.md).
+      const sessions = await fetchAllPaginated(
         `${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${FROM_DATE}&select=date,label,duration_minutes&order=date.asc`,
-        { headers: authHeaders(token) }
+        token
       );
-      if (!res.ok) throw new Error(res.status);
-      const sessions = await res.json();
       lastBarSessions = sessions;
       lastBarDateKeys = dateKeys;
       renderBarChart(sessions, dateKeys);
@@ -7226,32 +7263,6 @@
   // jedem stillen Refresh kurz der ganze Chart weg (Flacker) bzw. ein
   // vorübergehender Netzwerkfehler würde einen bereits korrekt angezeigten
   // Chart grundlos durch eine Fehlermeldung ersetzen.
-  // Generische PostgREST-Pagination in 1000er-Schritten (server-seitiges
-  // Default-Zeilenlimit) — gleiches limit/offset-Muster wie
-  // fetchAllSessions() beim CSV-Export. OHNE das schnitt PostgREST bei
-  // mehr als 1000 Zeilen seit ATTENTION_FROM_DATE (order=created_at.asc,
-  // kein Limit-Handling) still die NEUESTEN Zeilen ab — Bug gefunden, weil
-  // pomodoro_sessions bei genau 1010 Gesamt-Zeilen exakt die letzten 10
-  // (= heutige Sessions ab einer bestimmten Uhrzeit) nicht mehr lieferte,
-  // während tired_events (deutlich weniger Zeilen, damals 35) unter dem
-  // Limit blieb und unauffällig weiter korrekt anzeigte — genau das
-  // beobachtete "Tired-Punkte da, Fokuszeiten ab X Uhr fehlen"-Muster.
-  async function fetchAllPaginated(urlBase, token) {
-    const all = [];
-    let offset = 0;
-    const PAGE = 1000;
-    while (true) {
-      const sep = urlBase.includes('?') ? '&' : '?';
-      const res = await fetch(`${urlBase}${sep}limit=${PAGE}&offset=${offset}`, { headers: authHeaders(token) });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const page = await res.json();
-      all.push(...page);
-      if (page.length < PAGE) break;
-      offset += PAGE;
-    }
-    return all;
-  }
-
   async function loadAttentionChart() {
     const content = document.getElementById('attention-chart-content');
     if (!currentUser) return;
@@ -10163,10 +10174,10 @@
       }
     } catch(e) { console.warn('loadIncubator error:', e); }
 
-    // Karten-Deck
+    // Karten-Deck — fetchAllPaginated() statt einzelnem fetch(), gleiche
+    // vorbeugende Begründung wie bei loadStudyDays() (siehe dort).
     try {
-      const res  = await fetch(`${SB}/rest/v1/user_cards?user_id=eq.${currentUser.id}&select=card_id&order=obtained_at`, { headers: authHeaders(token) });
-      const rows = await res.json();
+      const rows = await fetchAllPaginated(`${SB}/rest/v1/user_cards?user_id=eq.${currentUser.id}&select=card_id&order=obtained_at`, token);
       eggDeck = [];
       if (Array.isArray(rows)) {
         for (const row of rows) {
