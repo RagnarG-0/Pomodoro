@@ -2046,6 +2046,8 @@
   <div id="attention-chart-content">
     <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Wird geladen…</div>
   </div>
+  <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.04em;margin:14px 0 6px;">Risiko-Analyse (KDE + DBSCAN)</div>
+  <div id="attention-histogram-content"></div>
 </div>
 
 <!-- Stats card -->
@@ -7233,6 +7235,297 @@
     return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
   }
 
+  // ─── Aufmerksamkeits-Risiko-Analyse (KDE + DBSCAN) ─────────────────────
+  // Erkennt aus der Historie aller "Tired"-Klicks (Minuten seit 4:00 Uhr,
+  // via attentionDecimalHour()*60) wiederkehrende Risiko-Zeitfenster für
+  // schlechte Konzentration — zwei unabhängige Methoden:
+  //   1. Kernel Density Estimation (Gaussian-Kernel) → glatte Dichtekurve
+  //      → lokale Maxima (Peaks) → Intervall je Peak über die
+  //      Halbwertsbreite (Schwelle = 50% der Peak-Höhe, beidseitig bis die
+  //      Dichte darunter fällt).
+  //   2. 1D-DBSCAN → explizite Cluster vs. Ausreißer (Noise), liefert
+  //      Cluster-Intervalle direkt aus den Rohpunkten statt aus einer
+  //      geglätteten Kurve.
+  // Alle Parameter sind unten als Konstanten hinterlegt (bewusst Code-Level
+  // statt Settings-UI — reine Kalibrierungswerte wie RACE_FIELDS/
+  // LIBRARY_BUILDINGS/ATTENTION_FROM_DATE, nur für den Entwickler beim
+  // Beobachten der eigenen Daten relevant).
+  //
+  // Zirkularität: die Tageszeit ist periodisch (Periode 1440 Minuten,
+  // nahtlos über die 4-Uhr-Grenze) — das zieht sich durch alle drei
+  // Bausteine:
+  //   - KDE: circularGaussianKdeDensity() summiert pro Datenpunkt die drei
+  //     periodischen Kopien (x-P, x, x+P); bei den hier verwendeten
+  //     Bandbreiten (~10-90 min gegenüber 1440 min Periode) tragen weiter
+  //     entfernte Kopien numerisch nichts mehr bei.
+  //   - Bandbreite: silvermanBandwidthMin() nutzt die ZIRKULÄRE Standard-
+  //     abweichung (Mardia/Fisher, über die mittlere Resultantenlänge R),
+  //     nicht die lineare Stichproben-SD — sonst würden zwei nahe der
+  //     4-Uhr-Naht liegende, aber tatsächlich benachbarte Punkte (z.B.
+  //     23:55 und 00:05) als ~1430 Minuten auseinanderliegend gezählt statt
+  //     der wahren zirkulären Distanz von 10 Minuten. Bekannte Einschränkung
+  //     von Silverman's Rule (auch linear): bei mehrgipfligen Verteilungen
+  //     glättet sie tendenziell zu stark (mehrere echte Peaks verschmelzen
+  //     zu einem) — dafür ist ATTENTION_KDE_BANDWIDTH_OVERRIDE_MIN als
+  //     manueller Override gedacht.
+  //   - DBSCAN: circularDbscan1D() konkateniert die Werte dreifach
+  //     (-P/0/+P) und clustert linear auf dem sortierten Ergebnis (bei
+  //     sortierten 1D-Daten ist die eps-Nachbarschaft ein einfacher
+  //     Zeiger-Scan, kein O(n²) nötig). Ein Cluster, der wirklich über die
+  //     4-Uhr-Naht läuft, zerfällt dabei zwangsläufig in zwei Ketten (an
+  //     beiden künstlichen Schnittstellen der Kopien) — Union-Find über die
+  //     Cluster-IDs, die ein und derselbe Punkt in seinen drei Kopien
+  //     erhält, verschmilzt sie wieder zu einem echten Kreis-Cluster. Das
+  //     endgültige Intervall wird bewusst NICHT über Min/Max aller
+  //     (auch geshifteter) Mitglieder gebildet, sondern über den kleinsten
+  //     umschließenden Kreisbogen (smallestEnclosingCircularArc()) NUR der
+  //     echten Original-Punkte — sonst würde eine bei der Union
+  //     mitverschmolzene, rein "geisterhafte" dritte periodische Kopie
+  //     (ohne eigene Original-Mitglieder) das Intervall künstlich aufblähen.
+  // Intervall-Konvention (KDE wie DBSCAN): {start, end} in Minuten seit
+  // 4:00; end < start bedeutet, das Intervall wraps über die 4-Uhr-Grenze.
+  const ATTENTION_PERIOD_MIN = 1440;                // 24h, Periodizität für alle Wrap-around-Berechnungen
+  const ATTENTION_KDE_BANDWIDTH_OVERRIDE_MIN = null; // null = automatisch (Silverman's Rule); Zahl = manueller Override
+  const ATTENTION_KDE_GRID_STEP_MIN = 5;             // Auflösung der KDE-Auswertung (288 Punkte über 24h)
+  const ATTENTION_HISTOGRAM_BIN_MIN = 30;            // Balkenbreite im Risiko-Histogramm
+  const ATTENTION_PEAK_MIN_HEIGHT_FRACTION = 0.15;   // Peak muss ≥ 15% der globalen Maximaldichte sein (Rausch-Filter)
+  const ATTENTION_INTERVAL_THRESHOLD_FRACTION = 0.5; // Intervallgrenze = 50% der jeweiligen Peak-Höhe (Halbwertsbreite)
+  const ATTENTION_DBSCAN_EPS_MIN = 25;               // zirkulärer Distanz-Schwellenwert
+  const ATTENTION_DBSCAN_MIN_SAMPLES = 3;            // Mindestpunkte (inkl. sich selbst) für einen Kern-Punkt
+
+  function circularStdDevMin(valuesMin) {
+    const n = valuesMin.length;
+    const toAngle = v => (v / ATTENTION_PERIOD_MIN) * 2 * Math.PI;
+    const C = valuesMin.reduce((a, v) => a + Math.cos(toAngle(v)), 0) / n;
+    const S = valuesMin.reduce((a, v) => a + Math.sin(toAngle(v)), 0) / n;
+    const R = Math.sqrt(C * C + S * S);
+    if (R <= 1e-9) return ATTENTION_PERIOD_MIN / 4; // praktisch gleichverteilt -> sehr breite SD
+    const sdRad = Math.sqrt(Math.max(0, -2 * Math.log(R)));
+    return sdRad * (ATTENTION_PERIOD_MIN / (2 * Math.PI));
+  }
+
+  function silvermanBandwidthMin(valuesMin) {
+    const n = valuesMin.length;
+    if (n < 2) return 25;
+    const sd = circularStdDevMin(valuesMin);
+    const h = 1.06 * sd * Math.pow(n, -1 / 5);
+    return Math.min(90, Math.max(10, h || 25));
+  }
+
+  function circularGaussianKdeDensity(t, dataMinutes, bandwidth) {
+    const n = dataMinutes.length;
+    if (n === 0) return 0;
+    const norm = 1 / (n * bandwidth * Math.sqrt(2 * Math.PI));
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      for (let k = -1; k <= 1; k++) {
+        const d = t - (dataMinutes[i] + k * ATTENTION_PERIOD_MIN);
+        sum += Math.exp(-(d * d) / (2 * bandwidth * bandwidth));
+      }
+    }
+    return sum * norm;
+  }
+
+  function computeAttentionKde(tiredMinutesArray) {
+    const bandwidth = ATTENTION_KDE_BANDWIDTH_OVERRIDE_MIN ?? silvermanBandwidthMin(tiredMinutesArray);
+    const grid = [];
+    for (let t = 0; t < ATTENTION_PERIOD_MIN; t += ATTENTION_KDE_GRID_STEP_MIN) grid.push(t);
+    const density = grid.map(t => circularGaussianKdeDensity(t, tiredMinutesArray, bandwidth));
+    const maxDensity = Math.max(0, ...density);
+    return { grid, density, bandwidth, maxDensity };
+  }
+
+  function findCircularPeaks(density, minHeightFraction) {
+    const n = density.length;
+    const maxD = Math.max(0, ...density);
+    if (maxD <= 0) return [];
+    const peaks = [];
+    for (let i = 0; i < n; i++) {
+      const prev = density[(i - 1 + n) % n];
+      const next = density[(i + 1) % n];
+      const cur = density[i];
+      if (cur > prev && cur > next && cur >= maxD * minHeightFraction) peaks.push(i);
+    }
+    return peaks;
+  }
+
+  // Halbwertsbreite je Peak, zirkulär, mit Merge überlappender Intervalle.
+  // Rückgabe: Array von {start, end} in Minuten seit 4:00; end < start heißt
+  // "wraps über die 4-Uhr-Grenze".
+  function attentionRiskIntervalsFromKde(peaks, grid, density, thresholdFraction) {
+    const n = grid.length;
+    const step = grid[1] - grid[0];
+    const rawIntervals = peaks.map(peakIdx => {
+      const threshold = density[peakIdx] * thresholdFraction;
+      let lo = peakIdx, hi = peakIdx;
+      while ((hi - lo) < n && density[((lo - 1) % n + n) % n] >= threshold) lo--;
+      while ((hi - lo) < n && density[((hi + 1) % n + n) % n] >= threshold) hi++;
+      return { lo, hi }; // unbounded ints, hi - lo < n garantiert (kein voller Umlauf)
+    });
+
+    // Überlappende (auch zirkulär benachbarte) Roh-Intervalle mergen, in
+    // "unbounded index"-Repräsentation, bevor auf Minuten zurückgerechnet wird.
+    rawIntervals.sort((a, b) => a.lo - b.lo);
+    const merged = [];
+    rawIntervals.forEach(iv => {
+      const last = merged[merged.length - 1];
+      if (last && iv.lo <= last.hi + 1) {
+        last.hi = Math.max(last.hi, iv.hi);
+      } else {
+        merged.push({ ...iv });
+      }
+    });
+    // Zirkulärer Merge: falls erstes und letztes Intervall über die
+    // Gitter-Länge hinweg zusammenhängen (z.B. Peak nahe 23:55 und Peak nahe
+    // 04:05), das letzte mit dem ersten (verschoben um +n) vereinigen.
+    if (merged.length > 1) {
+      const first = merged[0], last = merged[merged.length - 1];
+      if (last.hi >= first.lo + n) {
+        first.lo = Math.min(first.lo, last.lo - n);
+        first.hi = Math.max(first.hi, last.hi - n);
+        merged.pop();
+      }
+    }
+
+    return merged.map(({ lo, hi }) => {
+      const startRaw = grid[0] + lo * step;
+      const endRaw = grid[0] + hi * step;
+      const start = ((startRaw % ATTENTION_PERIOD_MIN) + ATTENTION_PERIOD_MIN) % ATTENTION_PERIOD_MIN;
+      const end = ((endRaw % ATTENTION_PERIOD_MIN) + ATTENTION_PERIOD_MIN) % ATTENTION_PERIOD_MIN;
+      return { start, end };
+    });
+  }
+
+  // Kleinster umschließender Kreisbogen einer Punktmenge auf dem Kreis: die
+  // größte Lücke zwischen zwei zirkulär benachbarten (sortierten) Punkten
+  // liegt garantiert AUSSERHALB des Bogens — der Bogen beginnt direkt danach
+  // und endet direkt davor. Bei nur 1 Punkt ist der "Bogen" der Punkt selbst.
+  function smallestEnclosingCircularArc(valuesMin) {
+    const P = ATTENTION_PERIOD_MIN;
+    const sorted = [...valuesMin].sort((a, b) => a - b);
+    const n = sorted.length;
+    if (n === 1) return { start: sorted[0], end: sorted[0] };
+    let maxGap = -1, gapIdx = 0;
+    for (let i = 0; i < n; i++) {
+      const cur = sorted[i];
+      const next = sorted[(i + 1) % n] + (i === n - 1 ? P : 0);
+      const gap = next - cur;
+      if (gap > maxGap) { maxGap = gap; gapIdx = i; }
+    }
+    return { start: sorted[(gapIdx + 1) % n], end: sorted[gapIdx] };
+  }
+
+  // 1D-DBSCAN auf zirkulären Minuten-Werten via Dreifach-Konkatenation
+  // (-P/0/+P), macht die Nachbarschaftssuche wrap-around-sicher ohne
+  // Sonderfall-Code.
+  function circularDbscan1D(valuesMin, eps, minSamples) {
+    const n = valuesMin.length;
+    if (n === 0) return { clusters: [], noise: [] };
+    const P = ATTENTION_PERIOD_MIN;
+    const extended = [];
+    for (let copy = -1; copy <= 1; copy++) {
+      valuesMin.forEach((v, origIdx) => extended.push({ val: v + copy * P, origIdx, isOriginal: copy === 0 }));
+    }
+    extended.sort((a, b) => a.val - b.val);
+    const m = extended.length;
+    const labels = new Array(m).fill(0); // 0 = unbesucht, -1 = noise, sonst Cluster-ID
+    let clusterId = 0;
+
+    function regionQuery(i) {
+      const neighbors = [];
+      for (let j = i - 1; j >= 0 && extended[i].val - extended[j].val <= eps; j--) neighbors.push(j);
+      for (let j = i + 1; j < m && extended[j].val - extended[i].val <= eps; j++) neighbors.push(j);
+      neighbors.push(i);
+      return neighbors;
+    }
+
+    for (let i = 0; i < m; i++) {
+      if (labels[i] !== 0) continue;
+      const neighbors = regionQuery(i);
+      if (neighbors.length < minSamples) { labels[i] = -1; continue; }
+      clusterId++;
+      labels[i] = clusterId;
+      const queue = neighbors.filter(j => j !== i);
+      while (queue.length) {
+        const j = queue.pop();
+        if (labels[j] === -1) labels[j] = clusterId;
+        if (labels[j] !== 0) continue;
+        labels[j] = clusterId;
+        const jNeighbors = regionQuery(j);
+        if (jNeighbors.length >= minSamples) queue.push(...jNeighbors);
+      }
+    }
+
+    // Ein Cluster, der wirklich über die 4-Uhr-Naht läuft, zerfällt in der
+    // sortierten Dreifach-Kopie zwangsläufig in zwei disjunkte Ketten (eine
+    // über die copy=-1/0-Grenze bei Wert 0, eine über die copy=0/+1-Grenze
+    // bei Wert P) — jede erhält eine eigene Cluster-ID. Das lässt sich daran
+    // erkennen, dass ein und derselbe Original-Punkt in seinen drei
+    // periodischen Kopien (-P/0/+P) in UNTERSCHIEDLICHEN Cluster-IDs landet;
+    // Union-Find verschmilzt solche IDs zur echten, einen Kreis-Cluster.
+    const parent = new Map();
+    function find(x) { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; }
+    function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); }
+    for (let id = 1; id <= clusterId; id++) parent.set(id, id);
+
+    const labelsByOrigIdx = new Map(); // origIdx -> Set(labels über die 3 Kopien)
+    extended.forEach((e, i) => {
+      const id = labels[i];
+      if (id <= 0) return;
+      if (!labelsByOrigIdx.has(e.origIdx)) labelsByOrigIdx.set(e.origIdx, new Set());
+      labelsByOrigIdx.get(e.origIdx).add(id);
+    });
+    labelsByOrigIdx.forEach(idSet => {
+      const ids = [...idSet];
+      for (let k = 1; k < ids.length; k++) union(ids[0], ids[k]);
+    });
+
+    const byCluster = new Map(); // root-ID -> Mitglieder
+    extended.forEach((e, i) => {
+      const id = labels[i];
+      if (id <= 0) return;
+      const root = find(id);
+      if (!byCluster.has(root)) byCluster.set(root, []);
+      byCluster.get(root).push(e);
+    });
+
+    const clusters = [];
+    byCluster.forEach(members => {
+      if (!members.some(mm => mm.isOriginal)) return;
+      // Nach dem Merge können Mitglieder mehrerer periodischer Kopien
+      // desselben Original-Punkts enthalten sein (z.B. copy -1 UND copy 0 von
+      // Punkt X, wenn beide über die Union verbunden wurden) — beim Zählen
+      // und bei den Anzeige-Punkten pro Original-Index deduplizieren.
+      const seenOrig = new Set();
+      const originalMembers = members.filter(mm => {
+        if (!mm.isOriginal) return false;
+        if (seenOrig.has(mm.origIdx)) return false;
+        seenOrig.add(mm.origIdx);
+        return true;
+      });
+      // WICHTIG: das Intervall NICHT über Min/Max aller (auch geshifteter)
+      // Mitglieder bestimmen — die Union kann eine dritte, rein "geisterhafte"
+      // periodische Kopie (z.B. copy +1 einer bereits über copy -1/0 verbundenen
+      // Original-Gruppe) mit demselben Root verschmelzen, ohne dass diese
+      // Kopie neue Original-Punkte beiträgt; ihre weit entfernten Werte
+      // würden den Bereich künstlich aufblähen. Stattdessen den kleinsten
+      // umschließenden Kreisbogen NUR über die echten Original-Werte bilden
+      // (größte Lücke im sortierten zirkulären Array = Bereich außerhalb
+      // des Clusters).
+      const { start, end } = smallestEnclosingCircularArc(originalMembers.map(mm => mm.val));
+      clusters.push({
+        start, end,
+        count: originalMembers.length,
+        pointsMin: originalMembers.map(mm => mm.val),
+      });
+    });
+
+    const noise = [];
+    extended.forEach((e, i) => { if (e.isOriginal && labels[i] === -1) noise.push(e.val); });
+
+    return { clusters, noise };
+  }
+
   function renderAttentionChart(sessions, tiredEvents, dateKeys) {
     const content = document.getElementById('attention-chart-content');
 
@@ -7318,6 +7611,118 @@
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
           <span style="width:8px;height:8px;border-radius:50%;background:#dc2626;flex-shrink:0;"></span>Tired
+        </span>
+      </div>`;
+
+    renderAttentionRiskHistogram(tiredEvents);
+  }
+
+  // Zweites, eigenständiges Chart unterhalb des Punktdiagramms: KDE-Dichte
+  // als Histogramm (X = Tageszeit 04:00→04:00, normale Leserichtung, Y =
+  // relative Dichte normiert auf den höchsten Balken) + DBSCAN-Cluster als
+  // separate Marker-Reihe. Wird von renderAttentionChart() am Ende
+  // mitaufgerufen — läuft dadurch bei jedem bestehenden Aufrufer automatisch
+  // mit (Login, ResizeObserver, optimistisches Update nach Tired-Klick/
+  // Timer-Ende), ohne dass diese Stellen einzeln angefasst werden müssen.
+  function renderAttentionRiskHistogram(tiredEvents) {
+    const container = document.getElementById('attention-histogram-content');
+    if (!container) return;
+
+    if (!tiredEvents || tiredEvents.length === 0) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Noch keine Tired-Klicks für eine Risiko-Analyse.</div>';
+      return;
+    }
+
+    const tiredMinutes = tiredEvents.map(t => attentionDecimalHour(t.created_at) * 60);
+    const kde = computeAttentionKde(tiredMinutes);
+    const peaks = findCircularPeaks(kde.density, ATTENTION_PEAK_MIN_HEIGHT_FRACTION);
+    const riskIntervals = attentionRiskIntervalsFromKde(peaks, kde.grid, kde.density, ATTENTION_INTERVAL_THRESHOLD_FRACTION);
+    const { clusters, noise } = circularDbscan1D(tiredMinutes, ATTENTION_DBSCAN_EPS_MIN, ATTENTION_DBSCAN_MIN_SAMPLES);
+
+    const isInRiskInterval = minute => riskIntervals.some(iv => iv.end < iv.start
+      ? (minute >= iv.start || minute <= iv.end)
+      : (minute >= iv.start && minute <= iv.end));
+
+    // leftPad/rightPad wie im Punktdiagramm oben — optisch konsistente
+    // Ränder zwischen den beiden gestapelten Charts, auch wenn die Achsen
+    // (dort Y, hier X) unterschiedliche Rollen haben.
+    const leftPad = 26, rightPad = 6, topPad = 8, bottomPad = 22;
+    const svgH = 130;
+    const chartH = svgH - topPad - bottomPad;
+    const axisY = topPad + chartH;
+    const markerY = axisY + 20; // eigene Reihe für die DBSCAN-Marker unterhalb der Stunden-Beschriftung
+    const svgH2 = svgH + 28;
+    const measuredW = container.clientWidth || 320;
+    const svgW = measuredW;
+    const availW = Math.max(svgW - leftPad - rightPad, 60);
+    const xForMinute = m => leftPad + (m / ATTENTION_PERIOD_MIN) * availW;
+
+    const nBins = Math.round(ATTENTION_PERIOD_MIN / ATTENTION_HISTOGRAM_BIN_MIN);
+    const binW = availW / nBins;
+    const gap = binW <= 4 ? 0 : Math.min(2, binW * 0.15);
+    const barW = Math.max(0.75, binW - gap);
+
+    const bins = [];
+    for (let i = 0; i < nBins; i++) {
+      const center = i * ATTENTION_HISTOGRAM_BIN_MIN + ATTENTION_HISTOGRAM_BIN_MIN / 2;
+      bins.push({ i, center, density: circularGaussianKdeDensity(center, tiredMinutes, kde.bandwidth) });
+    }
+    const maxBinDensity = Math.max(1e-9, ...bins.map(b => b.density));
+
+    let barsHtml = '';
+    bins.forEach(b => {
+      const relHeight = b.density / maxBinDensity; // 0..1, nur für die Anzeige normiert
+      const h = relHeight * chartH;
+      const x = leftPad + b.i * binW + gap / 2;
+      const y = axisY - h;
+      // Balken innerhalb eines erkannten Risiko-Intervalls kräftig rot,
+      // außerhalb gedämpft (fill-opacity statt color-mix — breiter
+      // Browser-Support in SVG-Präsentationsattributen).
+      const opacity = isInRiskInterval(b.center) ? 1 : 0.22;
+      barsHtml += `<rect x="${x.toFixed(2)}" y="${y.toFixed(1)}" width="${barW.toFixed(2)}" height="${Math.max(h,0).toFixed(1)}" fill="#dc2626" fill-opacity="${opacity}" rx="1.5"><title>${fmtClockFromDecimalHour(b.center/60)} · relative Dichte ${(relHeight*100).toFixed(0)}%</title></rect>`;
+    });
+
+    // Stunden-Gitterlinien, gleiche Konvention (04/08/12/16/20/00/04) wie im
+    // Punktdiagramm oben, hier vertikal auf der X-Achse statt horizontal.
+    let grid = '';
+    for (let h = 0; h <= 24; h += 4) {
+      const gx = xForMinute(h * 60).toFixed(1);
+      const clockHour = (4 + h) % 24;
+      grid += `<line x1="${gx}" y1="${topPad}" x2="${gx}" y2="${axisY}" stroke="var(--border)" stroke-width="0.5"/>`;
+      grid += `<text x="${gx}" y="${axisY + 12}" text-anchor="middle" font-size="9" fill="var(--text-muted)" font-family="Georgia,serif">${String(clockHour).padStart(2,'0')}</text>`;
+    }
+
+    // DBSCAN-Cluster als eigene Marker-Reihe; ein wrap-Cluster (end < start)
+    // wird als zwei Liniensegmente bis zum jeweiligen Rand gezeichnet.
+    let clusterHtml = '';
+    clusters.forEach(c => {
+      const titleAttr = `DBSCAN-Cluster (n=${c.count})`;
+      if (c.end < c.start) {
+        clusterHtml += `<line x1="${xForMinute(c.start).toFixed(1)}" y1="${markerY}" x2="${(leftPad + availW).toFixed(1)}" y2="${markerY}" stroke="#64b5f6" stroke-width="3" stroke-linecap="round"><title>${titleAttr}</title></line>`;
+        clusterHtml += `<line x1="${leftPad}" y1="${markerY}" x2="${xForMinute(c.end).toFixed(1)}" y2="${markerY}" stroke="#64b5f6" stroke-width="3" stroke-linecap="round"><title>${titleAttr}</title></line>`;
+      } else {
+        clusterHtml += `<line x1="${xForMinute(c.start).toFixed(1)}" y1="${markerY}" x2="${xForMinute(c.end).toFixed(1)}" y2="${markerY}" stroke="#64b5f6" stroke-width="3" stroke-linecap="round"><title>${titleAttr}</title></line>`;
+      }
+    });
+    noise.forEach(nMin => {
+      const nx = xForMinute(nMin).toFixed(1);
+      clusterHtml += `<circle cx="${nx}" cy="${markerY}" r="1.8" fill="var(--text-muted)"><title>Ausreißer · ${fmtClockFromDecimalHour(nMin / 60)}</title></circle>`;
+    });
+
+    container.innerHTML = `
+      <svg viewBox="0 0 ${svgW} ${svgH2}" style="width:100%;height:${svgH2}px;display:block;">${grid}${barsHtml}${clusterHtml}</svg>
+      <div style="display:flex;flex-wrap:wrap;margin-top:4px;padding:0 2px;">
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:8px;height:8px;border-radius:2px;background:#dc2626;flex-shrink:0;"></span>Risiko-Intervall (KDE)
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:8px;height:8px;border-radius:2px;background:#dc2626;opacity:0.22;flex-shrink:0;"></span>außerhalb
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:10px;height:3px;border-radius:2px;background:#64b5f6;flex-shrink:0;"></span>DBSCAN-Cluster
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0;"></span>Ausreißer
         </span>
       </div>`;
   }
