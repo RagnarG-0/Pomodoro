@@ -675,27 +675,19 @@
     position: absolute;
     width: 5.4%; aspect-ratio: 5 / 7; /* schmaler & höher als die 7.5%-breiten runden Renn-Avatare */
     transform: translate(-50%, -100%); /* Fuß der Karte steht auf dem Gebäude-Ankerpunkt */
-    display: flex; flex-direction: column; padding: 3px; gap: 2px;
+    padding: 3px;
     border-radius: 5px; border: 1.5px solid var(--card-color, var(--accent));
     background:
       linear-gradient(115deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 24%, rgba(255,255,255,0) 76%, rgba(255,255,255,0.25) 100%),
       linear-gradient(160deg, var(--card-bg, #1b1b1d), #000);
     box-shadow: 0 0 6px var(--card-color, var(--accent)), 0 2px 5px rgba(0,0,0,0.4);
     cursor: default;
+    display: flex; align-items: center; justify-content: center; /* zentriert den 👤-Platzhalter, falls kein Foto */
   }
-  .lb-wildcard-photo {
-    flex: 1 1 auto; min-height: 0; border-radius: 3px; overflow: hidden;
-    background: var(--surface2); display: flex; align-items: center; justify-content: center;
-  }
-  .lb-wildcard-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* Kein Namens-Label mehr — .lb-wildcard-photo sitzt direkt auf dem <img>
+     selbst und füllt die ganze Karte (kein Wrapper-Div nötig). */
+  .lb-wildcard-photo { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 3px; }
   .lb-wildcard-placeholder { font-size: clamp(9px, 1.6vw, 14px); color: var(--text-muted); }
-  .lb-wildcard-name {
-    font-family: -apple-system, sans-serif; font-size: clamp(6px, 1vw, 9px); font-weight: 700;
-    color: #fff; text-align: center; letter-spacing: 0.02em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    padding: 1.5px 2px; border-radius: 2px; flex: none;
-    background: var(--card-color, var(--accent));
-  }
   .lb-wildcard-me { box-shadow: 0 0 0 2px #fff, 0 0 10px var(--accent), 0 2px 5px rgba(0,0,0,0.4); }
 
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
@@ -5410,6 +5402,16 @@
   // steuert nur, ob der 💎-Marker auf der Strecke angezeigt wird.
   let raceCheckpointClaimed = { flag: false, finish: false, checkpoint60: false, checkpoint180: false };
 
+  // Cache der zuletzt per loadRaceTrackData()/leaderboard_today() geladenen
+  // HEUTIGEN Renn-Einträge — bewusst getrennt von lastLeaderboardData (das
+  // hält die Daten des in der separaten Ranglisten-Kachel aktiven
+  // Zeitraum-Tabs, z.B. 'alltime', mit anderer Datenform). Ein Re-Render
+  // ohne frischen Fetch (z.B. nach setLibraryCheckin()/checkRaceCheckpoint())
+  // muss über diesen Cache laufen, sonst interpretiert renderRaceTrack() eine
+  // falsche Liste und wirft alle Avatare auf die Startposition zurück
+  // (Bugfix: renderRaceTrack(lastLeaderboardData) war hierfür falsch).
+  let raceTodayList = [];
+
   async function loadRaceCheckpointStatus() {
     try {
       const token = await getValidToken() || SUPABASE_ANON_KEY;
@@ -5494,7 +5496,7 @@
         userDiamonds = result;
         renderEggDiamonds();
         raceCheckpointClaimed[checkpoint] = true;
-        renderRaceTrack(lastLeaderboardData);
+        renderRaceTrack(); // ohne Argument: nutzt raceTodayList-Cache, siehe dort
         toast({
           checkpoint60:  'Du warst heute der Erste bei 60 Minuten! +1 💎',
           checkpoint180: 'Du warst heute der Erste bei 180 Minuten! +1 💎',
@@ -5539,7 +5541,12 @@
     // Avatare hängen von `list` ab. Vorher versteckte ein leeres `list`
     // (niemand mit >0 Minuten heute, siehe leaderboard_today()) die ganze
     // Kachel, was wie "Rennstrecke lädt erst nach dem ersten Eintrag" wirkte.
-    const entries = list || [];
+    // Ein echtes `list` (auch ein leeres Array) aktualisiert den Cache; ein
+    // Aufruf ohne Argument (Re-Render nach setLibraryCheckin()/
+    // checkRaceCheckpoint(), ohne neuen Fetch) nutzt den zuletzt bekannten
+    // Stand weiter, statt fälschlich auf eine andere Datenquelle zu greifen.
+    if (list) raceTodayList = list;
+    const entries = raceTodayList;
 
     // Nach Feld gruppieren, damit mehrere Avatare auf demselben Feld
     // gestaffelt statt exakt übereinander gerendert werden.
@@ -5626,12 +5633,12 @@
         const meClass = isMe ? ' lb-wildcard-me' : '';
         const styleAttr = `left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;z-index:${40 + i};--card-color:${colors.color};--card-bg:${colors.bg};`;
         const titleAttr = `${esc(entry.name)} · ${esc(group.building.name)}`;
-        wildCardsHtml += `<div class="lb-wildcard${meClass}" style="${styleAttr}" title="${titleAttr}">
-          <div class="lb-wildcard-photo">${safeAvatar
-            ? `<img src="${esc(safeAvatar)}" alt="" onerror="this.style.display='none'">`
-            : `<span class="lb-wildcard-placeholder">👤</span>`}</div>
-          <div class="lb-wildcard-name">${esc(entry.name)}</div>
-        </div>`;
+        // Kein Namens-Label mehr auf der Karte selbst (wurde ohnehin
+        // abgeschnitten) — der Name bleibt über den nativen title-Tooltip
+        // beim Hover abrufbar. .lb-wildcard-photo füllt die ganze Karte.
+        wildCardsHtml += `<div class="lb-wildcard${meClass}" style="${styleAttr}" title="${titleAttr}">${safeAvatar
+            ? `<img src="${esc(safeAvatar)}" class="lb-wildcard-photo" alt="" onerror="this.style.display='none'">`
+            : `<span class="lb-wildcard-placeholder">👤</span>`}</div>`;
       });
     });
 
@@ -9635,7 +9642,8 @@
     userLibraryCheckin = newVal;
     libraryCheckins = libraryCheckins.filter(e => e.name !== userName);
     if (newVal) libraryCheckins.push({ name: userName, avatar_url: avatarUrl, library: newVal });
-    renderRaceTrack(lastLeaderboardData);
+    renderRaceTrack(); // ohne Argument: nutzt raceTodayList-Cache, siehe dort — NICHT lastLeaderboardData
+                        // (das ist die Liste des aktiven Ranglisten-Tabs, z.B. 'alltime', andere Datenform)
 
     await saveEggProfile({
       library_checkin: newVal,

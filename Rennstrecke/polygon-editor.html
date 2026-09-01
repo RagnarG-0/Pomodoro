@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Bibliotheks-Silhouetten-Editor</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #16161a; color: #eee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    padding: 20px;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; color: #ccc; }
+  p.hint { font-size: 12.5px; color: #999; margin: -6px 0 0; max-width: 900px; text-align: center; line-height: 1.5; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+  button {
+    font-family: inherit; font-size: 12.5px; cursor: pointer;
+    background: #26262c; color: #eee; border: 1px solid #3a3a42;
+    border-radius: 7px; padding: 7px 12px; transition: background 0.15s, border-color 0.15s;
+  }
+  button:hover { background: #323238; }
+  button.building-btn.active { border-color: var(--btn-color, #1D9E75); background: color-mix(in srgb, var(--btn-color, #1D9E75) 22%, #26262c); }
+  button.toggle-on { background: #1D9E75; border-color: #1D9E75; color: #fff; }
+  .sep { width: 1px; height: 20px; background: #3a3a42; margin: 0 2px; }
+
+  #stage-wrap { position: relative; width: min(1200px, 92vw); }
+  #stage { position: relative; width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.5); }
+  #stage img { width: 100%; display: block; }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+
+  polygon.poly { fill-opacity: 0.12; stroke-width: 0.35; vector-effect: non-scaling-stroke; }
+  polygon.poly.active { stroke-width: 0.6; }
+  polygon.poly.inactive { fill-opacity: 0.03; stroke-opacity: 0.35; }
+
+  circle.pt { cursor: grab; vector-effect: non-scaling-stroke; }
+  circle.pt:active { cursor: grabbing; }
+  circle.pt.inactive { opacity: 0.35; pointer-events: none; }
+  text.pt-label { font-size: 3px; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; font-family: monospace; }
+
+  path.anchor { cursor: grab; vector-effect: non-scaling-stroke; }
+  path.anchor:active { cursor: grabbing; }
+  path.anchor.inactive { opacity: 0.4; pointer-events: none; }
+
+  #legend { display: flex; gap: 18px; font-size: 11.5px; color: #999; }
+  #legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .star { display: inline-block; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid #ff4d4d; }
+
+  #output-wrap { width: min(1200px, 92vw); display: flex; flex-direction: column; gap: 6px; }
+  #output-head { display: flex; align-items: center; justify-content: space-between; }
+  #output-head span { font-size: 12px; color: #999; }
+  #copy-status { font-size: 12px; color: #1D9E75; opacity: 0; transition: opacity 0.2s; }
+  #copy-status.show { opacity: 1; }
+  textarea {
+    width: 100%; height: 220px; resize: vertical;
+    background: #0e0e11; color: #b8f0d8; border: 1px solid #3a3a42; border-radius: 8px;
+    font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5;
+    padding: 12px; white-space: pre;
+  }
+</style>
+</head>
+<body>
+
+<h1>🏛️ Bibliotheks-Silhouetten-Editor</h1>
+<p class="hint">
+  Gebäude oben auswählen, dann auf eine leere Stelle im Bild klicken, um einen neuen Punkt ans aktive Polygon anzuhängen —
+  bestehende Punkte lassen sich direkt per Ziehen verschieben. Der rote Stern ist der Ankerpunkt (Fußpunkt der Wild Card);
+  „Anker-Modus" umschalten, um ihn statt eines Polygon-Punkts zu setzen/verschieben. Unten steht laufend der fertige
+  <code>LIBRARY_BUILDINGS</code>-Code bereit zum Kopieren.
+</p>
+
+<div class="toolbar" id="building-buttons"></div>
+<div class="toolbar">
+  <button id="anchor-toggle">📍 Anker-Modus</button>
+  <div class="sep"></div>
+  <button id="undo-point">↩︎ Letzten Punkt entfernen</button>
+  <button id="reset-building">⟲ Gebäude zurücksetzen</button>
+</div>
+
+<div id="stage-wrap">
+  <div id="stage">
+    <img id="track-img" src="strecke.png" alt="Rennstrecke">
+    <svg id="overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+  </div>
+</div>
+
+<div id="legend">
+  <span><span class="dot" style="background:#1D9E75;"></span> aktives Polygon</span>
+  <span><span class="star"></span> Ankerpunkt (aktiv)</span>
+</div>
+
+<div id="output-wrap">
+  <div id="output-head">
+    <span>LIBRARY_BUILDINGS — bereit zum Einfügen in index.html</span>
+    <span style="display:flex;align-items:center;gap:10px;">
+      <span id="copy-status">Kopiert!</span>
+      <button id="copy-btn">📋 In Zwischenablage kopieren</button>
+    </span>
+  </div>
+  <textarea id="output" readonly spellcheck="false"></textarea>
+</div>
+
+<script>
+(function () {
+  const COLORS = { steintor: '#d9483c', neuwerk: '#d1a13c', juri: '#3ba8c4' };
+  const DEFAULTS = {
+    steintor: { name: 'Steintor', anchorPct: [32, 47], points: [[22,21],[43,20],[44,34],[41,47],[23,47],[20,29]] },
+    neuwerk:  { name: 'Neuwerk',  anchorPct: [77, 58], points: [[68,31],[84,30],[85,44],[82,58],[71,57],[68,42]] },
+    juri:     { name: 'Juri',     anchorPct: [57, 80], points: [[46,59],[66,57],[69,66],[68,80],[50,81],[45,70]] },
+  };
+  const ORDER = ['steintor', 'neuwerk', 'juri'];
+
+  // Tiefe Kopie als Arbeitskopie — DEFAULTS bleibt für "Zurücksetzen" unangetastet.
+  let state = JSON.parse(JSON.stringify(DEFAULTS));
+  let active = 'steintor';
+  let anchorMode = false;
+  let dragging = null; // { building, kind: 'point'|'anchor', index? }
+
+  const svg = document.getElementById('overlay');
+  const stage = document.getElementById('stage');
+  const output = document.getElementById('output');
+
+  // ─── Gebäude-Buttons ──────────────────────────────────────────────────
+  const btnBar = document.getElementById('building-buttons');
+  ORDER.forEach(key => {
+    const btn = document.createElement('button');
+    btn.className = 'building-btn';
+    btn.textContent = DEFAULTS[key].name;
+    btn.style.setProperty('--btn-color', COLORS[key]);
+    btn.addEventListener('click', () => { active = key; render(); });
+    btn.dataset.key = key;
+    btnBar.appendChild(btn);
+  });
+
+  document.getElementById('anchor-toggle').addEventListener('click', (e) => {
+    anchorMode = !anchorMode;
+    e.currentTarget.classList.toggle('toggle-on', anchorMode);
+  });
+  document.getElementById('undo-point').addEventListener('click', () => {
+    if (state[active].points.length > 0) { state[active].points.pop(); render(); }
+  });
+  document.getElementById('reset-building').addEventListener('click', () => {
+    state[active] = JSON.parse(JSON.stringify(DEFAULTS[active]));
+    render();
+  });
+  document.getElementById('copy-btn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(output.value);
+    } catch (e) {
+      output.select(); document.execCommand('copy');
+    }
+    const status = document.getElementById('copy-status');
+    status.classList.add('show');
+    setTimeout(() => status.classList.remove('show'), 1400);
+  });
+
+  // ─── Pointer-Koordinaten -> Prozent (0-100) relativ zum Bild ───────────
+  function pctFromEvent(e) {
+    const rect = stage.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width * 100;
+    const y = (e.clientY - rect.top) / rect.height * 100;
+    return [Math.max(0, Math.min(100, +x.toFixed(2))), Math.max(0, Math.min(100, +y.toFixed(2)))];
+  }
+
+  // Klick auf leere Fläche (nicht auf einen bestehenden Punkt/Anker) fügt
+  // einen neuen Polygon-Punkt an bzw. setzt im Anker-Modus den Ankerpunkt.
+  svg.addEventListener('click', (e) => {
+    if (dragging || e.target.closest('.pt') || e.target.closest('.anchor')) return;
+    const [x, y] = pctFromEvent(e);
+    if (anchorMode) state[active].anchorPct = [x, y];
+    else state[active].points.push([x, y]);
+    render();
+  });
+
+  function startDrag(building, kind, index) {
+    return (e) => {
+      e.stopPropagation();
+      dragging = { building, kind, index };
+      const move = (ev) => {
+        const [x, y] = pctFromEvent(ev);
+        if (dragging.kind === 'anchor') state[dragging.building].anchorPct = [x, y];
+        else state[dragging.building].points[dragging.index] = [x, y];
+        render();
+      };
+      const up = () => {
+        dragging = null;
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    };
+  }
+
+  function render() {
+    // Gebäude-Buttons hervorheben
+    btnBar.querySelectorAll('.building-btn').forEach(b => b.classList.toggle('active', b.dataset.key === active));
+
+    // SVG neu aufbauen
+    svg.innerHTML = '';
+    ORDER.forEach(key => {
+      const isActive = key === active;
+      const color = COLORS[key];
+      const b = state[key];
+
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      poly.setAttribute('points', b.points.map(p => p.join(',')).join(' '));
+      poly.setAttribute('fill', color);
+      poly.setAttribute('stroke', color);
+      poly.setAttribute('class', 'poly ' + (isActive ? 'active' : 'inactive'));
+      svg.appendChild(poly);
+
+      b.points.forEach((p, i) => {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]); c.setAttribute('r', 1.15);
+        c.setAttribute('fill', color); c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', 0.3);
+        c.setAttribute('class', 'pt ' + (isActive ? 'active' : 'inactive'));
+        if (isActive) c.addEventListener('pointerdown', startDrag(key, 'point', i));
+        svg.appendChild(c);
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', p[0]); label.setAttribute('y', p[1]);
+        label.setAttribute('class', 'pt-label');
+        label.textContent = String(i + 1);
+        svg.appendChild(label);
+      });
+
+      // Ankerpunkt als kleiner Stern (einfaches Kreuz-Polygon statt echtem
+      // Stern-Pfad, reicht als Marker völlig aus)
+      const [ax, ay] = b.anchorPct;
+      const star = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const s = 1.6;
+      star.setAttribute('d', `M ${ax} ${ay-s} L ${ax+s*0.3} ${ay-s*0.3} L ${ax+s} ${ay} L ${ax+s*0.3} ${ay+s*0.3} L ${ax} ${ay+s} L ${ax-s*0.3} ${ay+s*0.3} L ${ax-s} ${ay} L ${ax-s*0.3} ${ay-s*0.3} Z`);
+      star.setAttribute('fill', isActive ? '#ff4d4d' : '#883333');
+      star.setAttribute('stroke', '#fff'); star.setAttribute('stroke-width', 0.25);
+      star.setAttribute('class', 'anchor ' + (isActive ? 'active' : 'inactive'));
+      if (isActive) star.addEventListener('pointerdown', startDrag(key, 'anchor'));
+      svg.appendChild(star);
+    });
+
+    // Ausgabe-Textarea
+    const lines = ORDER.map(key => {
+      const b = state[key];
+      return `    {\n      key: '${key}', name: '${b.name}', anchorPct: [${b.anchorPct[0]}, ${b.anchorPct[1]}],\n      points: [${b.points.map(p => `[${p[0]},${p[1]}]`).join(',')}],\n    },`;
+    });
+    output.value = `const LIBRARY_BUILDINGS = [\n${lines.join('\n')}\n  ];`;
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
