@@ -7226,6 +7226,32 @@
   // jedem stillen Refresh kurz der ganze Chart weg (Flacker) bzw. ein
   // vorübergehender Netzwerkfehler würde einen bereits korrekt angezeigten
   // Chart grundlos durch eine Fehlermeldung ersetzen.
+  // Generische PostgREST-Pagination in 1000er-Schritten (server-seitiges
+  // Default-Zeilenlimit) — gleiches limit/offset-Muster wie
+  // fetchAllSessions() beim CSV-Export. OHNE das schnitt PostgREST bei
+  // mehr als 1000 Zeilen seit ATTENTION_FROM_DATE (order=created_at.asc,
+  // kein Limit-Handling) still die NEUESTEN Zeilen ab — Bug gefunden, weil
+  // pomodoro_sessions bei genau 1010 Gesamt-Zeilen exakt die letzten 10
+  // (= heutige Sessions ab einer bestimmten Uhrzeit) nicht mehr lieferte,
+  // während tired_events (deutlich weniger Zeilen, damals 35) unter dem
+  // Limit blieb und unauffällig weiter korrekt anzeigte — genau das
+  // beobachtete "Tired-Punkte da, Fokuszeiten ab X Uhr fehlen"-Muster.
+  async function fetchAllPaginated(urlBase, token) {
+    const all = [];
+    let offset = 0;
+    const PAGE = 1000;
+    while (true) {
+      const sep = urlBase.includes('?') ? '&' : '?';
+      const res = await fetch(`${urlBase}${sep}limit=${PAGE}&offset=${offset}`, { headers: authHeaders(token) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const page = await res.json();
+      all.push(...page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
+
   async function loadAttentionChart() {
     const content = document.getElementById('attention-chart-content');
     if (!currentUser) return;
@@ -7237,13 +7263,12 @@
     const dateKeys = buildDateKeysSinceFromDate(ATTENTION_FROM_DATE);
 
     try {
-      const [sessRes, tiredRes] = await Promise.all([
-        fetch(`${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${ATTENTION_FROM_DATE}&select=date,duration_minutes,created_at&order=created_at.asc`, { headers: authHeaders(token) }),
-        fetch(`${SB}/rest/v1/tired_events?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${ATTENTION_FROM_DATE}&select=date,created_at&order=created_at.asc`, { headers: authHeaders(token) }),
+      const [sessions, tiredEvents] = await Promise.all([
+        fetchAllPaginated(`${SB}/rest/v1/pomodoro_sessions?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${ATTENTION_FROM_DATE}&select=date,duration_minutes,created_at&order=created_at.asc`, token),
+        fetchAllPaginated(`${SB}/rest/v1/tired_events?user_id=eq.${encodeURIComponent(currentUser.id)}&date=gte.${ATTENTION_FROM_DATE}&select=date,created_at&order=created_at.asc`, token),
       ]);
-      if (!sessRes.ok || !tiredRes.ok) throw new Error(`${sessRes.status}/${tiredRes.status}`);
-      lastAttentionSessions = await sessRes.json();
-      lastAttentionTiredEvents = await tiredRes.json();
+      lastAttentionSessions = sessions;
+      lastAttentionTiredEvents = tiredEvents;
       lastAttentionDateKeys = dateKeys;
       renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, dateKeys);
       ensureAttentionChartResizeObserver();
