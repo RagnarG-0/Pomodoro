@@ -27,7 +27,7 @@ Wird verwendet, wenn ein neues Karten-Bild (PNG) zur Pomodoro-App hinzugefügt w
      { id: <ID>, name:'<Name>', rarity:'<rarity>', folder:'<rarity>' },
      ```
 
-5. **SQL-Insert für Supabase erstellen**
+5. **SQL-Insert für Supabase erstellen und direkt ausführen**
    - Neue Datei `supabase/add_cards_<YYYYMMDD>.sql` (heutiges Datum):
      ```sql
      -- Neue Karte (ID <ID>) einfügen
@@ -35,7 +35,7 @@ Wird verwendet, wenn ein neues Karten-Bild (PNG) zur Pomodoro-App hinzugefügt w
        (<ID>, '<Name>', '<rarity>')
      ON CONFLICT (id) DO NOTHING;
      ```
-   - Diese Datei liegt **nicht** unter `supabase/migrations/` und wird nicht automatisch ausgeführt — der Nutzer führt sie manuell im Supabase SQL-Editor aus.
+   - Diese Datei liegt bewusst **nicht** unter `supabase/migrations/` (reiner Daten-Insert, keine Schema-Änderung, keine Versionierung nötig), wird aber genau wie eine Migration **direkt selbst ausgeführt** — `supabase db query --linked -f supabase/add_cards_<YYYYMMDD>.sql` (nicht `supabase db push`, das gilt nur für `supabase/migrations/`). Kein manueller Schritt im Supabase SQL-Editor nötig, Zugriff besteht über die verlinkte CLI wie bei allen anderen Supabase-Änderungen in diesem Projekt.
 
 6. **`CLAUDE.md` aktualisieren**
    - Neue Zeile in der Tabelle unter "## Karten-Katalog" ergänzen: `| <ID> | <Name> | <rarity> |`
@@ -47,5 +47,5 @@ Wird verwendet, wenn ein neues Karten-Bild (PNG) zur Pomodoro-App hinzugefügt w
 
 - [ ] Bild liegt in `Karten/<rarity>/<Name>.png`
 - [ ] Eintrag in `CARD_CATALOG` (`index.html`)
-- [ ] `supabase/add_cards_<datum>.sql` erstellt (vom Nutzer noch manuell in Supabase auszuführen)
+- [ ] `supabase/add_cards_<datum>.sql` erstellt UND per `supabase db query --linked -f ...` bereits selbst ausgeführt
 - [ ] `CLAUDE.md`-Tabelle + Kartenanzahl aktualisiert
