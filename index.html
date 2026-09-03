@@ -674,8 +674,8 @@
     50%      { transform: translate(-50%, -50%) scale(1.15); }
   }
 
-  /* Bibliotheks-Check-in: Hover-Hotspots + Wild Cards auf den drei
-     Gebäuden im Streckenbild (siehe LIBRARY_BUILDINGS). */
+  /* Bibliotheks-Check-in: Hover-Hotspots + Wild Cards auf den vier
+     Check-in-Punkten im Streckenbild (siehe LIBRARY_BUILDINGS). */
   .lb-library-hover-layer {
     position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
   }
@@ -685,12 +685,40 @@
     pointer-events: all; cursor: pointer;
     transition: stroke 0.15s ease, filter 0.15s ease;
   }
-  .lb-library-hotspot:hover,
+  .lb-library-hotspot:not(.lb-library-disabled):hover,
   .lb-library-hotspot.lb-library-mine {
     stroke: #fff;
     filter: drop-shadow(0 0 5px rgba(255,255,255,0.85));
   }
   .lb-library-hotspot.lb-library-mine { stroke-width: 0.9; }
+  /* Vorübergehend geschlossenes Gebäude (z.B. Neuwerk): dauerhaft leicht
+     abgedunkelt, kein Hover-Glow, kein Klick-Cursor. */
+  .lb-library-hotspot.lb-library-disabled {
+    fill: rgba(0,0,0,0.45);
+    cursor: not-allowed;
+  }
+  /* Banner über einem gesperrten Gebäude, gleiches Positionierungs-Idiom
+     wie .lb-wildcard (anchorPct + translate(-50%,-50%)). */
+  .lb-library-closed-banner {
+    position: absolute;
+    transform: translate(-50%, -50%) rotate(-8deg);
+    background: rgba(20,20,22,0.88);
+    color: #fff;
+    font-family: -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: clamp(7px, 1.3vw, 11px);
+    line-height: 1.2;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    padding: 3px 7px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.35);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 41;
+  }
 
   /* Wild Card: rechteckige, kleinere Panini-Sticker-Karte — Gegenstück zu
      .lb-race-avatar, aber bewusst NICHT rund, damit beides klar
@@ -5429,31 +5457,42 @@
   //
   // `key: 'neuwerk'` bleibt bewusst unverändert (DB-Wert in
   // profiles.library_checkin, CHECK-Constraint, Migration
-  // 20260901000000_library_checkin.sql) — nur die Anzeige (`name`) wurde
-  // umfunktioniert, da die reale Neuwerk-Bibliothek im Sommer geschlossen
-  // ist. Das Gebäude im Bild dient jetzt als generischer "nicht in einer
-  // der beiden anderen Bibliotheken"-Check-in-Punkt.
+  // 20260901000000_library_checkin.sql). Neuwerk zeigt wieder ihren echten
+  // Namen, ist aber wegen `disabled: true` aktuell nicht auswählbar (reale
+  // Bibliothek vorübergehend geschlossen) — siehe „Vorübergehend
+  // geschlossen"-Banner in renderRaceTrack(). Der frühere generische
+  // "nicht in einer der beiden anderen Bibliotheken"-Check-in-Punkt läuft
+  // jetzt als eigener vierter Ort `auswaerts` mit eigener, frisch
+  // abgesteckter Fläche (Platzhalter-Koordinaten bis zur Kalibrierung im
+  // Silhouetten-Editor, siehe Kommentar oben).
   const LIBRARY_BUILDINGS = [
     {
       key: 'steintor', name: 'Steintor', anchorPct: [32.19, 31.71],
       points: [[27.33,20.54],[42.85,24.68],[42.92,37.6],[36.95,43.91],[21.24,37.45],[21.34,24.4]],
     },
     {
-      key: 'neuwerk', name: 'Auswärts / zu Hause', anchorPct: [78.11, 43.43],
+      key: 'neuwerk', name: 'Neuwerk', anchorPct: [78.11, 43.43], disabled: true,
       points: [[69.69,36.81],[73.89,33.2],[77.06,32.09],[82.91,34.25],[86.4,36.56],[86.37,51.27],[79.92,55],[69.5,50.25]],
     },
     {
       key: 'juri', name: 'Juri', anchorPct: [57.25, 70.71],
       points: [[44.83,62.75],[52.25,59.75],[60.47,63.25],[61.58,62.75],[67.42,65.38],[67.67,68.88],[70.58,70],[71,75.75],[65.33,81.63],[58.5,78.88],[56.25,80.38],[44.58,74.13]],
     },
+    {
+      // Platzhalter-Fläche — noch nicht im Silhouetten-Editor kalibriert,
+      // siehe Rennstrecke/polygon-editor.html.
+      key: 'auswaerts', name: 'Auswärts / zu Hause', anchorPct: [50, 50],
+      points: [[47,45],[53,45],[56,50],[53,55],[47,55],[44,50]],
+    },
   ];
   // Farbcodierung pro Gebäude, gleiches --card-color/--card-bg-Idiom wie
   // .deck-card (EGG_RARITIES) — macht auf einen Blick erkennbar, welche
   // Wild Card zu welchem Gebäude gehört.
   const LIBRARY_COLORS = {
-    steintor: { color: '#d9483c', bg: '#241210' }, // rotes Backsteingebäude
-    neuwerk:  { color: '#d1a13c', bg: '#241a05' }, // ockerfarbenes Türmchengebäude
-    juri:     { color: '#3ba8c4', bg: '#06232a' }, // moderner Glas-/Betonbau
+    steintor:  { color: '#d9483c', bg: '#241210' }, // rotes Backsteingebäude
+    neuwerk:   { color: '#d1a13c', bg: '#241a05' }, // ockerfarbenes Türmchengebäude
+    juri:      { color: '#3ba8c4', bg: '#06232a' }, // moderner Glas-/Betonbau
+    auswaerts: { color: '#8a6fd6', bg: '#1c1530' }, // generischer Check-in-Punkt, kein reales Gebäude
   };
 
   // Aktuell ungenutzt (Rennstrecke zeigt seit 2026-08-05 Profilbilder statt
@@ -5698,9 +5737,16 @@
     const libraryHoverHtml = `<svg class="lb-library-hover-layer" viewBox="0 0 100 100" preserveAspectRatio="none">
       ${LIBRARY_BUILDINGS.map(b => {
         const mineClass = b.key === userLibraryCheckin ? ' lb-library-mine' : '';
-        return `<polygon data-library="${b.key}" class="lb-library-hotspot${mineClass}" points="${b.points.map(p => p.join(',')).join(' ')}"><title>${esc(b.name)}</title></polygon>`;
+        const disabledClass = b.disabled ? ' lb-library-disabled' : '';
+        const titleSuffix = b.disabled ? ' (vorübergehend geschlossen)' : '';
+        return `<polygon data-library="${b.key}" class="lb-library-hotspot${mineClass}${disabledClass}" points="${b.points.map(p => p.join(',')).join(' ')}"><title>${esc(b.name + titleSuffix)}</title></polygon>`;
       }).join('')}
     </svg>`;
+
+    // Banner über jedem aktuell gesperrten Gebäude (z.B. Neuwerk).
+    const closedBannersHtml = LIBRARY_BUILDINGS.filter(b => b.disabled).map(b => {
+      return `<div class="lb-library-closed-banner" style="left:${b.anchorPct[0]}%;top:${b.anchorPct[1]}%;">Vorübergehend<br>geschlossen</div>`;
+    }).join('');
 
     // Wild Cards: eingecheckte Spieler nach Gebäude gruppiert (gleiches
     // Gruppierungs-/Fächer-Prinzip wie die Renn-Avatare oben), am Ankerpunkt
@@ -5736,7 +5782,7 @@
     });
 
     wrap.style.display = 'block';
-    wrap.innerHTML = `<img src="${encodeURI(`${CDN}/Rennstrecke/strecke.png`)}" class="lb-racetrack-img" alt="Rennstrecke">${libraryHoverHtml}${diamondsHtml}${carsHtml}${wildCardsHtml}`;
+    wrap.innerHTML = `<img src="${encodeURI(`${CDN}/Rennstrecke/strecke.png`)}" class="lb-racetrack-img" alt="Rennstrecke">${libraryHoverHtml}${diamondsHtml}${carsHtml}${wildCardsHtml}${closedBannersHtml}`;
   }
 
   let lbPeriod = 'alltime';
@@ -10233,6 +10279,7 @@
     if (!currentUser || !userName) return;
     const building = LIBRARY_BUILDINGS.find(b => b.key === key);
     if (!building) return;
+    if (building.disabled) { toast(`${building.name} ist vorübergehend geschlossen.`); return; }
 
     const newVal = (userLibraryCheckin === key) ? null : key;
     userLibraryCheckin = newVal;
