@@ -107,14 +107,12 @@
   const COLORS = { steintor: '#d9483c', neuwerk: '#d1a13c', juri: '#3ba8c4', auswaerts: '#8a6fd6' };
   // Synchron zu LIBRARY_BUILDINGS in index.html gehalten — "Zurücksetzen"
   // im Tool geht damit auf den aktuellen Live-Stand, nicht auf die
-  // allererste grobe Schätzung. `auswaerts` hat noch KEINEN kalibrierten
-  // Bereich (Platzhalter-Hexagon in der Streckenmitte) — als eigener,
-  // vierter Check-in-Punkt hier frisch abzustecken.
+  // allererste grobe Schätzung.
   const DEFAULTS = {
     steintor: { name: 'Steintor', anchorPct: [32.19, 31.71], points: [[27.33,20.54],[42.85,24.68],[42.92,37.6],[36.95,43.91],[21.24,37.45],[21.34,24.4]] },
-    neuwerk:  { name: 'Neuwerk', anchorPct: [78.11, 43.43], points: [[69.69,36.81],[73.89,33.2],[77.06,32.09],[82.91,34.25],[86.4,36.56],[86.37,51.27],[79.92,55],[69.5,50.25]] },
-    juri:     { name: 'Juri', anchorPct: [57.25, 70.71], points: [[44.83,62.75],[52.25,59.75],[60.47,63.25],[61.58,62.75],[67.42,65.38],[67.67,68.88],[70.58,70],[71,75.75],[65.33,81.63],[58.5,78.88],[56.25,80.38],[44.58,74.13]] },
-    auswaerts: { name: 'Auswärts / zu Hause', anchorPct: [50, 50], points: [[47,45],[53,45],[56,50],[53,55],[47,55],[44,50]] },
+    neuwerk:  { name: 'Neuwerk', anchorPct: [78.11, 43.43], points: [[69.69,36.81],[73.89,33.2],[77.06,32.09],[82.91,34.25],[86.4,36.56],[86.38,50.97],[79.92,55],[69.57,50.85]] },
+    juri:     { name: 'Juri', anchorPct: [57.25, 70.71], points: [[44.83,62.75],[52.25,59.75],[60.47,63.25],[61.58,62.75],[67.42,65.38],[67.67,68.88],[70.94,70.11],[70.87,78.59],[65.33,81.63],[58.5,78.88],[56.25,80.38],[44.58,74.13]] },
+    auswaerts: { name: 'Auswärts / zu Hause', anchorPct: [51.16, 45.84], points: [[40.67,45.5],[42,45.13],[46.08,44.25],[50.58,43.63],[55.33,43.63],[59.58,44.75],[62.67,46.13],[65.17,47.63],[64.08,49.5],[61.17,48.75],[60.08,50.5],[58.42,50.63],[58.42,48.5],[56.83,47],[55.08,48.25],[55.08,50],[53.5,50.5],[53.75,48],[52.42,46.5],[50.75,48.25],[50.83,49.75],[49.42,49.88],[49.33,48],[48.08,46.5],[46.33,47.88],[46.17,49.63],[44.75,49.88],[44.83,48.13],[43.67,47.13],[42.17,48.5],[42,50.13],[39.83,47.88]] },
   };
   const ORDER = ['steintor', 'neuwerk', 'juri', 'auswaerts'];
 
