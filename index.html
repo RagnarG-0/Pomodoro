@@ -7704,6 +7704,16 @@
   const ATTENTION_DBSCAN_EPS_MIN = 25;               // zirkulärer Distanz-Schwellenwert
   const ATTENTION_DBSCAN_MIN_SAMPLES = 3;            // Mindestpunkte (inkl. sich selbst) für einen Kern-Punkt
 
+  // ─── Exposure-Normalisierung (Hazard-Rate statt reiner Klick-Dichte) ──────
+  // Ein Tired-Klick kann nur entstehen, wenn der Nutzer gerade am PC ist —
+  // außerhalb von Fokus-Sessions (v.a. Pausen) ist diese "Gelegenheit zu
+  // klicken" massiv unterrepräsentiert. Die reine Tired-Klick-KDE misst
+  // deshalb eigentlich P(Klick UND am PC), nicht das eigentlich interessierende
+  // P(müde | am PC). Fix: siehe attentionRiskFactorAt() unten, Herleitung in
+  // docs/attention-tracking.md.
+  const ATTENTION_EXPOSURE_MIN_RELATIVE = 0.15;   // ĝ(t)·P unterhalb dieses Werts gilt als "zu wenig Daten" (bewusst identisch zu ATTENTION_PEAK_MIN_HEIGHT_FRACTION)
+  const ATTENTION_EXPOSURE_EPS_DENSITY = 1e-9;    // reiner Division-durch-0-Schutz, keine inhaltliche Bedeutung
+
   function circularStdDevMin(valuesMin) {
     const n = valuesMin.length;
     const toAngle = v => (v / ATTENTION_PERIOD_MIN) * 2 * Math.PI;
@@ -7744,6 +7754,77 @@
     const density = grid.map(t => circularGaussianKdeDensity(t, tiredMinutesArray, bandwidth));
     const maxDensity = Math.max(0, ...density);
     return { grid, density, bandwidth, maxDensity };
+  }
+
+  // Standardnormal-CDF Φ(z) über eine numerische erf-Approximation
+  // (Abramowitz & Stegun 7.1.26, max. Fehler ~1.5e-7) — für die Chart-Glättung
+  // hier mehr als ausreichend, ohne externe Bibliothek im Single-File-Setup.
+  function erf(x) {
+    const sign = x < 0 ? -1 : 1;
+    const ax = Math.abs(x);
+    const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741,
+          a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    const t = 1 / (1 + p * ax);
+    const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
+    return sign * y;
+  }
+  function stdNormalCdf(z) {
+    return 0.5 * (1 + erf(z / Math.SQRT2));
+  }
+
+  // Faltung eines Zeitfenster-Rechtecks (Boxcar) [start,end] mit einem
+  // Gauß-Kernel der Bandbreite h an Punkt t: geschlossene Form über die
+  // Differenz zweier Normalverteilungs-CDFs. Analog zu
+  // circularGaussianKdeDensity(), aber PRO SEGMENT statt pro Punkt, mit
+  // derselben Dreifach-Kopie (-P/0/+P) für den zirkulären Wrap. `weight`
+  // erlaubt eine spätere, bewusst NICHT aktivierte partielle Pausen-Exposure
+  // (siehe docs/attention-tracking.md, Abschnitt "Exposure-Normalisierung").
+  function circularBoxcarKdeSum(t, segments, bandwidth) {
+    let sum = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const { start, end, weight = 1 } = segments[i];
+      for (let k = -1; k <= 1; k++) {
+        const a = start + k * ATTENTION_PERIOD_MIN;
+        const b = end + k * ATTENTION_PERIOD_MIN;
+        sum += weight * (stdNormalCdf((t - a) / bandwidth) - stdNormalCdf((t - b) / bandwidth));
+      }
+    }
+    return sum; // Einheit: Minuten (unnormiert) — Integral über eine volle Periode ≈ Σ weight·(end-start)
+  }
+
+  // Rekonstruiert Exposure-Zeitfenster (nachgewiesene PC-Anwesenheit) aus den
+  // Fokus-Session-Segmenten — dieselbe Geometrie wie im Punktdiagramm oben
+  // (Ende = created_at, Start = Ende - duration_minutes, an der 4-Uhr-Grenze
+  // geclamped). Bewusst OHNE Pausen-Verlängerung: Pausen sind im Fokustimer
+  // nicht geloggt, jede nachträgliche Annahme über ihre Dauer wäre Spekulation.
+  // Zeiten ohne Fokus-Session gelten dadurch korrekt als "keine Exposure-
+  // Evidenz" statt fälschlich als "risikoarm".
+  function attentionExposureSegments(sessions) {
+    return sessions.map(s => {
+      const endH = attentionDecimalHour(s.created_at);
+      const durH = (+s.duration_minutes || 0) / 60;
+      const startMin = Math.max(endH - durH, 0) * 60;
+      const endMin = Math.max(endH * 60, startMin + 1); // Mindestlänge 1min gegen Degeneration bei duration=0
+      return { start: startMin, end: endMin, weight: 1 };
+    });
+  }
+
+  // Hazard-Rate / "relatives Risiko PRO EXPOSURE-MINUTE" an Punkt t: Verhältnis
+  // aus Tired-Klick-Dichte und (auf ∫=1 normierter) Exposure-Dichte. Beide sind
+  // Wahrscheinlichkeitsdichten — ihr Verhältnis ist exakt der Faktor gegenüber
+  // der durchschnittlichen Klick-Rate PRO EXPOSURE-MINUTE (nicht mehr pro
+  // Uhrzeit-Minute wie zuvor). Reduziert sich exakt auf die alte Formel
+  // (density * ATTENTION_PERIOD_MIN), falls Exposure perfekt gleichverteilt
+  // wäre — siehe Herleitung in docs/attention-tracking.md.
+  function attentionRiskFactorAt(t, tiredMinutes, bandwidth, exposureSegments, totalExposureMin) {
+    const tiredDensity = circularGaussianKdeDensity(t, tiredMinutes, bandwidth);
+    if (totalExposureMin <= 0) return { risk: 0, relExposure: 0, lowExposure: true };
+    const gRaw = circularBoxcarKdeSum(t, exposureSegments, bandwidth);
+    const gHat = gRaw / totalExposureMin;
+    const relExposure = gHat * ATTENTION_PERIOD_MIN; // 1.0 = "wie bei gleichverteilter 24/7-Präsenz"
+    const lowExposure = relExposure < ATTENTION_EXPOSURE_MIN_RELATIVE;
+    const gHatReg = Math.max(gHat, ATTENTION_EXPOSURE_EPS_DENSITY);
+    return { risk: tiredDensity / gHatReg, relExposure, lowExposure };
   }
 
   function findCircularPeaks(density, minHeightFraction) {
@@ -8025,7 +8106,7 @@
         </span>
       </div>`;
 
-    renderAttentionRiskHistogram(tiredEvents);
+    renderAttentionRiskHistogram(tiredEvents, sessions);
   }
 
   // Zweites, eigenständiges Chart unterhalb des Punktdiagramms: KDE-Dichte
@@ -8059,7 +8140,7 @@
     return lerpHexColor('#fee2e2', '#7f1d1d', t);
   }
 
-  function renderAttentionRiskHistogram(tiredEvents) {
+  function renderAttentionRiskHistogram(tiredEvents, sessions) {
     const container = document.getElementById('attention-histogram-content');
     if (!container) return;
 
@@ -8070,9 +8151,34 @@
 
     const tiredMinutes = tiredEvents.map(t => attentionDecimalHour(t.created_at) * 60);
     const kde = computeAttentionKde(tiredMinutes);
-    const peaks = findCircularPeaks(kde.density, ATTENTION_PEAK_MIN_HEIGHT_FRACTION);
-    const riskIntervals = attentionRiskIntervalsFromKde(peaks, kde.grid, kde.density, ATTENTION_INTERVAL_THRESHOLD_FRACTION);
+
+    // Exposure-Normalisierung: siehe attentionRiskFactorAt() und
+    // docs/attention-tracking.md, Abschnitt "Exposure-Normalisierung
+    // (Hazard-Rate)". Ohne Fokuszeit-Historie ist keine Rate schätzbar.
+    const exposureSegments = attentionExposureSegments(sessions || []);
+    const totalExposureMin = exposureSegments.reduce((a, s) => a + (s.end - s.start) * s.weight, 0);
+    if (totalExposureMin <= 0) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem;">Noch keine Fokuszeit-Daten — Risiko kann noch nicht bestimmt werden.</div>';
+      return;
+    }
+
+    // Peaks/Intervalle jetzt auf Basis der EXPOSURE-KORRIGIERTEN Risiko-Kurve
+    // statt der rohen Klick-Dichte — sonst würden "erkannte Risiko-Intervalle"
+    // weiterhin einfach dort liegen, wo am meisten Exposure ist (der zu
+    // behebende Bias), während die Balkenhöhen daneben schon korrigiert wären.
+    // Low-Exposure-Gitterpunkte werden vor der Peak-Suche auf 0 gesetzt, damit
+    // ein einzelner Klick in einem ~0-Exposure-Fenster keinen Fake-Peak erzeugt.
+    const riskGrid = kde.grid.map(t => {
+      const r = attentionRiskFactorAt(t, tiredMinutes, kde.bandwidth, exposureSegments, totalExposureMin);
+      return r.lowExposure ? 0 : r.risk;
+    });
+    const peaks = findCircularPeaks(riskGrid, ATTENTION_PEAK_MIN_HEIGHT_FRACTION);
+    const riskIntervals = attentionRiskIntervalsFromKde(peaks, kde.grid, riskGrid, ATTENTION_INTERVAL_THRESHOLD_FRACTION);
     const { clusters, noise } = circularDbscan1D(tiredMinutes, ATTENTION_DBSCAN_EPS_MIN, ATTENTION_DBSCAN_MIN_SAMPLES);
+    // DBSCAN bleibt bewusst unverändert auf den rohen Klick-Zeitpunkten: es
+    // beantwortet "bunchen sich beobachtete Klicks zeitlich", keine
+    // Hochrechnung auf Nicht-Ereignisse — dafür ist keine Exposure-Korrektur
+    // nötig (anders als bei KDE/riskFactor, die eine RATE schätzen).
 
     const isInRiskInterval = minute => riskIntervals.some(iv => iv.end < iv.start
       ? (minute >= iv.start || minute <= iv.end)
@@ -8097,32 +8203,44 @@
     const gap = binW <= 4 ? 0 : Math.min(2, binW * 0.15);
     const barW = Math.max(0.75, binW - gap);
 
-    // Relatives Risiko statt Peak-Normierung: die Dichte einer perfekten
-    // Gleichverteilung über 24h wäre konstant 1/ATTENTION_PERIOD_MIN, also
-    // ist density*ATTENTION_PERIOD_MIN exakt der Faktor gegenüber dem
-    // Tagesdurchschnitt (1.0 = durchschnittliches Risiko). Deutlich
-    // aussagekräftiger als "Anteil vom höchsten Balken", das JEDEN Datensatz
-    // unabhängig vom tatsächlichen Risikoniveau bis 100% ausreizt.
+    // Relatives Risiko PRO EXPOSURE-MINUTE (nicht mehr pro Uhrzeit-Minute):
+    // riskFactor(t) = kde_tired(t) / ĝ_exposure(t), beide auf ∫=1 normiert —
+    // "1.0 = Durchschnitt" bleibt dadurch automatisch erhalten (Herleitung in
+    // docs/attention-tracking.md), nur jetzt korrekt exposure-gewichtet statt
+    // uhrzeit-gewichtet. Bins mit zu wenig Exposure-Evidenz (v.a. Pausen,
+    // Zeiten ganz ohne Fokus-Session) bekommen keine Risikozahl, sondern
+    // werden weiter unten als neutraler grauer Balken dargestellt.
     const bins = [];
     for (let i = 0; i < nBins; i++) {
       const center = i * ATTENTION_HISTOGRAM_BIN_MIN + ATTENTION_HISTOGRAM_BIN_MIN / 2;
-      const density = circularGaussianKdeDensity(center, tiredMinutes, kde.bandwidth);
-      bins.push({ i, center, risk: density * ATTENTION_PERIOD_MIN });
+      const { risk, relExposure, lowExposure } = attentionRiskFactorAt(center, tiredMinutes, kde.bandwidth, exposureSegments, totalExposureMin);
+      bins.push({ i, center, risk, relExposure, lowExposure });
     }
     // Untergrenze 1 statt 0, damit die Achse auch bei durchgehend
     // unterdurchschnittlichem Risiko (kleines maxRisk) die Ø-Linie noch
     // sinnvoll mit anzeigt, statt sie ggf. über den sichtbaren Bereich
-    // hinauszuschieben.
-    const maxRisk = Math.max(1, ...bins.map(b => b.risk));
+    // hinauszuschieben. Low-Exposure-Bins fließen nicht in die Achsenskala
+    // ein — ein wilder Ausschlag bei kaum vorhandener Exposure soll nicht
+    // die ganze Skala stauchen.
+    const maxRisk = Math.max(1, ...bins.filter(b => !b.lowExposure).map(b => b.risk));
     const axisStep = niceAxisStep(maxRisk);
     const axisMax = Math.ceil(maxRisk / axisStep) * axisStep;
     const yForRisk = r => axisY - (r / axisMax) * chartH;
 
     let barsHtml = '';
     bins.forEach(b => {
+      const x = leftPad + b.i * binW + gap / 2;
+      if (b.lowExposure) {
+        // Neutraler, voll-hoher grauer Balken statt einer nicht belastbaren
+        // Risiko-Zahl — signalisiert bewusst "keine Aussage möglich" statt
+        // eines möglicherweise wilden Ausschlags bei kaum vorhandener
+        // Exposure-Evidenz (v.a. Pausen, Nachtstunden).
+        const title = `${fmtClockFromDecimalHour(b.center/60)} · zu wenig Exposure-Daten (${(b.relExposure*100).toFixed(0)}% der Ø-Anwesenheit) – Risiko nicht auswertbar`;
+        barsHtml += `<rect x="${x.toFixed(2)}" y="${topPad}" width="${barW.toFixed(2)}" height="${chartH.toFixed(1)}" fill="var(--border)" opacity="0.35" rx="1.5"><title>${title}</title></rect>`;
+        return;
+      }
       const y = yForRisk(b.risk);
       const h = axisY - y;
-      const x = leftPad + b.i * binW + gap / 2;
       // Balkenfarbe verdunkelt sich kontinuierlich mit dem Risikowert (hell
       // = niedriges, dunkel = hohes relatives Risiko) — Skala an axisMax
       // gekoppelt, deckt sich also direkt mit der Balkenhöhe (ein Balken
@@ -8187,6 +8305,9 @@
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
           <span style="width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0;"></span>Ausreißer
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:8px;height:8px;border-radius:2px;background:var(--border);opacity:0.6;flex-shrink:0;"></span>Zu wenig Daten
         </span>
       </div>`;
   }
