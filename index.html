@@ -8101,11 +8101,9 @@
     // Risiko-Histogramm. Nach `marks` gezeichnet (nicht in `grid`), damit sie
     // nicht hinter den Fokuszeit-Rechtecken der heutigen (rechtesten) Spalte
     // verschwindet, v.a. relevant wenn gerade eine Fokus-Session läuft.
-    // Label links statt rechts, weil die heutige Spalte am rechten Rand liegt.
     const nowH = Math.min(24 - 1e-6, Math.max(0, attentionDecimalHour(new Date().toISOString())));
     const nowY = yForHour(nowH).toFixed(1);
-    const nowLine = `<line x1="${leftPad}" y1="${nowY}" x2="${svgW - rightPad}" y2="${nowY}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>` +
-      `<text x="${leftPad + 2}" y="${(+nowY - 3).toFixed(1)}" text-anchor="start" font-size="9" font-style="italic" fill="var(--text-muted)" font-family="Georgia,serif">Jetzt</text>`;
+    const nowLine = `<line x1="${leftPad}" y1="${nowY}" x2="${svgW - rightPad}" y2="${nowY}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>`;
 
     content.innerHTML = `
       <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${marks}${nowLine}</svg>
@@ -8320,17 +8318,19 @@
     // der dünnen Risiko-Intervall-Umrandung und der Rot-/Grau-Balkenpalette
     // abhebt — reagiert außerdem automatisch auf Light/Dark-Mode. Reicht nur
     // topPad..axisY (wie die Stunden-Gitterlinien), nicht bis markerY, damit
-    // sie nicht durch die DBSCAN-Marker-Reihe läuft.
+    // sie nicht durch die DBSCAN-Marker-Reihe läuft. Die Umrandung folgt der
+    // TATSÄCHLICHEN Balkenhöhe (wie barsHtml sie zeichnet) statt der vollen
+    // Diagrammhöhe — bei lowExposure ist das die volle Höhe (grauer Balken),
+    // sonst exakt die Höhe des Risiko-Balkens selbst.
     const nowMinutes = Math.min(ATTENTION_PERIOD_MIN - 1e-6, Math.max(0, attentionDecimalHour(new Date().toISOString()) * 60));
     const nowX = xForMinute(nowMinutes);
     const nowBinIndex = Math.min(nBins - 1, Math.max(0, Math.floor(nowMinutes / ATTENTION_HISTOGRAM_BIN_MIN)));
+    const nowBin = bins[nowBinIndex];
     const nowBinX = leftPad + nowBinIndex * binW + gap / 2;
-    const nowLabelIsRight = nowX > leftPad + availW / 2;
-    const nowLabelAnchor = nowLabelIsRight ? 'end' : 'start';
-    const nowLabelX = (nowLabelIsRight ? nowX - 4 : nowX + 4).toFixed(1);
-    let nowMarkerHtml = `<rect x="${nowBinX.toFixed(2)}" y="${topPad}" width="${barW.toFixed(2)}" height="${chartH.toFixed(1)}" fill="none" stroke="var(--text)" stroke-width="1.3" rx="1.5"><title>Aktueller Bin · ${fmtClockFromDecimalHour(nowMinutes/60)}</title></rect>`;
+    const nowBinY = nowBin.lowExposure ? topPad : yForRisk(nowBin.risk);
+    const nowBinH = nowBin.lowExposure ? chartH : Math.max(axisY - nowBinY, 0);
+    let nowMarkerHtml = `<rect x="${nowBinX.toFixed(2)}" y="${nowBinY.toFixed(1)}" width="${barW.toFixed(2)}" height="${nowBinH.toFixed(1)}" fill="none" stroke="var(--text)" stroke-width="1.3" rx="1.5"><title>Aktueller Bin · ${fmtClockFromDecimalHour(nowMinutes/60)}</title></rect>`;
     nowMarkerHtml += `<line x1="${nowX.toFixed(1)}" y1="${topPad}" x2="${nowX.toFixed(1)}" y2="${axisY}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>`;
-    nowMarkerHtml += `<text x="${nowLabelX}" y="${topPad + 9}" text-anchor="${nowLabelAnchor}" font-size="9" font-style="italic" fill="var(--text-muted)" font-family="Georgia,serif">Jetzt</text>`;
 
     container.innerHTML = `
       <svg viewBox="0 0 ${svgW} ${svgH2}" style="width:100%;height:${svgH2}px;display:block;">${bgHtml}${grid}${barsHtml}${clusterHtml}${nowMarkerHtml}</svg>
