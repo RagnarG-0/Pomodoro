@@ -7703,6 +7703,8 @@
   const ATTENTION_INTERVAL_THRESHOLD_FRACTION = 0.5; // Intervallgrenze = 50% der jeweiligen Peak-Höhe (Halbwertsbreite)
   const ATTENTION_DBSCAN_EPS_MIN = 25;               // zirkulärer Distanz-Schwellenwert
   const ATTENTION_DBSCAN_MIN_SAMPLES = 3;            // Mindestpunkte (inkl. sich selbst) für einen Kern-Punkt
+  const ATTENTION_RISK_GREEN_MAX = 1.5;              // Risiko unterhalb dieses Faktors gilt als "risikoarm" -> grüner Hintergrund
+  const ATTENTION_RISK_GREEN_OPACITY = 0.09;         // bewusst niedrig ("nicht zu deckend")
 
   // ─── Exposure-Normalisierung (Hazard-Rate statt reiner Klick-Dichte) ──────
   // Ein Tired-Klick kann nur entstehen, wenn der Nutzer gerade am PC ist —
@@ -8095,8 +8097,18 @@
       });
     });
 
+    // "Jetzt"-Linie: aktuelle Uhrzeit, gleicher Stil wie die Ø-Linie im
+    // Risiko-Histogramm. Nach `marks` gezeichnet (nicht in `grid`), damit sie
+    // nicht hinter den Fokuszeit-Rechtecken der heutigen (rechtesten) Spalte
+    // verschwindet, v.a. relevant wenn gerade eine Fokus-Session läuft.
+    // Label links statt rechts, weil die heutige Spalte am rechten Rand liegt.
+    const nowH = Math.min(24 - 1e-6, Math.max(0, attentionDecimalHour(new Date().toISOString())));
+    const nowY = yForHour(nowH).toFixed(1);
+    const nowLine = `<line x1="${leftPad}" y1="${nowY}" x2="${svgW - rightPad}" y2="${nowY}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>` +
+      `<text x="${leftPad + 2}" y="${(+nowY - 3).toFixed(1)}" text-anchor="start" font-size="9" font-style="italic" fill="var(--text-muted)" font-family="Georgia,serif">Jetzt</text>`;
+
     content.innerHTML = `
-      <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${marks}</svg>
+      <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:${svgH}px;display:block;">${grid}${marks}${nowLine}</svg>
       <div style="display:flex;flex-wrap:wrap;margin-top:8px;padding:0 2px;">
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
           <span style="width:8px;height:8px;border-radius:2px;background:var(--accent);flex-shrink:0;"></span>Fokuszeit
@@ -8228,6 +8240,7 @@
     const yForRisk = r => axisY - (r / axisMax) * chartH;
 
     let barsHtml = '';
+    let bgHtml = '';
     bins.forEach(b => {
       const x = leftPad + b.i * binW + gap / 2;
       if (b.lowExposure) {
@@ -8238,6 +8251,13 @@
         const title = `${fmtClockFromDecimalHour(b.center/60)} · zu wenig Exposure-Daten (${(b.relExposure*100).toFixed(0)}% der Ø-Anwesenheit) – Risiko nicht auswertbar`;
         barsHtml += `<rect x="${x.toFixed(2)}" y="${topPad}" width="${barW.toFixed(2)}" height="${chartH.toFixed(1)}" fill="var(--border)" opacity="0.35" rx="1.5"><title>${title}</title></rect>`;
         return;
+      }
+      // Risikoarmer Hintergrund NUR bei belastbarer Exposure — bei lowExposure
+      // (s.o., return-Zweig) ist das Risiko unbekannt, nicht "sicher niedrig".
+      // Volle Balkenhöhe wie der graue "Zu wenig Daten"-Balken, aber dezent
+      // (niedrige Opacity), damit die Rot-Skala der Balken oben nicht überdeckt wird.
+      if (b.risk < ATTENTION_RISK_GREEN_MAX) {
+        bgHtml += `<rect x="${x.toFixed(2)}" y="${topPad}" width="${barW.toFixed(2)}" height="${chartH.toFixed(1)}" fill="var(--accent)" opacity="${ATTENTION_RISK_GREEN_OPACITY}"/>`;
       }
       const y = yForRisk(b.risk);
       const h = axisY - y;
@@ -8294,11 +8314,32 @@
       clusterHtml += `<circle cx="${nx}" cy="${markerY}" r="1.8" fill="var(--text-muted)"><title>Ausreißer · ${fmtClockFromDecimalHour(nMin / 60)}</title></circle>`;
     });
 
+    // "Jetzt"-Markierung: vertikale Linie (gleicher Stil wie die Ø-Linie)
+    // plus Umrandung des aktuellen Bins. Eigene, deckende Kontrastfarbe
+    // (var(--text) statt var(--text-muted)/#450a0a), damit sie sich klar von
+    // der dünnen Risiko-Intervall-Umrandung und der Rot-/Grau-Balkenpalette
+    // abhebt — reagiert außerdem automatisch auf Light/Dark-Mode. Reicht nur
+    // topPad..axisY (wie die Stunden-Gitterlinien), nicht bis markerY, damit
+    // sie nicht durch die DBSCAN-Marker-Reihe läuft.
+    const nowMinutes = Math.min(ATTENTION_PERIOD_MIN - 1e-6, Math.max(0, attentionDecimalHour(new Date().toISOString()) * 60));
+    const nowX = xForMinute(nowMinutes);
+    const nowBinIndex = Math.min(nBins - 1, Math.max(0, Math.floor(nowMinutes / ATTENTION_HISTOGRAM_BIN_MIN)));
+    const nowBinX = leftPad + nowBinIndex * binW + gap / 2;
+    const nowLabelIsRight = nowX > leftPad + availW / 2;
+    const nowLabelAnchor = nowLabelIsRight ? 'end' : 'start';
+    const nowLabelX = (nowLabelIsRight ? nowX - 4 : nowX + 4).toFixed(1);
+    let nowMarkerHtml = `<rect x="${nowBinX.toFixed(2)}" y="${topPad}" width="${barW.toFixed(2)}" height="${chartH.toFixed(1)}" fill="none" stroke="var(--text)" stroke-width="1.3" rx="1.5"><title>Aktueller Bin · ${fmtClockFromDecimalHour(nowMinutes/60)}</title></rect>`;
+    nowMarkerHtml += `<line x1="${nowX.toFixed(1)}" y1="${topPad}" x2="${nowX.toFixed(1)}" y2="${axisY}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>`;
+    nowMarkerHtml += `<text x="${nowLabelX}" y="${topPad + 9}" text-anchor="${nowLabelAnchor}" font-size="9" font-style="italic" fill="var(--text-muted)" font-family="Georgia,serif">Jetzt</text>`;
+
     container.innerHTML = `
-      <svg viewBox="0 0 ${svgW} ${svgH2}" style="width:100%;height:${svgH2}px;display:block;">${grid}${barsHtml}${clusterHtml}</svg>
+      <svg viewBox="0 0 ${svgW} ${svgH2}" style="width:100%;height:${svgH2}px;display:block;">${bgHtml}${grid}${barsHtml}${clusterHtml}${nowMarkerHtml}</svg>
       <div style="display:flex;flex-wrap:wrap;margin-top:4px;padding:0 2px;">
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
           <span style="width:24px;height:8px;border-radius:2px;background:linear-gradient(90deg,#fee2e2,#7f1d1d);flex-shrink:0;"></span>Risiko (hell→dunkel)
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
+          <span style="width:10px;height:8px;border-radius:2px;background:var(--accent);opacity:0.35;flex-shrink:0;"></span>Risikoarm (&lt; 1,5×)
         </span>
         <span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px 4px 0;font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">
           <span style="width:10px;height:3px;border-radius:2px;background:#64b5f6;flex-shrink:0;"></span>DBSCAN-Cluster
