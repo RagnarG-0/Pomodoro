@@ -1538,15 +1538,20 @@
     body.bento-edit-dragging .bento-edit-gap.bento-edit-hot::before { background: var(--accent); }
   }
 
-  #bento-edit-done-btn {
+  #bento-edit-actions {
     display: none; position: fixed; bottom: clamp(1rem, 4vw, 2rem); right: clamp(1rem, 4vw, 2rem);
-    z-index: 500; align-items: center; gap: 6px;
-    padding: 10px 18px; border-radius: 999px;
-    background: var(--accent); color: #fff; border: 0.5px solid var(--accent-dark);
-    font-family: Georgia, serif; font-size: 13px; letter-spacing: 0.02em;
-    cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+    z-index: 500; gap: 10px; align-items: center;
   }
-  body.bento-edit-mode #bento-edit-done-btn { display: flex; }
+  body.bento-edit-mode #bento-edit-actions { display: flex; }
+  #bento-edit-done-btn, #bento-edit-reset-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px 18px; border-radius: 999px;
+    font-family: Georgia, serif; font-size: 13px; letter-spacing: 0.02em;
+    cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.22); border: 0.5px solid;
+  }
+  #bento-edit-done-btn { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+  #bento-edit-reset-btn { background: var(--surface); color: var(--text-muted); border-color: var(--border-strong); }
+  #bento-edit-reset-btn:hover { color: var(--text); }
 
   #bento-removed-panel {
     display: none; position: fixed; bottom: clamp(1rem, 4vw, 2rem); left: clamp(1rem, 4vw, 2rem);
@@ -1556,6 +1561,12 @@
     box-shadow: 0 8px 24px rgba(0,0,0,0.22); font-family: Georgia, serif;
   }
   body.bento-edit-mode #bento-removed-panel.has-items { display: block; }
+
+  .bento-profile-row.active .bento-profile-name { color: var(--accent); }
+  .bento-profile-row-btns { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+  .bento-profile-row .label-edit-btn { opacity: 0.6; } /* .label-edit-btn ist sonst nur bei :hover der Stats-Detail-Zeile sichtbar */
+  .bento-profile-row .label-edit-btn:hover { opacity: 1; }
+  #bento-profile-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* ── Fokus-Modus (Header-Button, unabhängig vom Bento-Grid-Toggle) ── */
   body.focus-mode #heatmap-card,
@@ -1841,6 +1852,11 @@
     <p style="font-size:11px;color:var(--text-muted);margin:0.35rem 0 0.75rem;line-height:1.5;">
       Nur verfügbar, wenn „Neues Design" aktiv ist.
     </p>
+
+    <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin:0.75rem 0 0.4rem;">Gespeicherte Layouts</div>
+    <div id="bento-profiles-list" style="margin-bottom:0.5rem;"></div>
+    <button id="bento-profile-save-btn" style="width:100%;padding:8px;font-size:12px;border:0.5px dashed var(--border-strong);border-radius:8px;background:transparent;color:var(--text-muted);cursor:pointer;font-family:Georgia,serif;">+ Aktuelles Layout speichern</button>
+    <p id="bento-profiles-hint" style="font-size:11px;color:var(--text-muted);margin:0.35rem 0 0.75rem;line-height:1.5;"></p>
 
     <div class="panel-divider"></div>
     <div class="panel-section">Freie Wochentage</div>
@@ -2322,7 +2338,10 @@
   </div>
 </div>
 
-<button id="bento-edit-done-btn" title="Layout-Bearbeitung beenden">✓ Fertig</button>
+<div id="bento-edit-actions">
+  <button id="bento-edit-reset-btn" title="Auf Standard-Anordnung zurücksetzen">↺ Zurücksetzen</button>
+  <button id="bento-edit-done-btn" title="Layout-Bearbeitung beenden">✓ Fertig</button>
+</div>
 
 <!-- Permanenter, unsichtbarer Halte-Container für per Bento-Editor entfernte
      Kacheln (siehe applyBentoState/removeBentoTile). Kacheln werden per
@@ -4193,9 +4212,27 @@
   // hier ohne Egg-Bezug wiederverwendet statt eigenen Fetch-Code zu schreiben.
   // Gleiche Spalte profiles.bento_layout wie zuvor (JSONB, keine Migration
   // nötig) — hält jetzt { rows, removed } statt bloß rows.
+  // Write-Through: ist gerade ein benanntes Layout-Profil aktiv (siehe
+  // Bento-Layout-Profile unten), wird dessen rows/removed synchron mit-
+  // aktualisiert — dadurch landet JEDE Editor-Aktion (Drag/Resize/Entfernen/
+  // Wiederherstellen/Reset) automatisch im aktiven Profil, ohne dass die
+  // bestehenden Call-Sites von persistBentoState() angepasst werden müssen.
+  // Ein einziger PATCH pro Aktion (nicht zwei), um Request-Last/Race-Fenster
+  // nicht zu verdoppeln.
   function persistBentoState(state) {
     saveBentoState(state);
-    if (currentUser) saveEggProfile({ bento_layout: state });
+    const fields = { bento_layout: state };
+    const registry = loadBentoProfiles();
+    if (registry.activeId) {
+      const target = registry.profiles.find(p => p.id === registry.activeId);
+      if (target) {
+        target.rows = state.rows;
+        target.removed = state.removed;
+        saveBentoProfilesLocal(registry);
+        fields.bento_layout_profiles = registry;
+      }
+    }
+    if (currentUser) saveEggProfile(fields);
   }
 
   function bentoStateEqual(a, b) {
@@ -4217,6 +4254,215 @@
     if (bentoStateEqual(serverState, localState)) return;
     saveBentoState(serverState);
     applyBentoState(serverState);
+  }
+
+  // ── Bento-Layout-Profile: bis zu 5 benannte, vom Nutzer speicherbare
+  // Voll-Snapshots des Bento-Zustands (jeweils ein eigenständiges
+  // { rows, removed } wie der Haupt-State). Bewusst getrennt von
+  // bento_layout/pomo_bento_layout_v1 gehalten (eigene Spalte, eigener
+  // Key) statt eingebettet — normalizeBentoState() liest beim Reconcile
+  // oben ausschließlich .rows/.removed aus dem Server-Blob und würde ein
+  // eingebettetes profiles-Feld sonst bei jeder Abweichung stillschweigend
+  // verwerfen. bento_layout bleibt unverändert die alleinige Quelle der
+  // Wahrheit fürs Rendering; der Editor bearbeitet immer den Haupt-State,
+  // ist ein Profil aktiv, schreibt persistBentoState() (oben) jede Aktion
+  // zusätzlich in dieses Profil zurück ("jederzeit anpassen").
+  const BENTO_PROFILES_KEY = 'pomo_bento_profiles_v1';
+  const BENTO_PROFILES_MAX = 5;
+
+  function bentoProfilesDefault() { return { activeId: null, profiles: [] }; }
+
+  // Sanitisiert statt hart zu verwerfen: einzelne kaputte/veraltete Profile
+  // (z. B. nach einem künftigen neuen Bento-Tile, das isValidBentoState()
+  // für alte Snapshots false liefern lässt) werden stillschweigend
+  // übersprungen statt die ganze Registry zu verwerfen — sonst würde eine
+  // einzelne künftige Migration alle 5 Nutzer-Profile auf einen Schlag löschen.
+  function sanitizeBentoProfiles(parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.profiles)) {
+      return bentoProfilesDefault();
+    }
+    const seenIds = new Set();
+    const profiles = [];
+    for (const p of parsed.profiles) {
+      if (profiles.length >= BENTO_PROFILES_MAX) break;
+      if (!p || typeof p !== 'object') continue;
+      if (typeof p.id !== 'string' || !p.id || seenIds.has(p.id)) continue;
+      if (typeof p.name !== 'string' || !p.name.trim()) continue;
+      if (!isValidBentoState({ rows: p.rows, removed: p.removed })) continue;
+      seenIds.add(p.id);
+      profiles.push({ id: p.id, name: p.name.trim().slice(0, 40), rows: p.rows, removed: p.removed });
+    }
+    const activeId = (typeof parsed.activeId === 'string' && seenIds.has(parsed.activeId)) ? parsed.activeId : null;
+    return { activeId, profiles };
+  }
+
+  function loadBentoProfiles() {
+    try {
+      const raw = localStorage.getItem(BENTO_PROFILES_KEY);
+      if (!raw) return bentoProfilesDefault();
+      return sanitizeBentoProfiles(JSON.parse(raw));
+    } catch { return bentoProfilesDefault(); }
+  }
+
+  function saveBentoProfilesLocal(registry) { localStorage.setItem(BENTO_PROFILES_KEY, JSON.stringify(registry)); }
+
+  function persistBentoProfiles(registry) {
+    saveBentoProfilesLocal(registry);
+    if (currentUser) saveEggProfile({ bento_layout_profiles: registry });
+  }
+
+  function bentoProfilesEqual(a, b) {
+    const norm = r => JSON.stringify({
+      activeId: r?.activeId ?? null,
+      profiles: (r?.profiles || []).map(p => ({
+        id: p.id, name: p.name,
+        rows: p.rows.map(row => row.map(e => ({ id: e.id, flex: e.flex, height: e.height ?? null }))),
+        removed: [...p.removed].sort(),
+      })),
+    });
+    return norm(a) === norm(b);
+  }
+
+  // Beim Login: Server gewinnt bei Abweichung, aber rein Registry-seitig —
+  // kein applyBentoState()-Aufruf hier, das eigentliche Rendering bleibt
+  // exklusiv Aufgabe von bento_layout/reconcileBentoState() oben.
+  function reconcileBentoProfiles(profile) {
+    if (!profile || profile.bento_layout_profiles == null) return;
+    const serverRegistry = sanitizeBentoProfiles(profile.bento_layout_profiles);
+    const localRegistry = loadBentoProfiles();
+    if (bentoProfilesEqual(serverRegistry, localRegistry)) return;
+    saveBentoProfilesLocal(serverRegistry);
+  }
+
+  function genBentoProfileId() { return crypto.randomUUID(); }
+
+  function createBentoProfileFromCurrent(name) {
+    const registry = loadBentoProfiles();
+    if (registry.profiles.length >= BENTO_PROFILES_MAX) return null;
+    const state = loadBentoState();
+    const trimmed = (name || '').trim().slice(0, 40) || `Layout ${registry.profiles.length + 1}`;
+    const entry = {
+      id: genBentoProfileId(),
+      name: trimmed,
+      rows: JSON.parse(JSON.stringify(state.rows)),
+      removed: [...state.removed],
+    };
+    registry.profiles.push(entry);
+    registry.activeId = entry.id;
+    persistBentoProfiles(registry);
+    renderBentoProfilesList();
+    return entry.id;
+  }
+
+  function renameBentoProfile(id, newName) {
+    const registry = loadBentoProfiles();
+    const target = registry.profiles.find(p => p.id === id);
+    if (!target) return;
+    const trimmed = (newName || '').trim().slice(0, 40);
+    if (!trimmed) { renderBentoProfilesList(); return; }
+    target.name = trimmed;
+    persistBentoProfiles(registry);
+    renderBentoProfilesList();
+  }
+
+  function deleteBentoProfile(id) {
+    const registry = loadBentoProfiles();
+    const idx = registry.profiles.findIndex(p => p.id === id);
+    if (idx === -1) return;
+    registry.profiles.splice(idx, 1);
+    if (registry.activeId === id) registry.activeId = null; // bento_layout bleibt unangetastet
+    persistBentoProfiles(registry);
+    renderBentoProfilesList();
+  }
+
+  // Wendet ein gespeichertes Profil als Haupt-Layout an. Schreibt bento_layout
+  // UND bento_layout_profiles (aktualisiertes activeId) in einem PATCH.
+  function applyBentoProfile(id) {
+    const registry = loadBentoProfiles();
+    const target = registry.profiles.find(p => p.id === id);
+    if (!target) return;
+    registry.activeId = id;
+    saveBentoProfilesLocal(registry);
+
+    const state = { rows: JSON.parse(JSON.stringify(target.rows)), removed: [...target.removed] };
+    saveBentoState(state);
+    applyBentoState(state);
+    if (currentUser) saveEggProfile({ bento_layout: state, bento_layout_profiles: registry });
+
+    if (document.body.classList.contains('bento-edit-mode')) {
+      bentoEditRows = state.rows;
+      bentoEditRemoved = state.removed;
+      renderBentoEditGaps();
+      renderBentoRemovedList();
+    }
+    renderBentoProfilesList();
+  }
+
+  // Liste der gespeicherten Profile im Settings-Panel. Unabhängig von
+  // newDesignOn/Viewport nutzbar (Profile sind reine Datenmanipulation auf
+  // dem bento_layout-Blob, kein sichtbares Grid nötig) — nur die 5er-
+  // Kappung sperrt den Speichern-Button.
+  function renderBentoProfilesList() {
+    const list = document.getElementById('bento-profiles-list');
+    const saveBtn = document.getElementById('bento-profile-save-btn');
+    const hint = document.getElementById('bento-profiles-hint');
+    if (!list || !saveBtn || !hint) return;
+    const registry = loadBentoProfiles();
+
+    list.innerHTML = registry.profiles.length
+      ? registry.profiles.map(p => {
+          const isActive = p.id === registry.activeId;
+          return `
+            <div class="bell-request-row bento-profile-row${isActive ? ' active' : ''}" data-profile-id="${esc(p.id)}">
+              <span class="bento-profile-name" title="${esc(p.name)}">${isActive ? '● ' : ''}${esc(p.name)}</span>
+              <span class="bento-profile-row-btns">
+                <button class="label-edit-btn bento-profile-rename-btn" data-id="${esc(p.id)}" title="Umbenennen">✎</button>
+                ${isActive ? '' : `<button class="bell-req-accept bento-profile-apply-btn" data-id="${esc(p.id)}">Anwenden</button>`}
+                <button class="clan-member-remove bento-profile-delete-btn" data-id="${esc(p.id)}" title="Löschen">✕</button>
+              </span>
+            </div>`;
+        }).join('')
+      : `<p style="font-size:11px;color:var(--text-muted);margin:0.25rem 0;">Noch keine gespeicherten Layouts.</p>`;
+
+    saveBtn.disabled = registry.profiles.length >= BENTO_PROFILES_MAX;
+    hint.textContent = registry.profiles.length >= BENTO_PROFILES_MAX
+      ? `Maximal ${BENTO_PROFILES_MAX} Layouts gespeichert.`
+      : `${registry.profiles.length}/${BENTO_PROFILES_MAX} Layouts gespeichert.`;
+
+    list.querySelectorAll('.bento-profile-apply-btn').forEach(btn =>
+      btn.addEventListener('click', () => applyBentoProfile(btn.dataset.id)));
+    list.querySelectorAll('.bento-profile-delete-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const target = registry.profiles.find(p => p.id === btn.dataset.id);
+        if (!target) return;
+        showTimerConfirmBanner(`„${target.name}" wirklich löschen?`, () => deleteBentoProfile(btn.dataset.id));
+      }));
+    list.querySelectorAll('.bento-profile-rename-btn').forEach(btn =>
+      btn.addEventListener('click', () => startBentoProfileRename(btn.dataset.id)));
+  }
+
+  // Inline-Rename, gleiches Muster wie das Label-Stats-Overlay: Zeile wird
+  // durch <input> + ✓/✗ ersetzt, Enter=Speichern/Escape=Abbrechen.
+  function startBentoProfileRename(id) {
+    const row = document.querySelector(`.bento-profile-row[data-profile-id="${id}"]`);
+    const registry = loadBentoProfiles();
+    const target = registry.profiles.find(p => p.id === id);
+    if (!row || !target) return;
+    row.innerHTML = `<div class="label-edit-inline">
+      <input class="label-edit-input bento-profile-rename-input" value="${esc(target.name)}" maxlength="40">
+      <button class="label-edit-ok">✓</button>
+      <button class="label-edit-cancel">✗</button>
+    </div>`;
+    const input = row.querySelector('.bento-profile-rename-input');
+    input.focus();
+    input.select();
+    function commit() { renameBentoProfile(id, input.value); }
+    row.querySelector('.label-edit-ok').addEventListener('click', commit);
+    row.querySelector('.label-edit-cancel').addEventListener('click', renderBentoProfilesList);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') renderBentoProfilesList();
+    });
   }
 
   // Verschiebt die ECHTEN Kachel-Elemente (appendChild, kein Klonen) in frische
@@ -4466,6 +4712,27 @@
     renderBentoRemovedList();
   }
 
+  // Setzt den Editor-Arbeitszustand auf bentoDefaultState() zurück — exakt
+  // dieselbe Anordnung wie beim ersten Aktivieren von "Neues Design". Zählt
+  // als normale Editor-Aktion, der persistBentoState()-Write-Through greift
+  // also mit: ist gerade ein Profil aktiv, wird es ebenfalls auf Standard
+  // überschrieben (bestätigt, siehe Bestätigungstext) — konsistent dazu,
+  // dass der Editor immer das aktive Profil bearbeitet.
+  function resetBentoLayout() {
+    const registry = loadBentoProfiles();
+    const active = registry.profiles.find(p => p.id === registry.activeId);
+    const msg = active
+      ? `Layout „${active.name}" auf Standard-Anordnung zurücksetzen?`
+      : 'Layout auf Standard-Anordnung zurücksetzen?';
+    showTimerConfirmBanner(msg, () => {
+      bentoEditRows = bentoDefaultRows();
+      bentoEditRemoved = [];
+      applyBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+      persistBentoState({ rows: bentoEditRows, removed: bentoEditRemoved });
+      renderBentoRemovedList();
+    });
+  }
+
   // Rendert die schwebende Liste entfernter Kacheln (#bento-removed-panel).
   // Sichtbarkeit ist CSS-getrieben (body.bento-edit-mode + .has-items), hier
   // nur Inhalt + Toggle der .has-items-Klasse. Kein esc() nötig — icon/label
@@ -4576,9 +4843,11 @@
   }
 
   function initBentoEditMode() {
-    const openBtn = document.getElementById('bento-layout-editor-btn');
-    const cb      = document.getElementById('set-new-design');
-    const doneBtn = document.getElementById('bento-edit-done-btn');
+    const openBtn        = document.getElementById('bento-layout-editor-btn');
+    const cb              = document.getElementById('set-new-design');
+    const doneBtn         = document.getElementById('bento-edit-done-btn');
+    const resetBtn        = document.getElementById('bento-edit-reset-btn');
+    const saveProfileBtn  = document.getElementById('bento-profile-save-btn');
 
     function syncButtonState() { openBtn.disabled = !newDesignOn; }
     syncButtonState();
@@ -4586,6 +4855,16 @@
 
     openBtn.addEventListener('click', enterBentoEditMode);
     doneBtn.addEventListener('click', exitBentoEditMode);
+    resetBtn.addEventListener('click', resetBentoLayout);
+
+    // Profile-Sektion ist unabhängig von newDesignOn/Viewport nutzbar (reine
+    // Datenmanipulation auf dem bento_layout-Blob, kein sichtbares Grid nötig).
+    saveProfileBtn.addEventListener('click', () => {
+      const registry = loadBentoProfiles();
+      if (registry.profiles.length >= BENTO_PROFILES_MAX) return;
+      const id = createBentoProfileFromCurrent(`Layout ${registry.profiles.length + 1}`);
+      if (id) startBentoProfileRename(id); // sofort umbenennbar, direkt aus dem Default-Namen
+    });
   }
 
   // Fokus-Modus: blendet alle Karten außer Timer aus. Aktivierung manuell per
@@ -6415,6 +6694,8 @@
     document.getElementById('attention-card').style.display = 'block';
     await loadAttentionChart();
     reconcileBentoState(profile);
+    reconcileBentoProfiles(profile);
+    renderBentoProfilesList();
   }
 
   function showMigrationPrompt(session, localDays) {
@@ -8581,6 +8862,7 @@
   initNewDesignSetting();
   applyBentoState(loadBentoState());
   initBentoEditMode();
+  renderBentoProfilesList();
   initFocusMode();
   initChallengesCard();
   initAttentionCard();

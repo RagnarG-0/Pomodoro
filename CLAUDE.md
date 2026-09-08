@@ -32,7 +32,7 @@ Free-Tier-Limit: 0,5 GB Datenbankgröße. Stand 2026-09-01 (~121 Tage seit Start
 
 | Tabelle | Inhalt |
 |---|---|
-| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound, second_incubator_purchased, bento_layout, is_admin, library_checkin, library_checkin_date |
+| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound, second_incubator_purchased, bento_layout, bento_layout_profiles, is_admin, library_checkin, library_checkin_date |
 | `study_days` | user_id, date, minutes, off |
 | `pomodoro_sessions` | user_id, date, label, duration_minutes |
 | `timer_state` | user_id, end_at, total_sec, mode, paused_remaining, pomoday, limitless, started_at, credited_min, stash_total_sec, stash_paused_remaining, stash_limitless, stash_pomoday, stash_credited_min, unbroken_since |
@@ -197,6 +197,8 @@ tradeOfferListingId / tradeOfferSelected // uuid | null, Set<int> — Ziel-Listi
 | `pomo_egg_preview` | `'1'` wenn Clan-Leader den Placeholder deaktiviert hat | — |
 | `pomo_limitless_v1` | `'1'`/`'0'` — Präferenz „Unbegrenzt (Stoppuhr)"-Modus, geräte-lokal | — |
 | `pomo_new_design_v1` | `'1'`/`'0'` — Opt-in „Neues Design" (Bento-Grid ab Desktop-Breite), Default aus, geräte-lokal | — |
+| `pomo_bento_layout_v1` | Bento-Grid-Layout `{ rows, removed }`, siehe [[docs/bento-layout.md]] | — |
+| `pomo_bento_profiles_v1` | Bis zu 5 gespeicherte Bento-Layout-Profile `{ activeId, profiles }`, siehe [[docs/bento-layout.md]] | — |
 | `pomo_focus_mode_v1` | `'1'`/`'0'` — Fokus-Modus-Zustand, geräte-lokal | — |
 
 ---
