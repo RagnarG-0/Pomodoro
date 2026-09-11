@@ -755,9 +755,19 @@
     padding: 10px 12px;
     background: var(--surface);
     display: flex; flex-direction: column; gap: 8px;
-    transition: border-color 0.15s ease;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
   }
+  .mc-tile:hover { background: var(--card-bg, var(--bg)); }
   .mc-tile-mine { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mc-legend {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; color: var(--text-muted);
+  }
+  .mc-legend-swatch {
+    display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    background: #d9483c;
+  }
   .mc-tile-header {
     font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
@@ -780,16 +790,13 @@
   .mc-dish-gluten { border-left-color: #d9483c; }
   .mc-dish-gluten .mc-dish-name { color: #d9483c; }
   .mc-empty { font-size: 11px; color: var(--text-muted); font-style: italic; }
-  /* --card-color/--card-bg werden pro Mensa inline gesetzt (MENSA_COLORS,
-     gleiches Idiom wie LIBRARY_COLORS/.lb-wildcard) — Zähler + Icon-
-     Hintergrund greifen sie hier auf. */
+  /* --card-color/--card-bg werden auf .mc-tile inline gesetzt (MENSA_COLORS,
+     gleiches Idiom wie LIBRARY_COLORS/.lb-wildcard) — vererbt an alle
+     Kind-Elemente hier (Hover-Tint der Box, Zähler-Farbe, Icon-Hintergrund). */
   .mc-checkin-row {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    margin-top: auto; padding-top: 4px; cursor: pointer;
-    border-radius: 8px; padding: 4px 6px; margin: 4px -6px -4px;
-    transition: background 0.15s ease;
+    margin-top: auto; padding-top: 4px;
   }
-  .mc-checkin-row:hover { background: var(--card-bg, var(--bg)); }
   .mc-checkin-icons { display: flex; align-items: center; }
   .mc-checkin-icon {
     width: 20px; height: 20px; border-radius: 50%;
@@ -2449,7 +2456,10 @@
 <div class="bento-row">
 <!-- Mensa card -->
 <div class="card" id="mensa-card" style="display:none;">
-  <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:1rem;">Mensa</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;">Mensa</div>
+    <div class="mc-legend"><span class="mc-legend-swatch"></span>Rot = enthält Gluten</div>
+  </div>
   <div id="mensa-content"></div>
 </div>
 </div>
@@ -6263,12 +6273,17 @@
             ? `<img src="${esc(safeAvatar)}" class="mc-checkin-photo" alt="" onerror="this.style.display='none'">`
             : `👤`}</div>`;
       }).join('');
-      const checkinRowHtml = `<div class="mc-checkin-row" data-mensa="${opt.key}" style="--card-color:${colors.color};--card-bg:${colors.bg};">
+      const checkinRowHtml = `<div class="mc-checkin-row">
         <div class="mc-checkin-icons">${iconsHtml}</div>
         <div class="mc-checkin-count">${entries.length > 0 ? entries.length : ''}</div>
       </div>`;
 
-      return `<div class="mc-tile${isHome ? ' mc-home-tile' : ''}${mineClass}">
+      // data-mensa auf der GESAMTEN Kachel (nicht nur der Check-in-Zeile) —
+      // Klick irgendwo auf die Box gibt die Stimme ab, siehe Event-Delegation
+      // in initLeaderboard(). --card-color/--card-bg hier gesetzt, damit
+      // Hover-Tint + Zähler-Farbe + Icon-Rahmen (CSS) sie per Vererbung
+      // mitbekommen, ohne sie mehrfach zu setzen.
+      return `<div class="mc-tile${isHome ? ' mc-home-tile' : ''}${mineClass}" data-mensa="${opt.key}" style="--card-color:${colors.color};--card-bg:${colors.bg};">
         <div class="mc-tile-header">${esc(opt.name)}</div>
         ${dishListHtml}
         ${checkinRowHtml}
