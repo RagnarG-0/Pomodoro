@@ -742,6 +742,65 @@
   .lb-wildcard-placeholder { font-size: clamp(9px, 1.6vw, 14px); color: var(--text-muted); }
   .lb-wildcard-me { box-shadow: 0 0 0 2px #fff, 0 0 10px var(--accent), 0 2px 5px rgba(0,0,0,0.4); }
 
+  /* ── Mensa-Card: Speiseplan + Check-in (analog Bibliotheks-Check-in,
+     eigener mc-Präfix statt lb- zur Vermeidung von Klassen-Kollisionen) ── */
+  .mc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .mc-tile {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: var(--surface);
+    display: flex; flex-direction: column; gap: 8px;
+    transition: border-color 0.15s ease;
+  }
+  .mc-tile-mine { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mc-tile-header {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  }
+  .mc-home-tile .mc-tile-header { color: var(--text-muted); }
+  .mc-dish-list { display: flex; flex-direction: column; gap: 6px; }
+  .mc-dish {
+    font-size: 12px; line-height: 1.35;
+    border-left: 3px solid transparent;
+    padding-left: 6px;
+  }
+  .mc-dish-name { color: var(--text); }
+  .mc-dish-prices { color: var(--text-muted); font-size: 11px; }
+  .mc-badge {
+    display: inline-block; font-size: 9px; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin: 2px 4px 0 0;
+  }
+  /* Gluten (Zusatzstoff-Codes ab Buchstabe "A", z.B. A1 Weizengluten,
+     A3 Hafergluten) — rot markiert, siehe docs/mensa.md. */
+  .mc-dish-gluten { border-left-color: #d9483c; }
+  .mc-dish-gluten .mc-dish-name { color: #d9483c; }
+  .mc-empty { font-size: 11px; color: var(--text-muted); font-style: italic; }
+  /* --card-color/--card-bg werden pro Mensa inline gesetzt (MENSA_COLORS,
+     gleiches Idiom wie LIBRARY_COLORS/.lb-wildcard) — Zähler + Icon-
+     Hintergrund greifen sie hier auf. */
+  .mc-checkin-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    margin-top: auto; padding-top: 4px; cursor: pointer;
+    border-radius: 8px; padding: 4px 6px; margin: 4px -6px -4px;
+    transition: background 0.15s ease;
+  }
+  .mc-checkin-row:hover { background: var(--card-bg, var(--bg)); }
+  .mc-checkin-icons { display: flex; align-items: center; }
+  .mc-checkin-icon {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1.5px solid var(--surface); box-shadow: 0 0 0 1px var(--card-color, var(--border-strong));
+    margin-left: -6px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    background: var(--card-bg, var(--bg)); font-size: 10px;
+  }
+  .mc-checkin-icon:first-child { margin-left: 0; }
+  .mc-checkin-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mc-checkin-count { font-size: 11px; color: var(--card-color, var(--text-muted)); font-weight: 700; }
+
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
   #balloon-layer { position: fixed; inset: 0; pointer-events: none; z-index: 150; overflow: hidden; }
   .balloon {
@@ -1509,7 +1568,8 @@
     body.bento-edit-mode #challenges-card,
     body.bento-edit-mode #egg-section-wrapper,
     body.bento-edit-mode #leaderboard-card,
-    body.bento-edit-mode #race-track-card { position: relative; }
+    body.bento-edit-mode #race-track-card,
+    body.bento-edit-mode #mensa-card { position: relative; }
 
     body.bento-edit-mode .bento-row {
       position: relative; min-height: 48px;
@@ -1575,7 +1635,8 @@
   body.focus-mode #challenges-card,
   body.focus-mode #egg-section-wrapper,
   body.focus-mode #leaderboard-card,
-  body.focus-mode #race-track-card {
+  body.focus-mode #race-track-card,
+  body.focus-mode #mensa-card {
     display: none !important;
   }
   body.focus-mode .bento-row {
@@ -2383,6 +2444,13 @@
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:0.75rem;padding-top:0.75rem;border-top:0.5px solid var(--border);">
     <span style="font-size:11px;color:var(--text-muted);font-family:Georgia,serif;">💎 Tagessiege: 1. Platz = 3, 2. Platz = 2, 3. Platz = 1</span>
   </div>
+</div>
+</div>
+<div class="bento-row">
+<!-- Mensa card -->
+<div class="card" id="mensa-card" style="display:none;">
+  <div style="font-size:11px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:1rem;">Mensa</div>
+  <div id="mensa-content"></div>
 </div>
 </div>
 
@@ -4108,7 +4176,7 @@
     });
   }
 
-  // Bento-Layout: Nutzer ordnen die 6 nicht-Timer-Kacheln selbst an
+  // Bento-Layout: Nutzer ordnen die nicht-Timer-Kacheln selbst an
   // (Drag/Resize), geräte-lokal in localStorage + (falls eingeloggt) in
   // profiles.bento_layout persistiert. bentoDefaultRows() bildet exakt die
   // alte hartkodierte Reihen-Struktur ab — es gibt dadurch nur einen
@@ -4121,6 +4189,7 @@
     eggdeck:     { elId: 'egg-section-wrapper', label: 'Ei & Karten',       icon: '🥚' },
     leaderboard: { elId: 'leaderboard-card',    label: 'Rangliste',         icon: '🏆' },
     racetrack:   { elId: 'race-track-card',     label: 'Rennstrecke',      icon: '🏎️' },
+    mensa:       { elId: 'mensa-card',          label: 'Mensa',            icon: '🍽️' },
   };
   const BENTO_LAYOUT_KEY = 'pomo_bento_layout_v1';
 
@@ -4135,6 +4204,7 @@
       [{ id: 'challenges', flex: 2 }, { id: 'eggdeck', flex: 3 }],
       [{ id: 'racetrack', flex: 1 }],
       [{ id: 'leaderboard', flex: 1 }],
+      [{ id: 'mensa', flex: 1 }],
     ];
   }
 
@@ -4159,7 +4229,7 @@
   }
 
   // Vollständiger Zustand = rows (platzierte Kacheln) + removed (entfernte
-  // Kacheln). Jede der 7 BENTO_TILE_META-IDs muss GENAU EINMAL vorkommen —
+  // Kacheln). Jede BENTO_TILE_META-ID muss GENAU EINMAL vorkommen —
   // entweder in rows ODER in removed, nie beides, nie keins. eggdeck/leaderboard
   // dürfen nie in removed stehen (BENTO_NON_REMOVABLE).
   function isValidBentoState(state) {
@@ -5770,6 +5840,27 @@
     auswaerts: { color: '#8a6fd6', bg: '#1c1530' }, // generischer Check-in-Punkt, kein reales Gebäude
   };
 
+  // Mensa-Check-in (Kachel #mensa-card) — analog Bibliotheks-Check-in, aber
+  // ohne Streckenbild/Hotspots (eigenständige Kachel, kein Overlay auf einem
+  // Bild). 'neuwerk' als Key kollidiert namentlich mit dem LIBRARY_BUILDINGS-
+  // Key gleichen Namens, ist aber ein komplett getrenntes Feld
+  // (mensa_checkin vs. library_checkin) — nur ein Namens-Zufall (Mensa
+  // Neuwerk ≠ Bibliothek Neuwerk).
+  const MENSA_OPTIONS = [
+    { key: 'harzmensa',   name: 'Harzmensa' },
+    { key: 'franckesche', name: 'Franckesche Stiftungen' },
+    { key: 'neuwerk',     name: 'Mensa Neuwerk' },
+    { key: 'tulpe',       name: 'Mensa Tulpe' },
+    { key: 'zuhause',     name: 'Zu Hause' }, // kein Speiseplan, nur Check-in
+  ];
+  const MENSA_COLORS = {
+    harzmensa:   { color: '#d1a13c', bg: '#241a05' },
+    franckesche: { color: '#3ba8c4', bg: '#06232a' },
+    neuwerk:     { color: '#5d9c59', bg: '#0e2410' },
+    tulpe:       { color: '#d9483c', bg: '#241210' },
+    zuhause:     { color: '#8a6fd6', bg: '#1c1530' }, // wie 'auswaerts' bei LIBRARY_COLORS
+  };
+
   // Aktuell ungenutzt (Rennstrecke zeigt seit 2026-08-05 Profilbilder statt
   // Auto-Icons, da 8 Designs bei vielen Nutzern nicht mehr eindeutig sind) —
   // Funktion und race_car_id-Zuweisung bleiben bestehen für eine mögliche
@@ -5838,6 +5929,59 @@
       const rows = await res.json();
       libraryCheckins = Array.isArray(rows) ? rows : [];
     } catch(e) { console.warn('loadLibraryCheckins error', e); }
+  }
+
+  // Eigener Mensa-Check-in von HEUTE, oder null. Wird beim Login aus dem
+  // Profil entpackt (siehe onLoginSuccess()) und danach optimistisch von
+  // setMensaCheckin() gepflegt — exaktes Gegenstück zu userLibraryCheckin.
+  let userMensaCheckin = null; // 'harzmensa'|'franckesche'|'neuwerk'|'tulpe'|'zuhause'|null
+
+  // Alle heute eingecheckten Clan-Mitglieder (inkl. eigenem Eintrag),
+  // Ergebnis von get_mensa_checkins(). Immer live geladen, kein Cache.
+  let mensaCheckins = []; // [{ name, avatar_url, mensa }]
+
+  // Heutiger Speiseplan je Mensa, aus mensa_menu_items (serverseitig per
+  // scrape-mensa-menu Edge Function + pg_cron befüllt, siehe docs/mensa.md).
+  let mensaMenuToday = {}; // { <mensa_key>: [ { dish_name, price_student, price_staff, price_guest, badges, allergen_codes, sort_order } ] }
+
+  async function loadMensaMenu() {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/mensa_menu_items?date=eq.${todayKey()}&select=mensa_key,dish_name,price_student,price_staff,price_guest,badges,allergen_codes,sort_order&order=mensa_key.asc,sort_order.asc`, {
+        headers: authHeaders(token),
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const byMensa = {};
+      (Array.isArray(rows) ? rows : []).forEach(r => (byMensa[r.mensa_key] ??= []).push(r));
+      mensaMenuToday = byMensa;
+    } catch(e) { console.warn('loadMensaMenu error', e); }
+  }
+
+  async function loadMensaCheckins() {
+    try {
+      const token = await getValidToken();
+      if (!token) return;
+      const res = await fetch(`${SB}/rest/v1/rpc/get_mensa_checkins`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      mensaCheckins = Array.isArray(rows) ? rows : [];
+    } catch(e) { console.warn('loadMensaCheckins error', e); }
+  }
+
+  // Lädt Speiseplan + Check-ins und rendert einmal danach — Pendant zu
+  // loadRaceTrackData() für die Mensa-Kachel. Speiseplan ändert sich
+  // untertags nicht (nur einmal täglich per Cron gescrapt), Check-ins schon
+  // — deshalb wird im 60s-Poll (initLeaderboard()) nur loadMensaCheckins()
+  // erneut aufgerufen, nicht loadMensaMenu().
+  async function loadMensaCard() {
+    await Promise.all([loadMensaMenu(), loadMensaCheckins()]);
+    renderMensaCard();
   }
 
   // Lädt die heutigen Rangliste-Daten unabhängig vom aktuell in der
@@ -6060,6 +6204,80 @@
     wrap.innerHTML = `<img src="${encodeURI(`${CDN}/Rennstrecke/strecke.png`)}" class="lb-racetrack-img" alt="Rennstrecke">${libraryHoverHtml}${diamondsHtml}${carsHtml}${wildCardsHtml}${closedBannersHtml}`;
   }
 
+  // Formatiert einen Preis (numeric aus mensa_menu_items) im deutschen
+  // Format ("3,40€") — undefined/null (kein Preis für diese Zielgruppe
+  // hinterlegt) liefert '–'.
+  function formatMensaPrice(p) {
+    if (p === null || p === undefined) return '–';
+    return Number(p).toFixed(2).replace('.', ',') + '€';
+  }
+
+  // Zusatzstoff-/Allergen-Codes ab Buchstabe "A" kennzeichnen glutenhaltiges
+  // Getreide (A1 Weizengluten, A2 Roggengluten, A3 Gerstengluten,
+  // A4 Hafergluten, ...) in der Kennzeichnung von meine-mensa.de.
+  function dishHasGluten(dish) {
+    return (dish.allergen_codes || []).some(c => /^A\d*$/i.test(c));
+  }
+
+  // Mensa-Kachel: Speiseplan (4 Mensen) + Check-in/Voting ("zu Hause" als
+  // 5. Option). Eigenständige Kachel (kein Streckenbild-Overlay wie beim
+  // Bibliotheks-Check-in) — reines Grid aus .mc-tile-Kacheln, gleiches
+  // Gruppierungs-/Toggle-Prinzip wie renderRaceTrack()/setLibraryCheckin().
+  function renderMensaCard() {
+    const wrap = document.getElementById('mensa-content');
+    if (!wrap) return;
+
+    const checkinGroups = new Map(); // mensa key -> entries
+    (mensaCheckins || []).forEach(entry => {
+      if (!checkinGroups.has(entry.mensa)) checkinGroups.set(entry.mensa, []);
+      checkinGroups.get(entry.mensa).push(entry);
+    });
+
+    const tilesHtml = MENSA_OPTIONS.map(opt => {
+      const isHome = opt.key === 'zuhause';
+      const mineClass = opt.key === userMensaCheckin ? ' mc-tile-mine' : '';
+      const colors = MENSA_COLORS[opt.key];
+
+      let dishListHtml = '';
+      if (!isHome) {
+        const dishes = mensaMenuToday[opt.key] || [];
+        dishListHtml = dishes.length
+          ? `<div class="mc-dish-list">${dishes.map(d => {
+              const glutenClass = dishHasGluten(d) ? ' mc-dish-gluten' : '';
+              const glutenTitle = dishHasGluten(d) ? ' title="Enthält glutenhaltiges Getreide"' : '';
+              const prices = `${formatMensaPrice(d.price_student)} / ${formatMensaPrice(d.price_staff)} / ${formatMensaPrice(d.price_guest)}`;
+              const badges = (d.badges || []).map(b => `<span class="mc-badge">${esc(b)}</span>`).join('');
+              return `<div class="mc-dish${glutenClass}"${glutenTitle}>
+                <div class="mc-dish-name">${esc(d.dish_name)}</div>
+                <div class="mc-dish-prices">${prices}</div>
+                ${badges}
+              </div>`;
+            }).join('')}</div>`
+          : `<div class="mc-empty">Heute kein Plan verfügbar</div>`;
+      }
+
+      const entries = checkinGroups.get(opt.key) || [];
+      const iconsHtml = entries.map(entry => {
+        const safeAvatar = safeAvatarUrl(entry.avatar_url);
+        return `<div class="mc-checkin-icon" title="${esc(entry.name)}">${safeAvatar
+            ? `<img src="${esc(safeAvatar)}" class="mc-checkin-photo" alt="" onerror="this.style.display='none'">`
+            : `👤`}</div>`;
+      }).join('');
+      const checkinRowHtml = `<div class="mc-checkin-row" data-mensa="${opt.key}" style="--card-color:${colors.color};--card-bg:${colors.bg};">
+        <div class="mc-checkin-icons">${iconsHtml}</div>
+        <div class="mc-checkin-count">${entries.length > 0 ? entries.length : ''}</div>
+      </div>`;
+
+      return `<div class="mc-tile${isHome ? ' mc-home-tile' : ''}${mineClass}">
+        <div class="mc-tile-header">${esc(opt.name)}</div>
+        ${dishListHtml}
+        ${checkinRowHtml}
+      </div>`;
+    }).join('');
+
+    wrap.innerHTML = `<div class="mc-grid">${tilesHtml}</div>`;
+  }
+
   let lbPeriod = 'alltime';
   let lastLeaderboardData = [];
   let yesterdayWinner = null;
@@ -6264,12 +6482,13 @@
     }
   }
 
-  // Rangliste + Rennstrecke sind zwei getrennte Kacheln, aber immer gemeinsam
-  // sichtbar/unsichtbar (gleiche Zielgruppe: öffentliches Profil + Clan).
+  // Rangliste + Rennstrecke + Mensa sind drei getrennte Kacheln, aber immer
+  // gemeinsam sichtbar/unsichtbar (gleiche Zielgruppe: öffentliches Profil + Clan).
   function setLeaderboardVisibility(visible) {
     const v = visible ? 'block' : 'none';
     document.getElementById('leaderboard-card').style.display = v;
     document.getElementById('race-track-card').style.display = v;
+    document.getElementById('mensa-card').style.display = v;
   }
 
   function initLeaderboard() {
@@ -6277,6 +6496,7 @@
       setLeaderboardVisibility(true);
       loadLeaderboard(lbPeriod);
       loadRaceTrackData();
+      loadMensaCard();
     }
 
     // Bibliotheks-Check-in: EINMAL auf den persistenten #lb-racetrack-Knoten
@@ -6290,6 +6510,17 @@
       trackWrap.addEventListener('click', (e) => {
         const hotspot = e.target.closest('[data-library]');
         if (hotspot) setLibraryCheckin(hotspot.dataset.library);
+      });
+    }
+
+    // Mensa-Check-in: gleiches Event-Delegation-Muster wie oben, gebunden auf
+    // den persistenten #mensa-content-Knoten (renderMensaCard() ersetzt
+    // dessen innerHTML bei jedem Aufruf komplett).
+    const mensaWrap = document.getElementById('mensa-content');
+    if (mensaWrap) {
+      mensaWrap.addEventListener('click', (e) => {
+        const el = e.target.closest('[data-mensa]');
+        if (el) setMensaCheckin(el.dataset.mensa);
       });
     }
 
@@ -6309,7 +6540,11 @@
 
     // Auto-refresh every 60s when tab is visible
     setInterval(() => {
-      if (userPublic && userName && clanRole && !document.hidden) { loadLeaderboard(); loadRaceTrackData(); }
+      if (userPublic && userName && clanRole && !document.hidden) {
+        loadLeaderboard(); loadRaceTrackData();
+        // Nur Check-ins neu laden, nicht den Speiseplan (ändert sich untertags nicht).
+        loadMensaCheckins().then(renderMensaCard);
+      }
     }, 60000);
   }
 
@@ -6614,6 +6849,10 @@
       // durch ist.
       userLibraryCheckin = (profile.library_checkin && profile.library_checkin_date === todayKey())
         ? profile.library_checkin : null;
+      // Gleiches Prinzip wie userLibraryCheckin (kein Reset-Cron, nur
+      // Datumsfilter — server- wie clientseitig).
+      userMensaCheckin = (profile.mensa_checkin && profile.mensa_checkin_date === todayKey())
+        ? profile.mensa_checkin : null;
       if (profile.eggs) eggsFromProfileString(profile.eggs);
       renderEggDiamonds(); renderInventory();
       displayUnit = profile.display_unit || 'pomodoros';
@@ -10738,6 +10977,27 @@
     });
 
     toast(newVal ? `Eingecheckt in der Bibliothek ${building.name}!` : `Check-in in der Bibliothek ${building.name} aufgehoben.`);
+  }
+
+  // Exaktes Gegenstück zu setLibraryCheckin() — Toggle statt Mehrfachauswahl,
+  // optimistisches lokales Update + Re-Render vor dem Server-Write.
+  async function setMensaCheckin(key) {
+    if (!currentUser || !userName) return;
+    const option = MENSA_OPTIONS.find(m => m.key === key);
+    if (!option) return;
+
+    const newVal = (userMensaCheckin === key) ? null : key;
+    userMensaCheckin = newVal;
+    mensaCheckins = mensaCheckins.filter(e => e.name !== userName);
+    if (newVal) mensaCheckins.push({ name: userName, avatar_url: avatarUrl, mensa: newVal });
+    renderMensaCard();
+
+    await saveEggProfile({
+      mensa_checkin: newVal,
+      mensa_checkin_date: newVal ? todayKey() : null,
+    });
+
+    toast(newVal ? `Eingecheckt: ${option.name}!` : `Check-in bei ${option.name} aufgehoben.`);
   }
 
   // Level-Up Ei vergeben

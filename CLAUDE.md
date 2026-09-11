@@ -28,11 +28,13 @@ Free-Tier-Limit: 0,5 GB Datenbankgröße. Stand 2026-09-01 (~121 Tage seit Start
 
 **`prune-cron-job-run-details`** (Migration `20260901010000_prune_cron_job_run_details.sql`, `pg_cron`, täglich `30 3 * * *`): löscht `cron.job_run_details`-Zeilen älter als 7 Tage (reicht zum Nachvollziehen eines aktuellen Cron-Problems). Analoges, bereits länger bestehendes Muster: **`cleanup-study-log`** (nicht per Migrationsdatei im Repo dokumentiert, direkt in Supabase eingerichtet, stündlich `0 * * * *`) löscht `study_days_log`-Zeilen älter als 48h (das Audit-Log des `study_days_audit`-Triggers, siehe „Admin" → Lernzeit-Korrektur).
 
+**`scrape-mensa-menu`** (Migration `20260911000030_mensa_scrape_cron.sql`, `pg_cron`, täglich `10 3 * * *`): triggert die gleichnamige Edge Function per `net.http_post` (`pg_net`, seit dieser Migration erstmals in diesem Projekt aktiviert), siehe „Mensa". `pg_net` protokolliert jede Antwort in `net._http_response` — analoges Wachstumsrisiko wie `cron.job_run_details`, nach dem Rollout beobachten (`pg_size_pretty(pg_total_relation_size('net._http_response'))`) und bei Bedarf nach demselben Prune-Muster ergänzen.
+
 ### Tabellen
 
 | Tabelle | Inhalt |
 |---|---|
-| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound, second_incubator_purchased, bento_layout, bento_layout_profiles, is_admin, library_checkin, library_checkin_date |
+| `profiles` | username, public, avatar_url, diamonds, eggs, clan_id, clan_role, focus_min, short_min, daily_focus_goal_min, display_unit, off_weekdays, sound, second_incubator_purchased, bento_layout, bento_layout_profiles, is_admin, library_checkin, library_checkin_date, mensa_checkin, mensa_checkin_date |
 | `study_days` | user_id, date, minutes, off |
 | `pomodoro_sessions` | user_id, date, label, duration_minutes |
 | `timer_state` | user_id, end_at, total_sec, mode, paused_remaining, pomoday, limitless, started_at, credited_min, stash_total_sec, stash_paused_remaining, stash_limitless, stash_pomoday, stash_credited_min, unbroken_since |
@@ -54,6 +56,7 @@ Free-Tier-Limit: 0,5 GB Datenbankgröße. Stand 2026-09-01 (~121 Tage seit Start
 | `perfect_week_config` | id (PK, Singleton = 1), reward_diamonds — öffentlicher, tunable Reward-Wert (UPDATE ohne Migration), siehe „Zusätzliche Diamanten-Quellen" |
 | `set_bonus_claims` | user_id + rarity (PK), reward_diamonds, claimed_at |
 | `tired_events` | id uuid (PK), user_id, date, created_at — append-only Log jedes „Tired"-Klicks (kein UPDATE/DELETE), siehe „Aufmerksamkeits-Tracking" |
+| `mensa_menu_items` | id uuid (PK), mensa_key, date, dish_name, price_student, price_staff, price_guest, badges (text[]), allergen_codes (text[]), sort_order, scraped_at — täglicher Full-Replace (kein Verlauf) durch die `scrape-mensa-menu` Edge Function via `pg_cron`+`pg_net`, siehe „Mensa" |
 
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
@@ -102,6 +105,8 @@ Free-Tier-Limit: 0,5 GB Datenbankgröße. Stand 2026-09-01 (~121 Tage seit Start
 | `admin_lookup_user_day(p_username, p_date)` | Nur für Admins (sonst leer): `user_id` + aktuelle `study_days.minutes` eines Nutzers/Tages, für die Vorschau vor `admin_set_study_minutes()`, siehe „Admin" |
 | `admin_set_study_minutes(p_user_id, p_date, p_minutes)` | Nur für Admins (sonst `RAISE EXCEPTION`): setzt `study_days.minutes` direkt auf `p_minutes` (SET, nicht ADD), `p_minutes ∈ [0,1440]`, siehe „Admin" |
 | `get_library_checkins()` | Gibt alle heute an einer der drei Bibliotheken eingecheckten, öffentlichen Clan-Mitglieder zurück (`name`, `avatar_url`, `library`), gleiches Scoping wie `leaderboard_today()`, siehe „Bibliotheks-Check-in (Wild Cards)" |
+| `get_mensa_checkins()` | Gibt alle heute an einer der 4 Mensen/„zu Hause" eingecheckten, öffentlichen Clan-Mitglieder zurück (`name`, `avatar_url`, `mensa`), identisches Scoping/Muster wie `get_library_checkins()`, siehe „Mensa" |
+| `replace_mensa_menu(p_date, p_items)` | Nur `service_role` (expliziter Guard im Funktionskörper, `RAISE EXCEPTION` sonst): löscht+befüllt `mensa_menu_items` atomar für einen Tag (Full-Replace), aufgerufen von der `scrape-mensa-menu` Edge Function, siehe „Mensa" |
 
 ---
 
@@ -122,6 +127,9 @@ userDiamonds  // number — aktueller Diamanten-Stand (aus profiles.diamonds)
 userRaceCarId // number | null — profiles.race_car_id (1-8), dauerhaft, siehe „Rennstrecke"
 userLibraryCheckin   // 'steintor' | 'neuwerk' | 'juri' | null — eigener Bibliotheks-Check-in von HEUTE, siehe „Bibliotheks-Check-in (Wild Cards)"
 libraryCheckins      // Array — alle heutigen Check-ins im Clan (inkl. eigenem), aus get_library_checkins()
+userMensaCheckin     // 'harzmensa'|'franckesche'|'neuwerk'|'tulpe'|'zuhause'|null — eigener Mensa-Check-in von HEUTE, siehe „Mensa"
+mensaCheckins        // Array — alle heutigen Mensa-Check-ins im Clan (inkl. eigenem), aus get_mensa_checkins()
+mensaMenuToday       // { <mensa_key>: [items] } — heutiger Speiseplan der 4 Mensen, aus mensa_menu_items
 eggInventory  // Array[10] — null | { id, color } — lokale Kopie aus profiles.eggs
 incubatorData // null | { color, focus_minutes_at_placement, bonusMin } — Slot 1, aus incubator-Tabelle
 incubatorData2       // null | { color, focus_minutes_at_placement, bonusMin } — Slot 2 (nur ab Level 15 + Kauf nutzbar)
@@ -214,6 +222,7 @@ tradeOfferListingId / tradeOfferSelected // uuid | null, Set<int> — Ziel-Listi
 7. **Deck-Box** (`#deckBox`) — aufklappbares Karten-Grid, nach Rarität sortiert, Stapel-Optik bei Duplikaten; hinter demselben Placeholder. Kopfzeile zeigt `#deckCount` als `(besessen/gesamt)` — `eggDeck.length` (Anzahl unterschiedlicher besessener Karten, Duplikate zählen nicht mit) `/` `CARD_CATALOG.length` (aktuell 33, wächst automatisch mit neuen Katalog-Karten), gesetzt in `renderEggDeck()`
 8. **Leaderboard-Card** — nur sichtbar wenn `userPublic === true && clanRole != null`; Tabs: Heute/Letzte Woche/Letzter Monat/All Time; Tagessieger-Highlight = goldener Border + Label „Tagessieger · &lt;Vortags-Minuten&gt;" (über `minutesToDisplay()`, respektiert Anzeigeeinheit; Minutenzahl ist unabhängig vom aktiven Tab immer die des Vortags, aus `yesterdayWinnerMinutes`/`get_yesterday_winner()`); Live-Timer-Dot (grün, `entry.timer_active` aus `leaderboard_today()`/`leaderboard_aggregated()`); Rang-Änderungs-Indikator (▲ grün / ▼ rot / ● hellblau für Neue) vor dem 🃏-Button, nur nach echtem Server-Fetch sichtbar; im Heute-Tab zusätzlich Mini-Auto-Icon neben jedem Namen, siehe „Rennstrecke"
 9. **Rennstrecke-Card** (`#race-track-card`) — eigene Kachel direkt unterhalb der Leaderboard-Card, gleiche Sichtbarkeits-Bedingung (`setLeaderboardVisibility()`), zeigt immer live die heutigen Rennpositionen unabhängig vom aktiven Leaderboard-Tab, siehe „Rennstrecke"
+10. **Mensa-Card** (`#mensa-card`) — eigene Kachel direkt unterhalb der Rennstrecke-Card, gleiche Sichtbarkeits-Bedingung (`setLeaderboardVisibility()`); zeigt den heutigen Speiseplan der 4 Mensen (Gerichte rot markiert bei Gluten-Zusatzstoffen ab Codebuchstabe „A") + Check-in/Voting (Icon pro eingecheckter Person + Stimmenzahl je Mensa/„zu Hause", analog Bibliotheks-Check-in), siehe „Mensa"
 
 
 ### Eier & Kartensammlung — Schlüsseldetails
@@ -373,6 +382,10 @@ Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legend
 
 → Details (Diamanten-Checkpoints, Bibliotheks-Check-in): [[docs/racetrack.md]]
 
+## Mensa (eigene Bento-Kachel `#mensa-card`)
+
+→ Details (externe Datenquelle, Scrape-Mechanismus, Datenmodell, Check-in): [[docs/mensa.md]]
+
 ## Aufmerksamkeits-Tracking (eigene Bento-Kachel `#attention-card`)
 
 → Details (inkl. Risiko-Analyse KDE + DBSCAN): [[docs/attention-tracking.md]]
@@ -423,4 +436,4 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 - [[FocusFM/README|FocusFM]] — eigenständiges Projekt, nutzt ebenfalls die [[Web Audio API]] für synthetisierten Sound
 - [[Dashboard/README|Dashboard]] — verlinkt auf die online gehostete Pomodoro-Seite (`ragnarg-0.github.io/Pomodoro`)
 
-- [[docs/timer-details.md]], [[docs/bento-layout.md]], [[docs/focus-mode.md]], [[docs/challenges-rewards.md]], [[docs/admin.md]], [[docs/eggs.md]], [[docs/trading.md]], [[docs/racetrack.md]], [[docs/attention-tracking.md]] — ausgelagerte Feature-Details dieser Doku (siehe oben, aus `CLAUDE.md` gekürzt wegen 150k-Zeichen-Limit)
+- [[docs/timer-details.md]], [[docs/bento-layout.md]], [[docs/focus-mode.md]], [[docs/challenges-rewards.md]], [[docs/admin.md]], [[docs/eggs.md]], [[docs/trading.md]], [[docs/racetrack.md]], [[docs/attention-tracking.md]], [[docs/mensa.md]] — ausgelagerte Feature-Details dieser Doku (siehe oben, aus `CLAUDE.md` gekürzt wegen 150k-Zeichen-Limit)
