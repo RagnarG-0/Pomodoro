@@ -1219,6 +1219,12 @@
   .deck-content.open { max-height: 1400px; margin-top: 16px; }
   .deck-grid  { display: flex; flex-wrap: wrap; gap: 10px; }
   .deck-empty { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--text-muted); opacity: 0.5; text-align: center; padding: 12px 0; width: 100%; }
+  .deck-rarity-header { width: 100%; }
+  .deck-rarity-label {
+    width: 100%; font-family: -apple-system, sans-serif; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 2px;
+  }
+  .deck-rarity-label:first-child { margin-top: 0; }
   .deck-card-wrap { position: relative; }
   .market-divider { height: 1px; background: var(--border-strong); opacity: 0.4; margin: 14px 0 10px; }
   .market-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -2327,12 +2333,6 @@
       <div class="deck-grid" id="deckGrid">
         <div class="deck-empty">Noch keine Karten</div>
       </div>
-
-      <div class="market-divider"></div>
-      <div class="market-header">
-        <div class="hmap-label" style="font-size:13px;">🏆 Set-Boni</div>
-      </div>
-      <div id="setBonusList"></div>
 
       <div class="market-divider"></div>
       <div class="market-header">
@@ -6944,7 +6944,7 @@
     document.getElementById('challenges-card').style.display = 'block';
     renderChallengesCard();
     renderPerfectWeekRow();
-    renderSetBonusSection(); // erneut rendern, jetzt mit geladenen Claims
+    renderEggDeck(null, false); // erneut rendern, jetzt mit geladenen Set-Bonus-Claims
     document.getElementById('attention-card').style.display = 'block';
     await loadAttentionChart();
     reconcileBentoState(profile);
@@ -9577,10 +9577,6 @@
     document.getElementById('perfect-week-row')?.addEventListener('click', (e) => {
       if (e.target.closest('#perfect-week-claim-btn')) claimPerfectWeek();
     });
-    document.getElementById('setBonusList')?.addEventListener('click', (e) => {
-      const btn = e.target.closest('.chall-claim-btn');
-      if (btn) claimSetBonus(btn.dataset.rarity);
-    });
   }
 
   async function loadWeeklyClaims(token) {
@@ -9710,7 +9706,7 @@
     userDiamonds = (typeof newDiamonds === 'number') ? newDiamonds : userDiamonds;
     renderEggDiamonds();
     claimedSetBonusRarities.add(rarity);
-    renderSetBonusSection();
+    renderEggDeck(null, false);
   }
 
   function renderPerfectWeekRow() {
@@ -9738,38 +9734,6 @@
         <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
         <div class="progress-text">${fullDays} / 7 Tage</div>
       </div>`;
-  }
-
-  function renderSetBonusSection() {
-    const list = document.getElementById('setBonusList');
-    if (!list) return;
-    list.innerHTML = EGG_RARITIES.map(r => {
-      const total = CARD_CATALOG.filter(c => c.folder === r.folder).length;
-      const owned = eggDeck.filter(c => c.rarity.folder === r.folder).length;
-      const done = owned >= total;
-      const claimed = claimedSetBonusRarities.has(r.folder);
-      const reward = SET_BONUS_REWARD[r.folder];
-      let action;
-      if (claimed) {
-        action = `<span class="chall-check">✓ eingelöst</span>`;
-      } else if (done) {
-        action = `<button class="chall-claim-btn" data-rarity="${r.folder}">Einlösen</button>`;
-      } else {
-        action = `<span class="chall-reward">${reward} 💎</span>`;
-      }
-      const pct = Math.min(100, (owned / total) * 100);
-      return `
-        <div class="chall-row">
-          <div class="chall-row-top">
-            <div class="chall-title" style="color:${r.color}">${r.name}</div>
-            ${action}
-          </div>
-          <div class="progress-wrap">
-            <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${r.color}"></div></div>
-            <div class="progress-text">${owned} / ${total} Karten</div>
-          </div>
-        </div>`;
-    }).join('');
   }
 
   // State
@@ -10272,28 +10236,51 @@
     const countEl = document.getElementById('deckCount');
     if (!grid) return;
     if (countEl) countEl.textContent = `(${eggDeck.length}/${CARD_CATALOG.length})`;
-    renderSetBonusSection();
-    if (!eggDeck.length) { grid.innerHTML='<div class="deck-empty">Noch keine Karten</div>'; return; }
     grid.innerHTML = '';
-    eggDeck.forEach(({ id, src, rarity, count }) => {
-      const safeId     = 'c'+id;
-      const stackClass = count>=3?'stack-2 stack-3':count===2?'stack-2':'';
-      const wrap = document.createElement('div');
-      wrap.className = 'deck-card-wrap';
-      wrap.innerHTML = `
-        <div class="deck-card ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}" id="dc_${safeId}">
-          ${count>1?`<div class="deck-count-badge" id="dcb_${safeId}">×${count}</div>`:''}
-          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+    EGG_RARITIES.forEach(r => {
+      const total         = CARD_CATALOG.filter(c => c.folder === r.folder).length;
+      const cardsOfRarity = eggDeck.filter(c => c.rarity.folder === r.folder);
+      const owned         = cardsOfRarity.length;
+      const done          = owned >= total;
+      const claimed       = claimedSetBonusRarities.has(r.folder);
+      const reward        = SET_BONUS_REWARD[r.folder];
+      let action;
+      if (claimed)     action = `<span class="chall-check">✓ eingelöst</span>`;
+      else if (done)   action = `<button class="chall-claim-btn" data-rarity="${r.folder}">Einlösen</button>`;
+      else             action = `<span class="chall-reward">${reward} 💎</span>`;
+      const pct = Math.min(100, (owned / total) * 100);
+      const header = document.createElement('div');
+      header.className = 'chall-row deck-rarity-header';
+      header.innerHTML = `
+        <div class="chall-row-top">
+          <div class="chall-title" style="color:${r.color}">${r.name}</div>
+          ${action}
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${r.color}"></div></div>
+          <div class="progress-text">${owned} / ${total} Karten</div>
         </div>`;
-      grid.appendChild(wrap);
-      wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ id, src, rarity, count }));
-      if (highlightId===id && !isDuplicate) {
-        const dc=document.getElementById(`dc_${safeId}`);
-        if(dc) dc.style.animation='hatchCardPop 0.38s cubic-bezier(0.34,1.56,0.64,1) both';
-      }
-      if (highlightId===id && isDuplicate) {
-        requestAnimationFrame(()=>{ const b=document.getElementById(`dcb_${safeId}`); if(b) b.style.animation='hatchBadgePop 0.32s cubic-bezier(0.34,1.56,0.64,1) both'; });
-      }
+      grid.appendChild(header);
+      cardsOfRarity.forEach(({ id, src, rarity, count }) => {
+        const safeId     = 'c'+id;
+        const stackClass = count>=3?'stack-2 stack-3':count===2?'stack-2':'';
+        const wrap = document.createElement('div');
+        wrap.className = 'deck-card-wrap';
+        wrap.innerHTML = `
+          <div class="deck-card ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}" id="dc_${safeId}">
+            ${count>1?`<div class="deck-count-badge" id="dcb_${safeId}">×${count}</div>`:''}
+            <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+          </div>`;
+        grid.appendChild(wrap);
+        wrap.querySelector('.deck-card').addEventListener('click', () => showEggCardView({ id, src, rarity, count }));
+        if (highlightId===id && !isDuplicate) {
+          const dc=document.getElementById(`dc_${safeId}`);
+          if(dc) dc.style.animation='hatchCardPop 0.38s cubic-bezier(0.34,1.56,0.64,1) both';
+        }
+        if (highlightId===id && isDuplicate) {
+          requestAnimationFrame(()=>{ const b=document.getElementById(`dcb_${safeId}`); if(b) b.style.animation='hatchBadgePop 0.32s cubic-bezier(0.34,1.56,0.64,1) both'; });
+        }
+      });
     });
   }
   const CARD_SELL_REWARDS = { normal: 4, selten: 8, episch: 12, legendaer: 16, mystisch: 20 };
@@ -10663,6 +10650,10 @@
     }
   }
   document.getElementById('deckToggle')?.addEventListener('click', toggleEggDeck);
+  document.getElementById('deckGrid')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chall-claim-btn');
+    if (btn?.dataset.rarity) claimSetBonus(btn.dataset.rarity);
+  });
 
   document.getElementById('pending-focus-toggle')?.addEventListener('click', () => {
     pendingFocusListOpen = !pendingFocusListOpen;
@@ -10873,19 +10864,28 @@
       return;
     }
     grid.innerHTML = '';
-    deck.forEach(({ id, src, rarity, count }) => {
-      const stackClass = count >= 3 ? 'stack-2 stack-3' : count === 2 ? 'stack-2' : '';
-      const wrap = document.createElement('div');
-      wrap.className = 'deck-card-wrap';
-      // Fremde Decks sind nur noch anschaubar, nicht mehr anklickbar/vergrößerbar
-      // (siehe Tauschbörse-Sichtbarkeitsregeln) — daher .deck-card-inert statt
-      // .deck-card (kein Klick-Handler, kein Pointer-Cursor).
-      wrap.innerHTML = `
-        <div class="deck-card deck-card-inert ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
-          ${count > 1 ? `<div class="deck-count-badge">×${count}</div>` : ''}
-          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
-        </div>`;
-      grid.appendChild(wrap);
+    EGG_RARITIES.forEach(r => {
+      const cardsOfRarity = deck.filter(c => c.rarity.folder === r.folder);
+      if (!cardsOfRarity.length) return;
+      const header = document.createElement('div');
+      header.className = 'deck-rarity-label';
+      header.style.color = r.color;
+      header.textContent = r.name;
+      grid.appendChild(header);
+      cardsOfRarity.forEach(({ id, src, rarity, count }) => {
+        const stackClass = count >= 3 ? 'stack-2 stack-3' : count === 2 ? 'stack-2' : '';
+        const wrap = document.createElement('div');
+        wrap.className = 'deck-card-wrap';
+        // Fremde Decks sind nur noch anschaubar, nicht mehr anklickbar/vergrößerbar
+        // (siehe Tauschbörse-Sichtbarkeitsregeln) — daher .deck-card-inert statt
+        // .deck-card (kein Klick-Handler, kein Pointer-Cursor).
+        wrap.innerHTML = `
+          <div class="deck-card deck-card-inert ${stackClass}" style="--card-color:${rarity.color};--card-bg:${rarity.bg}">
+            ${count > 1 ? `<div class="deck-count-badge">×${count}</div>` : ''}
+            <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+          </div>`;
+        grid.appendChild(wrap);
+      });
     });
   }
 
