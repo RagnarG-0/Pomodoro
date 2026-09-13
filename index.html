@@ -1219,7 +1219,8 @@
   .deck-content.open { max-height: 1400px; margin-top: 16px; }
   .deck-grid  { display: flex; flex-wrap: wrap; gap: 10px; }
   .deck-empty { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--text-muted); opacity: 0.5; text-align: center; padding: 12px 0; width: 100%; }
-  .deck-rarity-header { width: 100%; }
+  .deck-rarity-header { width: 100%; border-bottom: none; border-top: 0.5px solid var(--border); margin-top: 6px; }
+  .deck-rarity-header:first-child { border-top: none; margin-top: 0; }
   .deck-rarity-label {
     width: 100%; font-family: -apple-system, sans-serif; font-size: 11px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 2px;
