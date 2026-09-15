@@ -760,6 +760,13 @@
   }
   .mc-tile:hover { border-color: var(--card-color, var(--border-strong)); }
   .mc-tile-mine { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mc-tile-photo {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 8px;
+    display: block;
+  }
   .mc-legend {
     display: flex; align-items: center; gap: 5px;
     font-size: 10px; color: var(--text-muted);
@@ -5871,6 +5878,14 @@
     tulpe:       { color: '#d9483c', bg: '#241210' },
     zuhause:     { color: '#8a6fd6', bg: '#1c1530' }, // wie 'auswaerts' bei LIBRARY_COLORS
   };
+  // Lokale Pfade statt CDN (wie lvl15/level15.jpg) — frisch gepushte Dateien
+  // koennen auf jsDelivr bis zu 24h stale gecacht bleiben.
+  const MENSA_IMAGES = {
+    harzmensa:   'Mensa/harzmensa.jpg',
+    franckesche: 'Mensa/franckesche.jpg',
+    neuwerk:     'Mensa/neuwerk.jpg',
+    tulpe:       'Mensa/tulpe.jpg',
+  };
 
   // Aktuell ungenutzt (Rennstrecke zeigt seit 2026-08-05 Profilbilder statt
   // Auto-Icons, da 8 Designs bei vielen Nutzern nicht mehr eindeutig sind) —
@@ -6248,6 +6263,9 @@
       const isHome = opt.key === 'zuhause';
       const mineClass = opt.key === userMensaCheckin ? ' mc-tile-mine' : '';
       const colors = MENSA_COLORS[opt.key];
+      const photoHtml = MENSA_IMAGES[opt.key]
+        ? `<img src="${MENSA_IMAGES[opt.key]}" class="mc-tile-photo" alt="">`
+        : '';
 
       let dishListHtml = '';
       if (!isHome) {
@@ -6286,6 +6304,7 @@
       // mitbekommen, ohne sie mehrfach zu setzen.
       return `<div class="mc-tile${isHome ? ' mc-home-tile' : ''}${mineClass}" data-mensa="${opt.key}" style="--card-color:${colors.color};--card-bg:${colors.bg};">
         <div class="mc-tile-header">${esc(opt.name)}</div>
+        ${photoHtml}
         ${dishListHtml}
         ${checkinRowHtml}
       </div>`;
