@@ -691,8 +691,9 @@
     filter: drop-shadow(0 0 5px rgba(255,255,255,0.85));
   }
   .lb-library-hotspot.lb-library-mine { stroke-width: 0.9; }
-  /* Vorübergehend geschlossenes Gebäude (z.B. Neuwerk): dauerhaft leicht
-     abgedunkelt, kein Hover-Glow, kein Klick-Cursor. */
+  /* Vorübergehend geschlossenes Gebäude (aktuell keins, generischer
+     Mechanismus): dauerhaft leicht abgedunkelt, kein Hover-Glow, kein
+     Klick-Cursor. */
   .lb-library-hotspot.lb-library-disabled {
     fill: rgba(0,0,0,0.45);
     cursor: not-allowed;
@@ -5824,19 +5825,18 @@
   //
   // `key: 'neuwerk'` bleibt bewusst unverändert (DB-Wert in
   // profiles.library_checkin, CHECK-Constraint, Migration
-  // 20260901000000_library_checkin.sql). Neuwerk zeigt wieder ihren echten
-  // Namen, ist aber wegen `disabled: true` aktuell nicht auswählbar (reale
-  // Bibliothek vorübergehend geschlossen) — siehe „Vorübergehend
-  // geschlossen"-Banner in renderRaceTrack(). Der frühere generische
-  // "nicht in einer der beiden anderen Bibliotheken"-Check-in-Punkt läuft
-  // jetzt als eigener vierter Ort `auswaerts` mit eigener Fläche.
+  // 20260901000000_library_checkin.sql). Anzeige heißt „Franckesche
+  // Stiftung" (das Gebäude im Bild bleibt unverändert das ockerfarbene
+  // Türmchengebäude). Der frühere generische "nicht in einer der beiden
+  // anderen Bibliotheken"-Check-in-Punkt läuft als eigener vierter Ort
+  // `auswaerts` mit eigener Fläche.
   const LIBRARY_BUILDINGS = [
     {
       key: 'steintor', name: 'Steintor', anchorPct: [32.19, 31.71],
       points: [[27.33,20.54],[42.85,24.68],[42.92,37.6],[36.95,43.91],[21.24,37.45],[21.34,24.4]],
     },
     {
-      key: 'neuwerk', name: 'Neuwerk', anchorPct: [78.11, 43.43], disabled: true,
+      key: 'neuwerk', name: 'Franckesche Stiftung', anchorPct: [78.11, 43.43],
       points: [[69.69,36.81],[73.89,33.2],[77.06,32.09],[82.91,34.25],[86.4,36.56],[86.38,50.97],[79.92,55],[69.57,50.85]],
     },
     {
@@ -6188,7 +6188,7 @@
       }).join('')}
     </svg>`;
 
-    // Banner über jedem aktuell gesperrten Gebäude (z.B. Neuwerk).
+    // Banner über jedem aktuell gesperrten Gebäude (aktuell keins).
     const closedBannersHtml = LIBRARY_BUILDINGS.filter(b => b.disabled).map(b => {
       return `<div class="lb-library-closed-banner" style="left:${b.anchorPct[0]}%;top:${b.anchorPct[1]}%;">Vorübergehend<br>geschlossen</div>`;
     }).join('');
