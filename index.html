@@ -893,6 +893,14 @@
   .stats-page-dots {
     display: flex; gap: 7px; align-items: center;
   }
+  .recap-open-btn {
+    margin-left: auto; margin-right: 12px;
+    font-family: Georgia, serif; font-size: 11px; letter-spacing: 0.04em;
+    padding: 3px 10px; border-radius: 999px; cursor: pointer;
+    border: 0.5px solid #a9860a; background: transparent; color: #a9860a;
+    transition: background 0.15s, color 0.15s;
+  }
+  .recap-open-btn:hover { background: #a9860a; color: #fff; }
   .stats-page-dot {
     width: 7px; height: 7px; border-radius: 50%;
     background: var(--border-strong); cursor: pointer;
@@ -1711,6 +1719,277 @@
   .focus-ring-wrap { display: flex; justify-content: center; align-items: center; }
   #focus-ring-svg { width: clamp(240px, 55vmin, 420px); height: clamp(240px, 55vmin, 420px); }
   #focus-ring-arc { opacity: 0.55; }
+  /* ═════════ M2-Recap-Overlay (siehe docs/recap.md) ═════════ */
+  #recapOverlay {
+    --r-bg: #141413; --r-surface: #272725;
+    --r-gold: #ffd700; --r-gold-dark: #a9860a;
+    --r-green: #1D9E75; --r-green-light: #5DCAA5; --r-pink: #ff4fbf;
+    --r-text: #f5f5f0; --r-muted: rgba(245,245,240,0.64);
+    position: fixed; inset: 0; z-index: 970; display: none;
+    background: rgba(0,0,0,0.86);
+    font-family: Georgia, 'Times New Roman', serif; color: var(--r-text);
+  }
+  #recapOverlay.visible { display: block; animation: rFade 0.35s ease; }
+  /* globale App-Styles (h1 uppercase/muted) im Recap neutralisieren */
+  #recapOverlay h1, #recapOverlay h2 { letter-spacing: normal; text-transform: none; color: inherit; }
+  @keyframes rFade { from { opacity: 0; } to { opacity: 1; } }
+
+  #recapOverlay .r-stage {
+    position: absolute; left: 50%; top: 50%; width: 1024px; height: 768px;
+    transform: translate(-50%, -50%); transform-origin: 50% 50%;
+    border-radius: 20px; overflow: hidden; background: var(--r-bg);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6); cursor: pointer; user-select: none;
+  }
+  #recapOverlay .r-slide {
+    position: absolute; inset: 0; overflow: hidden;
+    opacity: 0; visibility: hidden; transition: opacity 0.45s ease, visibility 0s linear 0.45s;
+  }
+  #recapOverlay .r-slide.active { opacity: 1; visibility: visible; transition: opacity 0.45s ease; }
+
+  /* Chrome: Fortschritt, Kopfzeile, Navigation */
+  #recapOverlay .r-progress {
+    position: absolute; top: 16px; left: 24px; right: 24px; z-index: 5;
+    display: grid; grid-template-columns: repeat(var(--r-n, 8), minmax(0, 1fr)); gap: 6px;
+  }
+  #recapOverlay .r-seg { height: 4px; border-radius: 2px; background: rgba(245,245,240,0.22); overflow: hidden; }
+  #recapOverlay .r-seg-fill { height: 100%; width: 0; background: var(--r-text); }
+  #recapOverlay .r-seg.done .r-seg-fill { width: 100%; }
+  #recapOverlay .r-seg.current .r-seg-fill { animation: rSegFill linear forwards; }
+  @keyframes rSegFill { from { width: 0; } to { width: 100%; } }
+  #recapOverlay .r-head {
+    position: absolute; top: 30px; left: 24px; right: 12px; z-index: 5;
+    display: flex; align-items: center; gap: 12px;
+  }
+  #recapOverlay .r-head-avatar {
+    width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--r-gold);
+    background: var(--r-surface); overflow: hidden; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700; color: var(--r-gold);
+  }
+  #recapOverlay .r-head-avatar img, #recapOverlay .r-avatar img, #recapOverlay .r-sum-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #recapOverlay .r-head-label { flex-grow: 1; font-size: 14px; color: var(--r-muted); letter-spacing: 0.02em; }
+  #recapOverlay .r-icon-btn {
+    width: 44px; height: 44px; border: none; background: transparent; color: var(--r-text);
+    cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%;
+  }
+  #recapOverlay .r-icon-btn:hover { background: rgba(245,245,240,0.08); }
+  #recapOverlay .r-nav {
+    position: absolute; top: 50%; width: 48px; height: 48px; margin-top: -24px; z-index: 5;
+    border-radius: 50%; border: 1px solid rgba(245,245,240,0.28); background: rgba(20,20,19,0.55);
+    color: var(--r-text); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+    transition: opacity 0.2s, background 0.2s;
+  }
+  #recapOverlay .r-nav:hover:not(:disabled) { background: rgba(245,245,240,0.12); }
+  #recapOverlay .r-nav:disabled { opacity: 0.3; cursor: default; }
+  #recapOverlay .r-nav.prev { left: 20px; } #recapOverlay .r-nav.next { right: 20px; }
+  #recapOverlay .r-nav.hidden { display: none; }
+  #recapOverlay .r-hint {
+    position: absolute; left: 0; right: 0; bottom: 26px; z-index: 5; text-align: center;
+    font-size: 13px; color: var(--r-muted); letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #recapOverlay .r-hint.hidden { opacity: 0; }
+
+  /* Typo-Bausteine */
+  #recapOverlay .r-eyebrow { font-size: 13px; letter-spacing: 0.2em; font-weight: 700; color: var(--r-gold); }
+  #recapOverlay .r-divider { width: 56px; height: 2px; border-radius: 1px; background: var(--r-gold-dark); }
+  #recapOverlay .r-gold { color: var(--r-gold); }
+  #recapOverlay .r-num { font-variant-numeric: tabular-nums; }
+  #recapOverlay .r-col-right {
+    position: absolute; left: 560px; right: 96px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: flex-start;
+  }
+  #recapOverlay .r-col-left {
+    position: absolute; left: 96px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: flex-start;
+  }
+  #recapOverlay .r-huge { font-size: 176px; line-height: 0.88; font-weight: 700; color: var(--r-gold); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  #recapOverlay .r-pill {
+    display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px;
+    background: rgba(29,158,117,0.2); border: 1px solid rgba(93,202,165,0.5);
+    color: var(--r-green-light); font-size: 16px; font-weight: 700;
+  }
+
+  /* Generische Einblend-Animation (wird bei jedem Betreten des Slides neu gestartet) */
+  #recapOverlay .rise { opacity: 0; }
+  #recapOverlay .r-slide.active .rise { animation: rRise 0.65s cubic-bezier(0.2,0.7,0.3,1) var(--d, 0.3s) both; }
+  @keyframes rRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+  #recapOverlay .fade { opacity: 0; }
+  #recapOverlay .r-slide.active .fade { animation: rFadeIn 0.8s ease var(--d, 0.3s) both; }
+  @keyframes rFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* Konfetti */
+  #recapOverlay .r-confetti { position: absolute; width: 8px; height: 14px; border-radius: 1px; opacity: 0; pointer-events: none; z-index: 4; }
+  @keyframes rConfetti {
+    0%   { opacity: 0; transform: translate(0,0) rotate(0deg); }
+    12%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--dx),var(--dy)) rotate(var(--rot)); }
+  }
+
+  /* ── 1 · Danke ── */
+  #recapOverlay .s1 { background: radial-gradient(60% 75% at 30% 50%, #3a3212 0%, #1c1a12 48%, #141413 80%); }
+  #recapOverlay .s1-glow {
+    position: absolute; left: 300px; top: 384px; width: 480px; height: 480px; margin: -240px 0 0 -240px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,215,0,0.42) 0%, rgba(255,215,0,0.12) 38%, transparent 66%);
+    opacity: 0;
+  }
+  #recapOverlay .r-slide.active .s1-glow { animation: rGlowPulse 2.6s ease-in-out 0.9s infinite both; }
+  @keyframes rGlowPulse { 0%,100% { opacity: 0.65; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.04); } }
+  #recapOverlay .s1-avatar-wrap { position: absolute; left: 200px; top: 284px; width: 200px; height: 200px; }
+  #recapOverlay .r-slide.active .s1-avatar-wrap { animation: rSpin 0.85s cubic-bezier(0.22,1,0.36,1) 0.15s both; }
+  @keyframes rSpin { from { transform: rotate(0deg); } to { transform: rotate(720deg); } }
+  #recapOverlay .r-avatar {
+    width: 100%; height: 100%; border-radius: 50%; border: 3px solid var(--r-gold); overflow: hidden;
+    background: var(--r-surface); box-shadow: 0 0 0 1px var(--r-gold-dark), 0 0 48px rgba(255,215,0,0.45), 0 12px 32px rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center; font-size: 88px; font-weight: 700; color: var(--r-gold);
+    opacity: 0;
+  }
+  #recapOverlay .r-slide.active .r-avatar { animation: rScaleIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s both; }
+  @keyframes rScaleIn { 0% { transform: scale(0.15); opacity: 0; } 65% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+  #recapOverlay .s1-piece { position: absolute; }
+  #recapOverlay .s1-title { margin: 22px 0; font-size: 40px; line-height: 1.25; font-weight: 700; text-wrap: balance; }
+  #recapOverlay .s1-sub { margin: 22px 0 0; font-size: 18px; line-height: 1.5; color: var(--r-muted); font-style: italic; }
+
+  /* ── 2 · Lernzeit ── */
+  #recapOverlay .s2 { background: radial-gradient(60% 80% at 75% 55%, #0f3a2c 0%, #142019 45%, #141413 80%); }
+  #recapOverlay .s2-ring { position: absolute; left: 740px; top: 400px; border-radius: 50%; opacity: 0; }
+  #recapOverlay .r-slide.active .s2-ring { animation: rRingIn 0.9s cubic-bezier(0.2,0.7,0.3,1) var(--d) both; }
+  @keyframes rRingIn { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+  #recapOverlay .s2-orbit { position: absolute; left: 570px; top: 230px; width: 340px; height: 340px; }
+  #recapOverlay .r-slide.active .s2-orbit { animation: rFadeIn 0.8s ease var(--d) both, rOrbit 14s linear infinite; }
+  @keyframes rOrbit { from { transform: rotate(45deg); } to { transform: rotate(405deg); } }
+  #recapOverlay .s2-dot { position: absolute; left: 50%; top: -7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--r-gold); box-shadow: 0 0 20px rgba(255,215,0,0.85); }
+  #recapOverlay .s2-center { position: absolute; left: 620px; top: 346px; width: 240px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+
+  /* ── 3 · Rekorde ── */
+  #recapOverlay .s3 { background: linear-gradient(160deg, #2e2810 0%, #181712 45%, #141413 100%); }
+  #recapOverlay .s3-cards { position: absolute; left: 96px; right: 96px; top: 300px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; align-items: start; }
+  #recapOverlay .s3-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 26px 24px; border-radius: 20px;
+    background: linear-gradient(150deg, rgba(255,215,0,0.13), rgba(255,255,255,0.03)); border: 1px solid rgba(255,215,0,0.34);
+    box-shadow: 0 14px 36px rgba(0,0,0,0.4); transform: rotate(var(--rot)); opacity: 0;
+  }
+  #recapOverlay .r-slide.active .s3-card { animation: rCardIn 0.75s cubic-bezier(0.34,1.4,0.64,1) var(--d) both; }
+  @keyframes rCardIn {
+    from { opacity: 0; transform: translateY(60px) rotate(calc(var(--rot) * -4)) scale(0.9); }
+    to   { opacity: 1; transform: translateY(0) rotate(var(--rot)) scale(1); }
+  }
+  #recapOverlay .s3-icon { width: 56px; height: 56px; border-radius: 50%; border: 1.5px solid var(--r-gold); display: flex; align-items: center; justify-content: center; color: var(--r-gold); }
+  #recapOverlay .s3-label { font-size: 12px; letter-spacing: 0.16em; font-weight: 700; color: var(--r-gold); margin-top: 6px; }
+  #recapOverlay .s3-value { font-size: 36px; line-height: 1.05; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #recapOverlay .s3-sub { font-size: 15px; color: var(--r-muted); }
+
+  /* ── 4 · Streak ── */
+  #recapOverlay .s4 { background: radial-gradient(70% 70% at 72% 100%, #4a2a08 0%, #22190d 48%, #141413 80%); }
+  #recapOverlay .s4-grid { display: grid; gap: 10px; }
+  #recapOverlay .s4-dot { aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe766, #d9a800 70%, #a9860a); box-shadow: 0 0 8px rgba(255,190,0,0.35); opacity: 0; }
+  #recapOverlay .s4-dot.last { background: radial-gradient(circle at 35% 30%, #fff3a0, var(--r-gold) 60%); box-shadow: 0 0 0 3px rgba(93,202,165,0.9), 0 0 18px rgba(255,215,0,0.9); }
+  #recapOverlay .r-slide.active .s4-dot { animation: rPop 0.4s cubic-bezier(0.34,1.8,0.64,1) var(--d) both; }
+  #recapOverlay .r-slide.active .s4-dot.last { animation: rPop 0.4s cubic-bezier(0.34,1.8,0.64,1) var(--d) both, rPulse 1.6s ease-in-out calc(var(--d) + 0.4s) infinite; }
+  @keyframes rPop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+  @keyframes rPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+  #recapOverlay .s4-live { width: 9px; height: 9px; border-radius: 50%; background: var(--r-green-light); box-shadow: 0 0 10px var(--r-green-light); }
+
+  /* ── 5 · Level ── */
+  #recapOverlay .s5 { background: radial-gradient(55% 70% at 30% 50%, #0f4a37 0%, #12251d 50%, #141413 82%); }
+  #recapOverlay .s5-glow { position: absolute; left: 80px; top: 164px; width: 440px; height: 440px; border-radius: 50%; background: radial-gradient(circle, rgba(29,158,117,0.5) 0%, transparent 62%); }
+  #recapOverlay .s5-dash { position: absolute; left: 125px; top: 209px; width: 350px; height: 350px; border-radius: 50%; border: 1.5px dashed rgba(93,202,165,0.5); }
+  #recapOverlay .r-slide.active .s5-dash { animation: rFadeIn 0.8s ease 0.5s both, rOrbit 40s linear infinite; }
+  #recapOverlay .s5-badge {
+    position: absolute; left: 170px; top: 254px; width: 260px; height: 260px; border-radius: 50%; box-sizing: border-box;
+    border: 3px solid var(--r-green-light); background: radial-gradient(circle at 40% 30%, #2bb88b, var(--r-green) 45%, #0F6E56);
+    box-shadow: 0 0 0 7px rgba(29,158,117,0.25), 0 0 70px rgba(29,158,117,0.6), inset 0 -12px 34px rgba(0,0,0,0.25);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; opacity: 0;
+  }
+  #recapOverlay .r-slide.active .s5-badge { animation: rBadgeIn 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.25s both; }
+  @keyframes rBadgeIn { 0% { opacity: 0; transform: scale(0.2) rotate(-25deg); } 70% { opacity: 1; transform: scale(1.08) rotate(4deg); } 100% { opacity: 1; transform: scale(1) rotate(0); } }
+  #recapOverlay .s5-segs { width: 100%; display: grid; gap: 3px; margin-top: 12px; }
+  #recapOverlay .s5-seg { height: 10px; border-radius: 2px; background: rgba(245,245,240,0.16); position: relative; overflow: hidden; }
+  #recapOverlay .s5-seg.done::after { content: ''; position: absolute; inset: 0; background: var(--r-green-light); transform: scaleX(0); transform-origin: left; }
+  #recapOverlay .r-slide.active .s5-seg.done::after { animation: rSegGrow 0.18s ease-out var(--d) both; }
+  @keyframes rSegGrow { to { transform: scaleX(1); } }
+
+  /* ── 6 · Karten ── */
+  #recapOverlay .s6 { background: radial-gradient(60% 70% at 30% 55%, #2a1a33 0%, #1a1520 48%, #141413 80%); }
+  #recapOverlay .s6-fan { position: absolute; left: 60px; width: 480px; top: 250px; height: 300px; }
+  #recapOverlay .s6-card {
+    position: absolute; bottom: 0; width: 132px; height: 198px; margin-left: -66px; border-radius: 12px; box-sizing: border-box;
+    border: 2px solid var(--c); background: #1a1a18; overflow: hidden;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--c) 45%, transparent), 0 12px 28px rgba(0,0,0,0.5);
+    transform-origin: 50% 120%; transform: rotate(var(--rot)); opacity: 0;
+  }
+  #recapOverlay .r-slide.active .s6-card { animation: rFanOut 0.7s cubic-bezier(0.34,1.4,0.64,1) var(--d) both; }
+  @keyframes rFanOut {
+    from { opacity: 0; transform: translate(var(--fx), 70px) rotate(0deg); }
+    to   { opacity: 1; transform: translate(0, 0) rotate(var(--rot)); }
+  }
+  #recapOverlay .s6-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #recapOverlay .s6-ring-arc { stroke-dasharray: 326.73; stroke-dashoffset: var(--off); }
+  #recapOverlay .r-slide.active .s6-ring-arc { animation: rRingDraw 1.5s cubic-bezier(0.2,0.7,0.3,1) 0.9s both; }
+  @keyframes rRingDraw { from { stroke-dashoffset: 326.73; } to { stroke-dashoffset: var(--off); } }
+
+  /* ── 7 · Clan ── */
+  #recapOverlay .s7 { background: linear-gradient(180deg, #141413 0%, #17160f 60%, #221d0a 100%); }
+  #recapOverlay .s7-spot {
+    position: absolute; left: 548px; top: -40px; width: 360px; height: 720px;
+    background: linear-gradient(180deg, rgba(255,215,0,0.2), rgba(255,215,0,0.02) 80%, transparent);
+    clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+  }
+  #recapOverlay .s7-podium { position: absolute; left: 548px; width: 360px; bottom: 150px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: end; }
+  #recapOverlay .s7-step { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #recapOverlay .s7-count { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #recapOverlay .s7-bar {
+    width: 100%; border-radius: 12px 12px 4px 4px; box-shadow: 0 -6px 30px rgba(0,0,0,0.3);
+    display: flex; justify-content: center; padding-top: 16px; box-sizing: border-box; transform-origin: bottom;
+  }
+  #recapOverlay .r-slide.active .s7-bar { animation: rGrowY 0.8s cubic-bezier(0.34,1.3,0.64,1) var(--d) both; }
+  @keyframes rGrowY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  #recapOverlay .s7-medal { width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.22); border: 2px solid rgba(255,255,255,0.45); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: #fff; }
+  #recapOverlay .s7-floor { position: absolute; left: 528px; width: 400px; bottom: 138px; height: 2px; background: rgba(245,245,240,0.25); }
+
+  /* ── 8 · Zusammenfassung ── */
+  #recapOverlay .s8 { background: radial-gradient(80% 60% at 50% 0%, #2e2810 0%, #141413 65%); }
+  #recapOverlay .s8-wrap { position: absolute; left: 88px; right: 88px; top: 84px; bottom: 36px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+  #recapOverlay .s8-card {
+    border-radius: 24px; padding: 26px; background: linear-gradient(170deg, #22201a, #161614 60%);
+    border: 1.5px solid rgba(255,215,0,0.55); box-shadow: 0 0 0 1px rgba(169,134,10,0.4), 0 24px 60px rgba(0,0,0,0.5);
+    display: flex; gap: 22px; cursor: default;
+  }
+  #recapOverlay .r-sum-avatar {
+    flex-shrink: 0; width: 64px; height: 64px; border-radius: 50%; border: 2.5px solid var(--r-gold); overflow: hidden;
+    background: var(--r-surface); display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 700; color: var(--r-gold); box-shadow: 0 0 18px rgba(255,215,0,0.35);
+  }
+  #recapOverlay .s8-hero { flex-grow: 1; padding: 16px; border-radius: 16px; background: linear-gradient(150deg, rgba(255,215,0,0.16), rgba(255,215,0,0.04)); border: 1px solid rgba(255,215,0,0.35); display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  #recapOverlay .s8-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  #recapOverlay .s8-tile { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  #recapOverlay .s8-tl { font-size: 10px; letter-spacing: 0.1em; font-weight: 700; color: rgba(245,245,240,0.6); }
+  #recapOverlay .s8-tv { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #recapOverlay .s8-ts { font-size: 12px; color: rgba(245,245,240,0.6); }
+  #recapOverlay .s8-mini { width: 34px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #recapOverlay .s8-mini-bar { width: 100%; border-radius: 4px 4px 2px 2px; transform-origin: bottom; }
+  #recapOverlay .r-slide.active .s8-mini-bar { animation: rGrowY 0.6s cubic-bezier(0.34,1.3,0.64,1) var(--d) both; }
+  #recapOverlay .s8-btn { width: 180px; height: 52px; border-radius: 12px; font-family: Georgia, serif; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #recapOverlay .s8-btn.secondary { border: 1.5px solid rgba(245,245,240,0.4); background: transparent; color: var(--r-text); }
+  #recapOverlay .s8-btn.secondary:hover { background: rgba(245,245,240,0.08); }
+  #recapOverlay .s8-btn.primary { border: none; background: var(--r-gold); color: #26210a; box-shadow: 0 6px 18px rgba(240,180,41,0.35); }
+  #recapOverlay .s8-btn.primary:hover { filter: brightness(1.06); }
+  #recapOverlay .s8-btn:active { transform: scale(0.97); }
+  #recapOverlay .r-toast {
+    position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 6;
+    padding: 10px 18px; border-radius: 10px; background: rgba(245,245,240,0.95); color: #1a1a18;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  #recapOverlay .r-toast.show { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #recapOverlay *, #recapOverlay *::after { animation: none !important; transition: none !important; }
+    #recapOverlay .rise, #recapOverlay .fade, #recapOverlay .r-avatar, #recapOverlay .s1-glow,
+    #recapOverlay .s2-ring, #recapOverlay .s3-card, #recapOverlay .s4-dot, #recapOverlay .s5-badge,
+    #recapOverlay .s6-card { opacity: 1; }
+    #recapOverlay .s5-seg.done::after { transform: none; }
+    #recapOverlay .r-seg.current .r-seg-fill { width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -2181,6 +2460,7 @@
 <div class="card" id="stats-card" style="position:relative;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
     <div class="hmap-label">Statistik</div>
+    <button id="recap-open-btn" class="recap-open-btn" style="display:none">Recap ansehen</button>
     <div class="stats-page-dots">
       <div class="stats-page-dot active" data-page="1"></div>
       <div class="stats-page-dot" data-page="2"></div>
@@ -2381,6 +2661,25 @@
     <div class="lvl15-title" id="lvl15Title">Du bist ein wahrer Peter Hippe!</div>
     <div class="lvl15-subtitle">17.400 Minuten Fokuszeit — der zweite Brutkasten ist jetzt käuflich.</div>
     <button class="btn-lvl15-dismiss" id="btnLevel15Dismiss">Weiter</button>
+  </div>
+</div>
+
+<!-- M2-Recap-Overlay (siehe docs/recap.md) — Slides werden per JS gerendert -->
+<div id="recapOverlay" role="dialog" aria-modal="true" aria-label="Dein Pomodoro-Recap">
+  <div class="r-stage" id="rStage">
+    <div id="rSlides"></div>
+
+    <div class="r-progress" id="rProgress"></div>
+    <div class="r-head">
+      <div class="r-head-avatar" id="rHeadAvatar"></div>
+      <div class="r-head-label">Pomodoro · M2-Recap</div>
+      <button class="r-icon-btn" id="rPause" aria-label="Pausieren"></button>
+      <button class="r-icon-btn" id="rClose" aria-label="Recap schließen"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <button class="r-nav prev" id="rPrev" aria-label="Vorheriger Screen"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="r-nav next" id="rNext" aria-label="Nächster Screen"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <div class="r-hint" id="rHint">Klicken oder mit ← → blättern</div>
+    <div class="r-toast" id="rToast"></div>
   </div>
 </div>
 
@@ -5531,6 +5830,8 @@
       });
     }
     setToken(null);
+    closeRecap(false);
+    document.getElementById('recap-open-btn').style.display = 'none';
     currentUser = null; userName = null; userPublic = false; isAdmin = false; avatarUrl = null;
     load(); loadSettings();
     if (mode === 'work' && limitless) { totalSec = 0; remaining = 0; }
@@ -6637,6 +6938,8 @@
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     // Don't trigger when settings overlay is open
     if (document.getElementById('overlay')?.classList.contains('open')) return;
+    // Recap-Overlay nutzt die Leertaste selbst (Pause)
+    if (document.getElementById('recapOverlay')?.classList.contains('visible')) return;
     e.preventDefault();
     start();
   });
@@ -6970,6 +7273,7 @@
     reconcileBentoState(profile);
     reconcileBentoProfiles(profile);
     renderBentoProfilesList();
+    maybeShowRecap(); // nicht awaiten — darf den restlichen Start nicht blockieren
   }
 
   function showMigrationPrompt(session, localDays) {
@@ -10163,6 +10467,822 @@
       </div>`;
     document.getElementById('hatchOverlay').classList.add('visible');
   }
+
+  /* ═════════ M2-Recap (siehe docs/recap.md) ═════════
+     Story-Overlay mit bis zu 8 Screens + PDF-Urkunde. Doppeltes Datums-Gate:
+     1. Client: todayKey() >= RECAP_START — vorher weder Overlay noch Button
+        noch irgendein Request.
+     2. Server: RPC recap_available() (gleiche 4-Uhr-Berlin-Grenze, Datum fest
+        in der SQL-Funktion) — schützt gegen falsch gestellte Geräteuhren.
+        Fehler/Timeout → kein Recap (fail closed). */
+  const RECAP_START    = '2026-10-04';
+  const RECAP_SEEN_KEY = 'pomo_recap_m2_seen_v1';
+  const RECAP_SLIDE_MS = 9000;
+  const RECAP_W = 1024, RECAP_H = 768;
+  const JSPDF_SRC      = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';   // jsDelivr statt cdnjs: CSP erlaubt nur cdn.jsdelivr.net
+  // Fächer-Reihenfolge links → rechts, legendary in der Mitte
+  const RECAP_RARITIES = ['common', 'rare', 'legendary', 'epic', 'mystic'];
+  const RECAP_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+  let recapServerOk = false;   // nur true wird gecacht (pro Seitenladung)
+  let recapData = null;        // zuletzt geöffnete Daten (für Urkunde)
+  let recapOpening = false;
+
+  function recapActive() { return todayKey() >= RECAP_START; }
+
+  function recapSeenKey() { return `${RECAP_SEEN_KEY}_${currentUser?.id}`; }
+  function recapSeen() {
+    try { return localStorage.getItem(recapSeenKey()) === '1'; } catch (e) { return false; }
+  }
+  function recapMarkSeen() {
+    try { localStorage.setItem(recapSeenKey(), '1'); } catch (e) {}
+  }
+
+  async function recapServerGate() {
+    if (recapServerOk) return true;
+    if (!currentUser || !recapActive()) return false;
+    try {
+      const token = await getValidToken();
+      if (!token) return false;
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch(`${SB}/rest/v1/rpc/recap_available`, {
+        method: 'POST', headers: authHeaders(token), body: '{}', signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (!res.ok) return false;
+      recapServerOk = (await res.json()) === true;
+    } catch (e) { return false; }
+    return recapServerOk;
+  }
+
+  // ── Datums-Helfer (YYYY-MM-DD, Mittag lokal → nie auf einer DST-Kante) ──
+  const recapDate = s => new Date(s + 'T12:00:00');
+  const recapKey  = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  const recapAddDays = (s, n) => { const x = recapDate(s); x.setDate(x.getDate() + n); return recapKey(x); };
+  const recapDM  = s => recapDate(s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  const recapDMY = s => recapDate(s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const recapWeekEnd = s => recapAddDays(s, 6);
+  const recapDe  = n => Math.round(n).toLocaleString('de-DE');
+  const recapPl  = (n, one, many) => n === 1 ? one : many;
+
+  // Immer Zeitformat (= 'time'-Zweig von minutesToDisplay()), unabhängig von displayUnit
+  function recapFmtMin(mins) {
+    const h = Math.floor(mins / 60), m = Math.round(mins % 60);
+    return h > 0 ? `${h}h ${m}min` : `${m}min`;
+  }
+
+  // Beste Woche (Mo–So) bzw. bester Monat; bei Gleichstand der jüngere Zeitraum
+  function computeBestPeriod(unit) {
+    const sums = {};
+    for (const [k, v] of Object.entries(days)) {
+      if (!(v > 0)) continue;
+      let start;
+      if (unit === 'week') {
+        const dt = recapDate(k);
+        dt.setDate(dt.getDate() - (dt.getDay() + 6) % 7);
+        start = recapKey(dt);
+      } else {
+        start = k.slice(0, 7) + '-01';
+      }
+      sums[start] = (sums[start] || 0) + v;
+    }
+    let bestKey = null, bestMin = 0;
+    for (const k of Object.keys(sums).sort()) {
+      if (sums[k] >= bestMin) { bestMin = sums[k]; bestKey = k; }
+    }
+    return { start: bestKey, min: bestMin };
+  }
+
+  // Wie computeLongestStreak(), zusätzlich mit from/to; bei Gleichstand der jüngste Lauf
+  function computeLongestStreakRange() {
+    const studyDays = Object.keys(days).filter(k => days[k] > 0).sort();
+    let best = { days: 0, from: null, to: null };
+    let current = 0, runStart = null, prevKey = null;
+    for (const key of studyDays) {
+      if (prevKey && Math.round((recapDate(key) - recapDate(prevKey)) / 86400000) === 1) {
+        current++;
+      } else {
+        current = 1; runStart = key;
+      }
+      if (current >= best.days) best = { days: current, from: runStart, to: key };
+      prevKey = key;
+    }
+    return best;
+  }
+
+  // Je Rarität eine zufällige eigene Karte; fehlt eine Rarität komplett,
+  // wird stattdessen eine beliebige noch nicht gezeigte eigene Karte gewählt.
+  function pickFanCards() {
+    const owned = eggDeck;
+    const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+    const used = new Set();
+    const picks = RECAP_RARITIES.map(rar => {
+      const pool = owned.filter(c => c.folder === rar);
+      const c = pool.length ? rand(pool) : null;
+      if (c) used.add(c.id);
+      return c;
+    });
+    return picks.map(c => {
+      if (c) return c;
+      const rest = owned.filter(o => !used.has(o.id));
+      const f = rest.length ? rand(rest) : null;
+      if (f) used.add(f.id);
+      return f;
+    });
+  }
+
+  async function recapFetchPodium(token) {
+    const res = await fetch(`${SB}/rest/v1/daily_winners?user_id=eq.${currentUser.id}&select=rank`, {
+      headers: authHeaders(token),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    const p = { 1: 0, 2: 0, 3: 0 };
+    rows.forEach(r => { if (p[r.rank] != null) p[r.rank]++; });
+    return p;
+  }
+
+  async function recapFetchAlltimeRank(token) {
+    if (!userPublic || !clanRole) return null;
+    const res = await fetch(`${SB}/rest/v1/rpc/leaderboard_aggregated`, {
+      method: 'POST', headers: authHeaders(token), body: JSON.stringify({ date_from: '2000-01-01' }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const list = await res.json();
+    if (!Array.isArray(list) || !list.length) return null;
+    const rank = computeRanks(list, false)[userName];
+    return rank ? { rank, of: list.length } : null;
+  }
+
+  async function collectRecapData() {
+    const totalMin = Object.values(days).reduce((a, b) => a + b, 0);
+    const studyKeys = Object.keys(days).filter(k => days[k] > 0).sort();
+    if (!totalMin || !studyKeys.length) return null;
+
+    const token = await getValidToken();
+    let podium = { 1: 0, 2: 0, 3: 0 }, alltimeRank = null;
+    if (token) {
+      const [p, r] = await Promise.allSettled([recapFetchPodium(token), recapFetchAlltimeRank(token)]);
+      if (p.status === 'fulfilled') podium = p.value;
+      if (r.status === 'fulfilled') alltimeRank = r.value;
+    }
+
+    const bestDay = computeBestDay();
+    const bestWeek = computeBestPeriod('week');
+    const bestMonth = computeBestPeriod('month');
+    const streak = computeLongestStreakRange();
+    const today = todayKey();
+    const ongoing = streak.to === today || (streak.to === recapAddDays(today, -1) && !(days[today] > 0));
+    const { current, next } = getCurrentLevel(totalMin);
+
+    return {
+      userName: userName || '',
+      avatarUrl: safeAvatarUrl(avatarUrl),
+      totalMin,
+      studyDays: studyKeys.length,
+      firstDay: studyKeys[0],
+      bestDay:   { date: bestDay.key, min: bestDay.min },
+      bestWeek:  { weekStart: bestWeek.start, min: bestWeek.min },
+      bestMonth: { month: bestMonth.start, min: bestMonth.min },
+      longestStreak: { ...streak, ongoing },
+      level: {
+        index: activeLevels.indexOf(current) + 1,
+        count: activeLevels.length,
+        name: current.name,
+        label: current.label,
+        icon: current.icon,
+        nextLabel: next ? next.label : null,
+        minToNext: next ? next.minMinutes - totalMin : 0,
+      },
+      cards: { owned: eggDeck.length, total: CARD_CATALOG.length },
+      fan: pickFanCards(),
+      podium,
+      alltimeRank,
+    };
+  }
+
+  function recapAvatarHtml(r) {
+    const initial = esc(r.userName.charAt(0).toUpperCase());
+    return r.avatarUrl
+      ? `<img src="${esc(r.avatarUrl)}" alt="" data-i="${initial}" onerror="this.parentNode.textContent=this.dataset.i">`
+      : initial;
+  }
+
+  // Zähl-Element: data-count Ziel, data-from Start, data-fmt int|dur|pct, data-delay Sek.
+  const recapCnt = (to, fmt, delay, from = 0) =>
+    `<span class="r-num" data-count="${to}" data-from="${from}" data-fmt="${fmt}" data-delay="${delay}">${recapFmtVal(to, fmt)}</span>`;
+  function recapFmtVal(v, fmt) {
+    if (fmt === 'dur') return recapFmtMin(Math.round(v));
+    if (fmt === 'pct') return Math.round(v) + ' %';
+    return recapDe(v);
+  }
+
+  const RECAP_ICON = {
+    sun:   '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    week:  '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M7 14h2M11 14h2M15 14h2"/></svg>',
+    cup:   '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg>',
+    clock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>',
+    save:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 19h14"/></svg>',
+    pause: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+    play:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>',
+  };
+
+  // ── Slides ──
+  function buildRecapSlides(r) {
+    const s = [];
+    const L = r.level;
+    const p = r.podium, podTotal = p[1] + p[2] + p[3];
+    const hasRank = !!r.alltimeRank;
+    const hasPodium = podTotal > 0;
+    const pct = r.cards.total ? Math.round(r.cards.owned / r.cards.total * 100) : 0;
+    const n = r.longestStreak.days;
+    const lerntage = recapPl(r.studyDays, 'Lerntag', 'Lerntage');
+
+    // 1 · Danke
+    const pieces = [[150,190,7,14,'var(--r-gold)',-24],[215,140,6,12,'var(--r-pink)',38],[420,165,7,14,'var(--r-green-light)',18],[468,250,6,12,'var(--r-gold)',-52],
+      [118,330,6,12,'var(--r-green)',64],[482,410,7,14,'var(--r-pink)',-12],[160,500,6,12,'var(--r-gold)',28],[380,120,5,10,'var(--r-text)',-36],
+      [300,112,6,6,'var(--r-gold)',0],[250,590,6,6,'var(--r-green-light)',0],[420,560,6,12,'var(--r-gold)',72],[96,430,5,10,'var(--r-pink)',-40]]
+      .map(([x,y,w,h,c,rot], i) => `<div class="s1-piece fade" style="--d:${(1.5 + i*0.05).toFixed(2)}s;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${w===h?'50%':'1px'};background:${c};transform:rotate(${rot}deg)"></div>`).join('');
+    s.push(`<section class="r-slide s1" data-confetti="300,384,0.95">
+      <div class="s1-glow"></div>${pieces}
+      <div class="s1-avatar-wrap"><div class="r-avatar">${recapAvatarHtml(r)}</div></div>
+      <div class="r-col-right">
+        <div class="r-eyebrow rise" style="--d:.95s">DEIN POMODORO-RECAP</div>
+        <h1 class="s1-title rise" style="--d:1.05s">Vielen Dank <span class="r-gold">${esc(r.userName)}</span>, dass du Pomodoro zum Lernen genutzt hast.</h1>
+        <div class="r-divider rise" style="--d:1.15s"></div>
+        <p class="s1-sub rise" style="--d:1.25s">Zeit für einen Blick zurück auf deine Lernzeit.</p>
+      </div>
+    </section>`);
+
+    // 2 · Lernzeit
+    const ring = (size, border, delay, extra = '') =>
+      `<div class="s2-ring" style="--d:${delay}s;width:${size}px;height:${size}px;margin:-${size/2}px 0 0 -${size/2}px;border:${border};${extra}"></div>`;
+    const hours = Math.round(r.totalMin / 60);
+    s.push(`<section class="r-slide s2">
+      ${ring(440, '1px solid rgba(255,215,0,0.18)', 0.5)}
+      ${ring(340, '1px solid rgba(255,215,0,0.26)', 0.35)}
+      ${ring(240, '2px solid rgba(93,202,165,0.45)', 0.2, 'background:radial-gradient(circle, rgba(29,158,117,0.28), transparent 70%)')}
+      <div class="s2-orbit fade" style="--d:.9s"><div class="s2-dot"></div></div>
+      <div class="s2-center rise" style="--d:.7s">
+        <div style="font-size:64px;line-height:1;font-weight:700">${recapCnt(r.studyDays, 'int', 0.7)}</div>
+        <div style="font-size:20px;font-style:italic;color:var(--r-green-light)">${lerntage}</div>
+      </div>
+      <div class="r-col-left" style="width:420px;gap:12px">
+        <div class="r-eyebrow rise" style="--d:.2s">GESAMTE LERNZEIT</div>
+        <div class="r-huge rise" style="--d:.3s;margin-top:12px">${recapCnt(hours, 'int', 0.3)}</div>
+        <div class="rise" style="--d:.45s;font-size:52px;line-height:1;font-style:italic">${recapPl(hours, 'Stunde', 'Stunden')}</div>
+        <div class="r-divider rise" style="--d:.9s;margin:18px 0 6px"></div>
+        <p class="rise" style="--d:1s;margin:0;font-size:20px;line-height:1.5"><b>${recapCnt(r.totalMin, 'int', 1)} ${recapPl(r.totalMin, 'Minute', 'Minuten')}</b> seit ${recapDMY(r.firstDay)}</p>
+        <div class="r-pill rise" style="--d:1.2s;margin-top:10px">${RECAP_ICON.clock}<span>Ø ${recapFmtMin(r.totalMin / r.studyDays)} pro Lerntag</span></div>
+      </div>
+    </section>`);
+
+    // 3 · Rekorde
+    const monthName = recapMonthName(r.bestMonth.month);
+    const rec = (icon, label, min, sub, rot, delay) => `
+      <div class="s3-card" style="--rot:${rot}deg;--d:${delay}s">
+        <div class="s3-icon">${icon}</div>
+        <div class="s3-label">${label}</div>
+        <div class="s3-value">${recapCnt(min, 'dur', delay + 0.2)}</div>
+        <div class="s3-sub">${sub}</div>
+      </div>`;
+    s.push(`<section class="r-slide s3">
+      <div class="fade" style="--d:.1s;position:absolute;left:-140px;top:20px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle, rgba(255,215,0,0.2), transparent 68%)"></div>
+      <div style="position:absolute;left:96px;right:96px;top:140px;display:flex;flex-direction:column;gap:12px">
+        <div class="r-eyebrow rise" style="--d:.2s">DEINE REKORDE</div>
+        <h2 class="rise" style="--d:.3s;margin:0;font-size:44px;line-height:1.15;font-weight:700">Das waren deine <span class="r-gold" style="font-style:italic">Bestleistungen</span></h2>
+      </div>
+      <div class="s3-cards">
+        ${rec(RECAP_ICON.sun,  'BESTER TAG',   r.bestDay.min,   'am ' + recapDMY(r.bestDay.date), -2, 0.7)}
+        ${rec(RECAP_ICON.week, 'BESTE WOCHE',  r.bestWeek.min,  `${recapDM(r.bestWeek.weekStart)} – ${recapDMY(recapWeekEnd(r.bestWeek.weekStart))}`, 1.5, 1.1)}
+        ${rec(RECAP_ICON.cup,  'BESTER MONAT', r.bestMonth.min, `im ${monthName}`, -1, 1.5)}
+      </div>
+    </section>`);
+
+    // 4 · Streak
+    const cols = Math.max(11, Math.ceil(Math.sqrt(n * 11 / 4)));
+    const dotGap = n > 120 ? 4 : 10;
+    const dots = Array.from({ length: n }, (_, i) =>
+      `<div class="s4-dot${i === n - 1 && r.longestStreak.ongoing ? ' last' : ''}" style="--d:${(0.9 + i * (1.6 / n)).toFixed(3)}s"></div>`).join('');
+    const streakRange = n > 1
+      ? `${recapDM(r.longestStreak.from)} – ${recapDMY(r.longestStreak.to)}`
+      : recapDMY(r.longestStreak.to);
+    s.push(`<section class="r-slide s4">
+      <div class="r-col-left" style="width:380px;gap:8px">
+        <div class="r-eyebrow rise" style="--d:.2s">LÄNGSTER STREAK</div>
+        <div class="r-huge rise" style="--d:.3s;margin-top:16px">${recapCnt(n, 'int', 0.9)}</div>
+        <div class="rise" style="--d:.45s;font-size:40px;line-height:1.1;font-style:italic">${recapPl(n, 'Tag', 'Tage')} am Stück</div>
+        <div class="rise" style="--d:2.6s;margin-top:24px;display:flex;align-items:center;gap:10px;font-size:17px;color:var(--r-green-light);font-weight:700">
+          <div class="s4-live"></div><span>${streakRange}${r.longestStreak.ongoing ? ' · läuft noch' : ''}</span>
+        </div>
+      </div>
+      <div style="position:absolute;left:528px;width:400px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:14px">
+        <div class="s4-grid" style="gap:${dotGap}px;grid-template-columns:repeat(${cols}, minmax(0, 1fr))">${dots}</div>
+        <div class="fade" style="--d:2.5s;display:flex;justify-content:space-between;font-size:14px;color:var(--r-muted);margin-top:4px">
+          ${n > 1 ? `<span>${recapDM(r.longestStreak.from)}</span><span>${r.longestStreak.ongoing ? 'heute' : recapDM(r.longestStreak.to)}</span>` : ''}
+        </div>
+      </div>
+    </section>`);
+
+    // 5 · Level (Namen aus clans.level_config via activeLevels)
+    const segs = Array.from({ length: L.count }, (_, i) =>
+      `<div class="s5-seg${i < L.index ? ' done' : ''}" style="--d:${(1.2 + i * 0.05).toFixed(2)}s"></div>`).join('');
+    s.push(`<section class="r-slide s5" data-confetti="300,384,1.0">
+      <div class="s5-glow fade" style="--d:.2s"></div>
+      <div class="s5-dash"></div>
+      <div class="s5-badge">
+        <div style="font-size:42px;line-height:1">${esc(L.icon)}</div>
+        <div style="font-size:13px;letter-spacing:.24em;font-weight:700;color:rgba(255,255,255,.85);margin-top:8px">LEVEL</div>
+        <div style="font-size:100px;line-height:.9;font-weight:700;color:#fff">${recapCnt(L.index, 'int', 0.35, 1)}</div>
+      </div>
+      <div class="r-col-right" style="gap:14px">
+        <div class="r-eyebrow rise" style="--d:.6s">DEIN LEVEL</div>
+        <h2 class="rise" style="--d:.75s;margin:0;font-size:50px;line-height:1.1;font-weight:700;text-wrap:balance">${esc(L.label)}</h2>
+        <div class="rise" style="--d:.9s;font-size:17px;color:var(--r-muted)">${esc(L.name)} von ${L.count}</div>
+        <div class="s5-segs" style="grid-template-columns:repeat(${L.count}, minmax(0, 1fr))">${segs}</div>
+        ${L.nextLabel ? `<div class="rise" style="--d:2.4s;font-size:15px;color:var(--r-muted);margin-top:4px">noch ${recapFmtMin(L.minToNext)} bis <span style="color:var(--r-text)">${esc(L.nextLabel)}</span></div>` : ''}
+      </div>
+    </section>`);
+
+    // 6 · Karten (entfällt ohne Karten)
+    if (r.cards.owned > 0) {
+      // Slot-Positionen links → rechts; bei < 5 Karten von der Mitte aus belegen
+      const SLOTS = [[150, -24, 1, 0.35], [195, -12, 2, 0.28], [240, 0, 3, 0.2], [285, 12, 2, 0.28], [330, 24, 1, 0.35]];
+      const fanCards = r.fan.filter(Boolean);
+      const slotIdx = fanCards.length === 5 ? [0, 1, 2, 3, 4] : [2, 1, 3, 0, 4].slice(0, fanCards.length).sort((a, b) => a - b);
+      const cardsHtml = fanCards.map((c, i) => {
+        const [x, rot, z, delay] = SLOTS[slotIdx[i]];
+        return `
+        <div class="s6-card" style="left:${x}px;--rot:${rot}deg;--fx:${240 - x}px;--c:${c.rarity.color};--d:${delay}s;z-index:${z}">
+          <img src="${esc(c.src)}" alt="${esc(c.name)}" loading="eager">
+        </div>`;
+      }).join('');
+      s.push(`<section class="r-slide s6">
+        <div class="s6-fan">${cardsHtml}</div>
+        <div class="r-col-right" style="gap:24px">
+          <div class="r-eyebrow rise" style="--d:.6s">KARTENSAMMLUNG</div>
+          <div class="rise" style="--d:.75s;display:flex;align-items:center;gap:26px">
+            <div style="position:relative;flex-shrink:0;width:140px;height:140px">
+              <svg width="140" height="140" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="rgba(245,245,240,0.14)" stroke-width="10"/><circle class="s6-ring-arc" style="--off:${(326.73 * (1 - pct / 100)).toFixed(2)}" cx="60" cy="60" r="52" fill="none" stroke="#ffd700" stroke-width="10" stroke-linecap="round" transform="rotate(-90 60 60)"/></svg>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;color:var(--r-gold)">${recapCnt(pct, 'pct', 0.9)}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-size:84px;line-height:.95;font-weight:700">${recapCnt(r.cards.owned, 'int', 0.9)}</div>
+              <div style="font-size:26px;font-style:italic">von ${r.cards.total} Karten</div>
+            </div>
+          </div>
+          <div class="rise" style="--d:1.1s;font-size:17px;color:var(--r-muted)">gesammelt — ${pct} % des Katalogs</div>
+        </div>
+      </section>`);
+    }
+
+    // 7 · Clan-Platz + Treppchen (entfällt, wenn beides fehlt)
+    if (hasRank || hasPodium) {
+      const step = (place, count, h, grad, delay) => `
+        <div class="s7-step">
+          <div class="s7-count rise" style="--d:${delay + 0.5}s">${recapCnt(count, 'int', delay + 0.5)}×</div>
+          <div class="s7-bar" style="height:${h}px;background:${grad};--d:${delay}s"><div class="s7-medal">${place}</div></div>
+        </div>`;
+      const podDelay = hasRank ? 0 : -1.7;   // ohne Platz-Block rücken die Treppchen-Zeilen nach vorn
+      s.push(`<section class="r-slide s7"${hasPodium ? ' data-confetti="728,300,2.0"' : ''}>
+        ${hasPodium ? '<div class="s7-spot fade" style="--d:.1s"></div>' : ''}
+        <div class="r-col-left" style="width:400px;gap:8px">
+          ${hasRank ? `
+          <div class="r-eyebrow rise" style="--d:.2s">DEIN CLAN · ALL TIME</div>
+          <div class="rise" style="--d:.3s;display:flex;align-items:baseline;gap:14px;margin-top:16px">
+            <span style="font-size:34px;font-style:italic">Platz</span>
+            <span style="font-size:150px;line-height:.88;font-weight:700;color:var(--r-gold)">${recapCnt(r.alltimeRank.rank, 'int', 0.4, r.alltimeRank.of)}</span>
+            <span style="font-size:34px;font-style:italic">von ${r.alltimeRank.of}</span>
+          </div>
+          <div class="rise" style="--d:.5s;font-size:17px;color:var(--r-muted)">nach gesamter Lernzeit</div>` : `
+          <div class="r-eyebrow rise" style="--d:.2s">DEINE TAGESPLATZIERUNGEN</div>`}
+          ${hasPodium ? `
+          ${hasRank ? '<div class="r-divider rise" style="--d:1.9s;margin:22px 0 8px"></div>' : ''}
+          <div class="rise" style="--d:${(2 + podDelay).toFixed(1)}s;font-size:24px;${hasRank ? '' : 'margin-top:16px'}"><b class="r-gold">${recapCnt(podTotal, 'int', 2 + podDelay)}×</b> auf dem Treppchen</div>
+          <div class="rise" style="--d:${(2.1 + podDelay).toFixed(1)}s;font-size:15px;color:var(--r-muted)">Tagesplatzierungen</div>` : ''}
+        </div>
+        ${hasPodium ? `
+        <div class="s7-podium">
+          ${step(2, p[2], 170, 'linear-gradient(180deg, #e4e4e0, #8f8f8a)', 0.9)}
+          ${step(1, p[1], 240, 'linear-gradient(180deg, #ffe766, #d9a800 55%, #a9860a)', 1.3)}
+          ${step(3, p[3], 120, 'linear-gradient(180deg, #e0a466, #9a6532)', 0.6)}
+        </div>
+        <div class="s7-floor fade" style="--d:.5s"></div>` : ''}
+      </section>`);
+    }
+
+    // 8 · Zusammenfassung
+    const tile = (label, value, sub, delay) => `
+      <div class="s8-tile rise" style="--d:${delay}s"><div class="s8-tl">${label}</div><div class="s8-tv">${value}</div><div class="s8-ts">${sub}</div></div>`;
+    const mini = (h, grad, count, delay) => `
+      <div class="s8-mini"><div style="font-size:12px;font-weight:700">${count}×</div><div class="s8-mini-bar" style="height:${h}px;background:${grad};--d:${delay}s"></div></div>`;
+    const streakTileSub = n > 1 ? `${recapDM(r.longestStreak.from)} – ${recapDM(r.longestStreak.to)}` : recapDM(r.longestStreak.to);
+    const rankBox = (hasRank || hasPodium) ? `
+            <div class="rise" style="--d:.9s;padding:12px 16px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <div class="s8-tl">${hasRank ? 'CLAN · ALL TIME' : 'TREPPCHEN'}</div>
+                <div style="font-size:22px;font-weight:700">${hasRank ? `Platz <span class="r-gold">#${r.alltimeRank.rank}</span> von ${r.alltimeRank.of}` : `${podTotal}× auf dem Treppchen`}</div>
+                ${hasRank && hasPodium ? `<div class="s8-ts">${podTotal}× auf dem Treppchen</div>` : ''}
+              </div>
+              ${hasPodium ? `
+              <div style="display:flex;align-items:flex-end;gap:5px">
+                ${mini(30, 'linear-gradient(180deg, #e4e4e0, #8f8f8a)', p[2], 1.1)}
+                ${mini(44, 'linear-gradient(180deg, #ffe766, #a9860a)', p[1], 1.2)}
+                ${mini(20, 'linear-gradient(180deg, #e0a466, #9a6532)', p[3], 1.0)}
+              </div>` : ''}
+            </div>` : '';
+    s.push(`<section class="r-slide s8" data-confetti="512,120,0.7">
+      <div class="s8-wrap">
+        <div class="s8-card rise" style="--d:.15s">
+          <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:center;gap:14px">
+              <div class="r-sum-avatar">${recapAvatarHtml(r)}</div>
+              <div style="font-size:24px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(r.userName)}</div>
+            </div>
+            <div style="align-self:flex-start;padding:5px 12px;border-radius:999px;background:rgba(29,158,117,0.2);border:1px solid rgba(93,202,165,0.5);color:var(--r-green-light);font-size:13px;font-weight:700">${esc(L.icon)} ${esc(L.name)} · ${esc(L.label)}</div>
+            <div class="s8-hero">
+              <div style="font-size:11px;letter-spacing:.14em;font-weight:700;color:var(--r-gold)">GESAMTE LERNZEIT</div>
+              <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:60px;line-height:1.05;font-weight:700">${recapCnt(hours, 'int', 0.4)}</span><span style="font-size:24px;font-style:italic">${recapPl(hours, 'Stunde', 'Stunden')}</span></div>
+              <div style="font-size:13px;color:rgba(245,245,240,.62)">${recapDe(r.totalMin)} min an ${r.studyDays} ${recapPl(r.studyDays, 'Lerntag', 'Lerntagen')}</div>
+            </div>
+          </div>
+          <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:10px">
+            <div class="s8-grid">
+              ${tile('BESTER TAG', recapFmtMin(r.bestDay.min), recapDMY(r.bestDay.date), 0.45)}
+              ${tile('BESTE WOCHE', recapFmtMin(r.bestWeek.min), `${recapDM(r.bestWeek.weekStart)} – ${recapDM(recapWeekEnd(r.bestWeek.weekStart))}`, 0.52)}
+              ${tile('BESTER MONAT', recapFmtMin(r.bestMonth.min), RECAP_MONTHS[recapDate(r.bestMonth.month).getMonth()], 0.59)}
+              ${tile('BESTER STREAK', `${n} ${recapPl(n, 'Tag', 'Tage')}`, streakTileSub, 0.66)}
+              ${tile('Ø PRO LERNTAG', recapFmtMin(r.totalMin / r.studyDays), `${r.studyDays} ${lerntage}`, 0.73)}
+              ${tile('KARTEN', `${r.cards.owned} / ${r.cards.total}`, `${pct} % gesammelt`, 0.8)}
+            </div>
+            ${rankBox}
+            <div class="rise" style="--d:1.1s;display:flex;align-items:center;justify-content:space-between;padding-top:4px">
+              <div style="font-size:20px;font-weight:700;color:var(--r-gold)">Viel Erfolg beim M2! 🍀</div>
+              <div style="font-size:11px;letter-spacing:.16em;color:rgba(245,245,240,.5)">POMODORO</div>
+            </div>
+          </div>
+        </div>
+        <div class="rise" style="--d:1.3s;display:flex;justify-content:flex-end;gap:12px">
+          <button class="s8-btn secondary" id="rSave">${RECAP_ICON.save}<span>Speichern</span></button>
+          <button class="s8-btn primary" id="rDone">Weiter</button>
+        </div>
+      </div>
+    </section>`);
+
+    return s;
+  }
+
+  function recapMonthName(monthKey) {
+    const dt = recapDate(monthKey);
+    return `${RECAP_MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+  }
+
+  // ── Steuerung ──
+  const recapOverlay  = document.getElementById('recapOverlay');
+  const recapStage    = document.getElementById('rStage');
+  const recapSlidesEl = document.getElementById('rSlides');
+  const recapProgEl   = document.getElementById('rProgress');
+  const recapPrevBtn  = document.getElementById('rPrev');
+  const recapNextBtn  = document.getElementById('rNext');
+  const recapHintEl   = document.getElementById('rHint');
+  const recapPauseBtn = document.getElementById('rPause');
+  const recapToastEl  = document.getElementById('rToast');
+  const recapReduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let recapSlides = [], recapIdx = 0, recapPaused = false, recapTimers = [], recapEnterToken = 0;
+
+  function recapIsOpen() { return recapOverlay.classList.contains('visible'); }
+
+  function recapFit() {
+    const k = Math.min(window.innerWidth * 0.94 / RECAP_W, window.innerHeight * 0.94 / RECAP_H, 1.35);
+    recapStage.style.transform = `translate(-50%, -50%) scale(${k})`;
+  }
+
+  function recapRenderProgress() {
+    recapProgEl.innerHTML = recapSlides.map((_, i) => {
+      const cls = i < recapIdx || (i === recapIdx && i === recapSlides.length - 1) ? 'done' : i === recapIdx ? 'current' : '';
+      return `<div class="r-seg ${cls}"><div class="r-seg-fill"></div></div>`;
+    }).join('');
+    const cur = recapProgEl.querySelector('.r-seg.current .r-seg-fill');
+    if (cur) {
+      cur.style.animationDuration = RECAP_SLIDE_MS + 'ms';
+      cur.style.animationPlayState = recapPaused ? 'paused' : 'running';
+      cur.addEventListener('animationend', () => { if (recapIsOpen()) recapGo(recapIdx + 1); });
+    }
+  }
+
+  function recapSetPaused(v) {
+    recapPaused = v;
+    recapPauseBtn.innerHTML = recapPaused ? RECAP_ICON.play : RECAP_ICON.pause;
+    recapPauseBtn.setAttribute('aria-label', recapPaused ? 'Fortsetzen' : 'Pausieren');
+    const cur = recapProgEl.querySelector('.r-seg.current .r-seg-fill');
+    if (cur) cur.style.animationPlayState = recapPaused ? 'paused' : 'running';
+  }
+
+  function recapRunCounters(slide, token) {
+    slide.querySelectorAll('[data-count]').forEach(el => {
+      const to = +el.dataset.count, from = +el.dataset.from, fmt = el.dataset.fmt;
+      if (recapReduceMotion) { el.textContent = recapFmtVal(to, fmt); return; }
+      el.textContent = recapFmtVal(from, fmt);
+      recapTimers.push(setTimeout(() => {
+        const t0 = performance.now(), dur = 1300;
+        const step = now => {
+          if (token !== recapEnterToken) return;
+          const t = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - t, 3);
+          el.textContent = recapFmtVal(from + (to - from) * e, fmt);
+          if (t < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }, Math.max(0, +el.dataset.delay) * 1000));
+    });
+  }
+
+  function recapSpawnConfetti(slide, x, y) {
+    if (recapReduceMotion) return;
+    const colors = ['#ffd700', '#1D9E75', '#5DCAA5', '#ff4fbf', '#f0b429', '#f5f5f0'];
+    for (let i = 0; i < 46; i++) {
+      const c = document.createElement('div');
+      c.className = 'r-confetti';
+      const a = Math.random() * Math.PI * 2, dist = 140 + Math.random() * 220;
+      c.style.left = x + 'px'; c.style.top = y + 'px';
+      c.style.background = colors[i % colors.length];
+      if (i % 4 === 0) { c.style.width = c.style.height = '8px'; c.style.borderRadius = '50%'; }
+      c.style.setProperty('--dx', Math.cos(a) * dist + 'px');
+      c.style.setProperty('--dy', Math.sin(a) * dist - 60 + 'px');
+      c.style.setProperty('--rot', (Math.random() * 900 - 450).toFixed(0) + 'deg');
+      c.style.animation = `rConfetti ${(1.1 + Math.random() * 0.6).toFixed(2)}s cubic-bezier(.2,.7,.3,1) ${(Math.random() * 0.15).toFixed(2)}s forwards`;
+      slide.appendChild(c);
+      c.addEventListener('animationend', () => c.remove());
+    }
+  }
+
+  function recapGo(i, force = false) {
+    if (i < 0 || i >= recapSlides.length || (i === recapIdx && !force)) return;
+    recapTimers.forEach(clearTimeout); recapTimers = [];
+    recapEnterToken++;
+    recapSlides[recapIdx].classList.remove('active');
+    recapSlides[recapIdx].querySelectorAll('.r-confetti').forEach(n => n.remove());
+    recapIdx = i;
+    const slide = recapSlides[recapIdx];
+    void slide.offsetWidth;          // Animationen neu starten
+    slide.classList.add('active');
+    recapRunCounters(slide, recapEnterToken);
+    if (slide.dataset.confetti) {
+      const [x, y, t] = slide.dataset.confetti.split(',').map(Number);
+      recapTimers.push(setTimeout(() => recapSpawnConfetti(slide, x, y), t * 1000));
+    }
+    const last = recapIdx === recapSlides.length - 1;
+    recapPrevBtn.disabled = recapIdx === 0;
+    recapNextBtn.classList.toggle('hidden', last);
+    recapHintEl.classList.toggle('hidden', last);
+    recapRenderProgress();
+  }
+
+  function recapToast(msg) {
+    recapToastEl.textContent = msg;
+    recapToastEl.classList.add('show');
+    setTimeout(() => recapToastEl.classList.remove('show'), 2200);
+  }
+
+  function closeRecap(markSeen = true) {
+    if (!recapIsOpen()) return;
+    recapTimers.forEach(clearTimeout); recapTimers = [];
+    recapEnterToken++;
+    recapOverlay.classList.remove('visible');
+    if (markSeen && currentUser) recapMarkSeen();
+  }
+
+  function openRecap(data) {
+    recapData = data;
+    recapSlides = [];
+    recapSlidesEl.innerHTML = buildRecapSlides(data).join('');
+    recapSlides = [...recapSlidesEl.querySelectorAll('.r-slide')];
+    recapProgEl.style.setProperty('--r-n', recapSlides.length);
+    document.getElementById('rHeadAvatar').innerHTML = recapAvatarHtml(data);
+    document.getElementById('rSave').addEventListener('click', e => saveRecapCertificate(e.currentTarget));
+    document.getElementById('rDone').addEventListener('click', () => closeRecap());
+    recapOverlay.classList.add('visible');
+    recapFit();
+    recapSetPaused(false);
+    recapIdx = 0;
+    recapGo(0, true);
+  }
+
+  // Andere Start-Overlays (Level-15-Feier, Schlüpfen, Bestätigungsbanner) zuerst abwarten
+  function recapBlockedByOtherOverlay() {
+    return document.getElementById('level15Overlay')?.classList.contains('visible')
+        || document.getElementById('hatchOverlay')?.classList.contains('visible')
+        || document.getElementById('timer-confirm-banner')?.classList.contains('open');
+  }
+
+  async function showRecapNow(fromButton) {
+    if (recapOpening || recapIsOpen()) return;
+    if (!currentUser || !recapActive()) return;
+    recapOpening = true;
+    try {
+      if (!(await recapServerGate())) return;
+      const data = await collectRecapData();
+      if (!data || !currentUser) return;
+      if (!fromButton) {
+        for (let i = 0; i < 40 && recapBlockedByOtherOverlay(); i++) {
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        if (recapBlockedByOtherOverlay() || !currentUser) return;
+      }
+      openRecap(data);
+    } catch (e) {
+      console.warn('recap error:', e);
+    } finally {
+      recapOpening = false;
+    }
+  }
+
+  // Aufruf am Ende von onLoginSuccess() (nicht awaiten).
+  async function maybeShowRecap() {
+    const btn = document.getElementById('recap-open-btn');
+    if (btn) btn.style.display = 'none';
+    if (!currentUser || !recapActive()) return;                // Client-Gate: vorher keinerlei Requests
+    const totalMin = Object.values(days).reduce((a, b) => a + b, 0);
+    if (!totalMin) return;
+    if (!(await recapServerGate())) return;                    // Server-Gate
+    if (btn && currentUser) btn.style.display = '';
+    if (!recapSeen()) showRecapNow(false);
+  }
+
+  // ── Urkunde als PDF (jsPDF wird erst beim Klick nachgeladen) ──
+  let jspdfPromise = null;
+  function loadJsPDF() {
+    if (window.jspdf) return Promise.resolve(window.jspdf);
+    if (!jspdfPromise) {
+      jspdfPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = JSPDF_SRC;
+        s.onload = () => resolve(window.jspdf);
+        s.onerror = () => { jspdfPromise = null; reject(new Error('jsPDF konnte nicht geladen werden')); };
+        document.head.appendChild(s);
+      });
+    }
+    return jspdfPromise;
+  }
+
+  // Profilbild rund zuschneiden → PNG-DataURL (null, wenn nicht ladbar)
+  async function roundAvatarDataUrl(url) {
+    if (!url) return null;
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) return null;
+      const blobUrl = URL.createObjectURL(await res.blob());
+      const img = await new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = blobUrl; });
+      const size = 400, c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.beginPath(); ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2); ctx.clip();
+      const k = Math.max(size / img.width, size / img.height);
+      ctx.drawImage(img, (size - img.width * k) / 2, (size - img.height * k) / 2, img.width * k, img.height * k);
+      URL.revokeObjectURL(blobUrl);
+      return c.toDataURL('image/png');
+    } catch (e) { return null; }
+  }
+
+  async function saveRecapCertificate(btn) {
+    const r = recapData;
+    if (!r) return;
+    btn.disabled = true;
+    recapToast('Urkunde wird erstellt …');
+    try {
+      const [{ jsPDF }, avatar] = await Promise.all([loadJsPDF(), roundAvatarDataUrl(r.avatarUrl)]);
+      buildRecapCertificate(jsPDF, r, avatar)
+        .save(`Pomodoro-Urkunde-${r.userName.replace(/[^\wäöüÄÖÜß-]+/g, '_')}.pdf`);
+      recapToast('Urkunde gespeichert');
+    } catch (e) {
+      recapToast('Urkunde konnte nicht erstellt werden');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function buildRecapCertificate(jsPDF, r, avatar) {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const PW = 297, PH = 210, CX = PW / 2;
+    const C = { paper: '#fbf8ef', ink: '#1a1a18', muted: '#6b6b66', gold: '#a9860a', goldLight: '#e8c547',
+                green: '#0F6E56', box: '#f3edd8', silver: '#8f8f8a', bronze: '#9a6532' };
+    const col  = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+    const fill = h => doc.setFillColor(...col(h));
+    const draw = h => doc.setDrawColor(...col(h));
+    const ink  = h => doc.setTextColor(...col(h));
+    const font = (style, size) => { doc.setFont('times', style); doc.setFontSize(size); };
+    const text = (t, x, y, opt = {}) => doc.text(String(t), x, y, { align: 'center', ...opt });
+    const fitSize = (t, size, maxW) => { let s = size; font('bold', s); while (s > 10 && doc.getTextWidth(t) > maxW) font('bold', --s); };
+
+    // Papier + Doppelrahmen + Eck-Rauten
+    fill(C.paper); doc.rect(0, 0, PW, PH, 'F');
+    draw(C.gold); doc.setLineWidth(1.2); doc.rect(9, 9, PW - 18, PH - 18);
+    doc.setLineWidth(0.35); doc.rect(12.5, 12.5, PW - 25, PH - 25);
+    fill(C.gold);
+    [[12.5, 12.5], [PW - 12.5, 12.5], [12.5, PH - 12.5], [PW - 12.5, PH - 12.5]].forEach(([x, y]) =>
+      doc.lines([[2.6, 2.6], [-2.6, 2.6], [-2.6, -2.6]], x, y - 2.6, [1, 1], 'F', true));
+
+    // Kopf
+    font('bold', 9); ink(C.gold);
+    text('P O M O D O R O', CX, 24);
+    font('bold', 40); ink(C.ink);
+    text('Urkunde', CX, 39);
+    font('italic', 12); ink(C.muted);
+    text('Pomodoro-Recap zum M2', CX, 46.5);
+
+    // Profilbild mit Goldring
+    const ay = 63, ar = 12.5;
+    fill(C.goldLight); doc.circle(CX, ay, ar + 1.6, 'F');
+    if (avatar) {
+      doc.addImage(avatar, 'PNG', CX - ar, ay - ar, ar * 2, ar * 2);
+    } else {
+      fill('#272725'); doc.circle(CX, ay, ar, 'F');
+      font('bold', 30); ink(C.goldLight);
+      text(r.userName.charAt(0).toUpperCase(), CX, ay + 3.8);
+    }
+    draw(C.gold); doc.setLineWidth(0.5); doc.circle(CX, ay, ar + 1.6, 'S');
+
+    // Empfänger + Würdigung
+    font('italic', 11); ink(C.muted);
+    text('verliehen an', CX, 85);
+    fitSize(r.userName, 28, 200); ink(C.ink);
+    text(r.userName, CX, 96);
+    draw(C.gold); doc.setLineWidth(0.3); doc.line(CX - 45, 99.5, CX + 45, 99.5);
+    font('normal', 12); ink(C.ink);
+    const hours = Math.round(r.totalMin / 60);
+    text(`für ${recapDe(hours)} ${recapPl(hours, 'Stunde', 'Stunden')} konzentrierte Lernzeit an ${r.studyDays} ${recapPl(r.studyDays, 'Lerntag', 'Lerntagen')} seit ${recapDMY(r.firstDay)}`, CX, 107);
+    font('bold', 12); ink(C.green);
+    text(`Erreichtes ${r.level.name} · ${r.level.label}`, CX, 114);   // ohne Emoji-Icon (Standard-PDF-Fonts)
+
+    // Statistik-Kästen (bis zu 2 Reihen à 4, letzte Reihe zentriert)
+    const p = r.podium, podTotal = p[1] + p[2] + p[3];
+    const n = r.longestStreak.days;
+    const stats = [
+      ['BESTER TAG',     recapFmtMin(r.bestDay.min),   recapDMY(r.bestDay.date)],
+      ['BESTE WOCHE',    recapFmtMin(r.bestWeek.min),  `${recapDM(r.bestWeek.weekStart)} – ${recapDMY(recapWeekEnd(r.bestWeek.weekStart))}`],
+      ['BESTER MONAT',   recapFmtMin(r.bestMonth.min), recapMonthName(r.bestMonth.month)],
+      ['BESTER STREAK',  `${n} ${recapPl(n, 'Tag', 'Tage')}`, n > 1 ? `${recapDM(r.longestStreak.from)} – ${recapDMY(r.longestStreak.to)}` : recapDMY(r.longestStreak.to)],
+      ['Ø PRO LERNTAG',  recapFmtMin(r.totalMin / r.studyDays), `${r.studyDays} ${recapPl(r.studyDays, 'Lerntag', 'Lerntage')}`],
+      ['KARTEN',         `${r.cards.owned} / ${r.cards.total}`, `${r.cards.total ? Math.round(r.cards.owned / r.cards.total * 100) : 0} % gesammelt`],
+    ];
+    if (r.alltimeRank) stats.push(['PLATZ ALL TIME', `#${r.alltimeRank.rank} von ${r.alltimeRank.of}`, 'im Clan']);
+    if (podTotal > 0)  stats.push(['TREPPCHEN', `${p[1]}× · ${p[2]}× · ${p[3]}×`, '1. · 2. · 3. Platz']);
+    const bx0 = 22, gap = 5, bw = (PW - 2 * bx0 - 3 * gap) / 4, bh = 19;
+    stats.forEach(([label, value, sub], i) => {
+      const row = Math.floor(i / 4);
+      const inRow = Math.min(4, stats.length - row * 4);
+      const rowX0 = bx0 + (4 - inRow) * (bw + gap) / 2;
+      const x = rowX0 + (i % 4) * (bw + gap), y = 120 + row * (bh + 4);
+      fill(C.box); draw(C.gold); doc.setLineWidth(0.25);
+      doc.roundedRect(x, y, bw, bh, 2.5, 2.5, 'FD');
+      font('bold', 7); ink(C.gold);
+      text(label, x + bw / 2, y + 5, { charSpace: 0.4 });
+      font('bold', 14); ink(C.ink);
+      text(value, x + bw / 2, y + 11.8);
+      font('normal', 8); ink(C.muted);
+      text(sub, x + bw / 2, y + 16.3);
+    });
+
+    // Fuß: Datum · Wunsch · Siegel
+    const fy = 183;
+    font('normal', 9); ink(C.muted);
+    text(`Ausgestellt am ${new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`, 24, fy, { align: 'left' });
+    font('bolditalic', 16); ink(C.gold);
+    text('Viel Erfolg beim M2!', CX, fy);
+    const sx = PW - 42, sy = fy - 3;
+    fill(C.goldLight); doc.circle(sx, sy, 13, 'F');
+    draw(C.gold); doc.setLineWidth(0.6); doc.circle(sx, sy, 13, 'S');
+    doc.setLineWidth(0.3); doc.circle(sx, sy, 10.8, 'S');
+    font('bold', 6); ink(C.ink);
+    text('POMODORO', sx, sy - 4.2, { charSpace: 0.3 });
+    font('bold', 15);
+    text('M2', sx, sy + 2.4);
+    font('bold', 6);
+    text(String(new Date().getFullYear()), sx, sy + 6.6, { charSpace: 0.3 });
+
+    return doc;
+  }
+
+  // Klick links = zurück, sonst weiter (Buttons ausgenommen)
+  recapStage.addEventListener('click', e => {
+    if (e.target.closest('button') || e.target.closest('.s8-card')) return;
+    const rect = recapStage.getBoundingClientRect();
+    (e.clientX - rect.left < rect.width * 0.3) ? recapGo(recapIdx - 1) : recapGo(recapIdx + 1);
+  });
+  recapPrevBtn.addEventListener('click', () => recapGo(recapIdx - 1));
+  recapNextBtn.addEventListener('click', () => recapGo(recapIdx + 1));
+  recapPauseBtn.addEventListener('click', () => recapSetPaused(!recapPaused));
+  document.getElementById('rClose').addEventListener('click', () => closeRecap());
+  document.addEventListener('keydown', e => {
+    if (!recapIsOpen()) return;
+    if (e.key === 'ArrowRight') recapGo(recapIdx + 1);
+    else if (e.key === 'ArrowLeft') recapGo(recapIdx - 1);
+    else if (e.key === 'Escape') closeRecap();
+    else if (e.key === ' ') { e.preventDefault(); recapSetPaused(!recapPaused); }
+  });
+  window.addEventListener('resize', () => { if (recapIsOpen()) recapFit(); });
+  document.getElementById('recap-open-btn').addEventListener('click', () => showRecapNow(true));
 
   function celebrateLevel15() {
     const overlay = document.getElementById('level15Overlay');

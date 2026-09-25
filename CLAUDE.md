@@ -106,6 +106,7 @@ Free-Tier-Limit: 0,5 GB Datenbankgröße. Stand 2026-09-01 (~121 Tage seit Start
 | `admin_set_study_minutes(p_user_id, p_date, p_minutes)` | Nur für Admins (sonst `RAISE EXCEPTION`): setzt `study_days.minutes` direkt auf `p_minutes` (SET, nicht ADD), `p_minutes ∈ [0,1440]`, siehe „Admin" |
 | `get_library_checkins()` | Gibt alle heute an einer der drei Bibliotheken eingecheckten, öffentlichen Clan-Mitglieder zurück (`name`, `avatar_url`, `library`), gleiches Scoping wie `leaderboard_today()`, siehe „Bibliotheks-Check-in (Wild Cards)" |
 | `get_mensa_checkins()` | Gibt alle heute an einer der 4 Mensen/„zu Hause" eingecheckten, öffentlichen Clan-Mitglieder zurück (`name`, `avatar_url`, `mensa`), identisches Scoping/Muster wie `get_library_checkins()`, siehe „Mensa" |
+| `recap_available()` | `true` ab 04.10.2026 04:00 Uhr Berlin — serverseitiges Datums-Gate des M2-Recaps (gegen falsch gestellte Geräteuhren), siehe „M2-Recap" |
 | `replace_mensa_menu(p_date, p_items)` | Nur `service_role` (expliziter Guard im Funktionskörper, `RAISE EXCEPTION` sonst): löscht+befüllt `mensa_menu_items` atomar für einen Tag (Full-Replace), aufgerufen von der `scrape-mensa-menu` Edge Function, siehe „Mensa" |
 
 ---
@@ -207,6 +208,7 @@ tradeOfferListingId / tradeOfferSelected // uuid | null, Set<int> — Ziel-Listi
 | `pomo_new_design_v1` | `'1'`/`'0'` — Opt-in „Neues Design" (Bento-Grid ab Desktop-Breite), Default aus, geräte-lokal | — |
 | `pomo_bento_layout_v1` | Bento-Grid-Layout `{ rows, removed }`, siehe [[docs/bento-layout.md]] | — |
 | `pomo_bento_profiles_v1` | Bis zu 5 gespeicherte Bento-Layout-Profile `{ activeId, profiles }`, siehe [[docs/bento-layout.md]] | — |
+| `pomo_recap_m2_seen_v1_<userId>` | `'1'` wenn der M2-Recap geschlossen wurde (kein erneutes Auto-Öffnen), siehe „M2-Recap" | — |
 | `pomo_focus_mode_v1` | `'1'`/`'0'` — Fokus-Modus-Zustand, geräte-lokal | — |
 
 ---
@@ -386,6 +388,12 @@ Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legend
 
 → Details (externe Datenquelle, Scrape-Mechanismus, Datenmodell, Check-in): [[docs/mensa.md]]
 
+## M2-Recap (Overlay `#recapOverlay`)
+
+Einmaliger Story-Rückblick (8 Screens + PDF-Urkunde) zum M2, erscheint **frühestens am 04.10.2026 ab 04:00 Uhr Berlin**: doppeltes, fail-closed Datums-Gate aus `todayKey() >= RECAP_START` (Client, davor keinerlei Requests) **und** RPC `recap_available()` (Server). Danach einmalig automatisch nach dem Login, jederzeit erneut über „Recap ansehen" in der Stats-Card.
+
+→ Details (Gate, Datenquellen, Randfälle): [[docs/recap.md]]
+
 ## Aufmerksamkeits-Tracking (eigene Bento-Kachel `#attention-card`)
 
 → Details (inkl. Risiko-Analyse KDE + DBSCAN): [[docs/attention-tracking.md]]
@@ -436,4 +444,4 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 - [[FocusFM/README|FocusFM]] — eigenständiges Projekt, nutzt ebenfalls die [[Web Audio API]] für synthetisierten Sound
 - [[Dashboard/README|Dashboard]] — verlinkt auf die online gehostete Pomodoro-Seite (`ragnarg-0.github.io/Pomodoro`)
 
-- [[docs/timer-details.md]], [[docs/bento-layout.md]], [[docs/focus-mode.md]], [[docs/challenges-rewards.md]], [[docs/admin.md]], [[docs/eggs.md]], [[docs/trading.md]], [[docs/racetrack.md]], [[docs/attention-tracking.md]], [[docs/mensa.md]] — ausgelagerte Feature-Details dieser Doku (siehe oben, aus `CLAUDE.md` gekürzt wegen 150k-Zeichen-Limit)
+- [[docs/timer-details.md]], [[docs/bento-layout.md]], [[docs/focus-mode.md]], [[docs/challenges-rewards.md]], [[docs/admin.md]], [[docs/eggs.md]], [[docs/trading.md]], [[docs/racetrack.md]], [[docs/attention-tracking.md]], [[docs/mensa.md]], [[docs/recap.md]] — ausgelagerte Feature-Details dieser Doku (siehe oben, aus `CLAUDE.md` gekürzt wegen 150k-Zeichen-Limit)
