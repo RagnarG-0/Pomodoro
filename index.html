@@ -7579,7 +7579,8 @@
       const email = document.getElementById('forgot-email').value.trim();
       if (!email) { showAuthError('Bitte E-Mail eingeben.'); return; }
       document.getElementById('forgot-btn').textContent = '…';
-      const res = await fetch(`${SB}/auth/v1/recover`, {
+      const redirectTo = encodeURIComponent('https://ragnarg-0.github.io/Pomodoro/');
+      const res = await fetch(`${SB}/auth/v1/recover?redirect_to=${redirectTo}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
         body: JSON.stringify({ email }),
