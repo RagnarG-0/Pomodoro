@@ -2835,6 +2835,7 @@
   let userName = null;
   let userPublic = false;
   let isAdmin = false;          // profiles.is_admin — App-Owner-Fähigkeit, siehe "Admin"
+  let recapTestEarlyAccess = false;   // profiles.recap_test_early_access — testweise vorgezogene Recap-Freischaltung, siehe "M2-Recap"
   let userDiamonds = 0;
   let userRaceCarId = null; // profiles.race_car_id, 1-8, dauerhaft
   let displayUnit = 'pomodoros'; // 'pomodoros' | 'time'
@@ -7172,6 +7173,7 @@
       userName    = profile.username;
       userPublic  = profile.public;
       isAdmin     = !!profile.is_admin;
+      recapTestEarlyAccess = !!profile.recap_test_early_access;
       displayUnit = profile.display_unit || 'pomodoros';
       offWeekdays   = profile.off_weekdays || [];
       avatarUrl     = profile.avatar_url || null;
@@ -10489,7 +10491,7 @@
   let recapData = null;        // zuletzt geöffnete Daten (für Urkunde)
   let recapOpening = false;
 
-  function recapActive() { return todayKey() >= RECAP_START; }
+  function recapActive() { return todayKey() >= RECAP_START || recapTestEarlyAccess === true; }
 
   function recapSeenKey() { return `${RECAP_SEEN_KEY}_${currentUser?.id}`; }
   function recapSeen() {
