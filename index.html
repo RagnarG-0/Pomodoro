@@ -1232,7 +1232,7 @@
   /* Deck-Box */
   .deck-toggle-area { cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
   .deck-content { overflow: hidden; max-height: 0; transition: max-height 0.32s ease, margin-top 0.32s ease; margin-top: 0; }
-  .deck-content.open { max-height: 80vh; margin-top: 16px; overflow-y: auto; }
+  .deck-content.open { margin-top: 16px; }
   .deck-grid  { display: flex; flex-wrap: wrap; gap: 10px; }
   .deck-empty { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--text-muted); opacity: 0.5; text-align: center; padding: 12px 0; width: 100%; }
   .deck-rarity-header { width: 100%; border-bottom: none; border-top: 0.5px solid var(--border); margin-top: 6px; }
@@ -5485,7 +5485,7 @@
     section.style.display = pendingFocusSessions.length > 0 ? '' : 'none';
     if (!pendingFocusSessions.length) pendingFocusListOpen = false;
     if (countEl) countEl.textContent = `(${pendingFocusSessions.length})`;
-    document.getElementById('pending-focus-content')?.classList.toggle('open', pendingFocusListOpen);
+    setAccordionOpen(document.getElementById('pending-focus-content'), pendingFocusListOpen);
     const btn = document.getElementById('pending-focus-toggle-btn');
     if (btn) btn.textContent = pendingFocusListOpen ? '▲ zuklappen' : '▼ aufklappen';
     list.innerHTML = pendingFocusSessions.map(row => `
@@ -11781,9 +11781,34 @@
     }
   }
 
+  function setAccordionOpen(el, open) {
+    if (!el) return;
+    const wasOpen = el.classList.contains('open');
+    if (open) {
+      el.classList.add('open');
+      if (!wasOpen || el.style.maxHeight !== 'none') {
+        el.style.maxHeight = el.scrollHeight + 'px';
+        const onEnd = (e) => {
+          if (e.target === el && e.propertyName === 'max-height') {
+            el.style.maxHeight = 'none';
+            el.removeEventListener('transitionend', onEnd);
+          }
+        };
+        el.addEventListener('transitionend', onEnd);
+      }
+    } else {
+      if (el.style.maxHeight === 'none' || el.style.maxHeight === '') {
+        el.style.maxHeight = el.scrollHeight + 'px';
+        void el.offsetHeight;
+      }
+      el.style.maxHeight = '0px';
+      el.classList.remove('open');
+    }
+  }
+
   function toggleEggDeck() {
     eggDeckOpen = !eggDeckOpen;
-    document.getElementById('deckContent')?.classList.toggle('open', eggDeckOpen);
+    setAccordionOpen(document.getElementById('deckContent'), eggDeckOpen);
     const btn = document.getElementById('deckBtn');
     if (btn) btn.textContent = eggDeckOpen ? '▲ zuklappen' : '▼ aufklappen';
     if (eggDeckOpen && !marketLoaded) {
