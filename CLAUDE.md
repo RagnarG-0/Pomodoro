@@ -319,7 +319,7 @@ Beim erstmaligen Überschreiten der Level-15-Schwelle (`activeLevels[14]`, gleic
 
 ---
 
-## Karten-Katalog (42 Karten)
+## Karten-Katalog (43 Karten)
 
 `CARD_CATALOG` hardcoded im JS. Bildpfad: `CDN/Karten/<rarity>/<name>.png`.
 
@@ -367,6 +367,7 @@ Beim erstmaligen Überschreiten der Level-15-Schwelle (`activeLevels[14]`, gleic
 | 41 | James-Tanner | common |
 | 42 | Hans-Curschmann | common |
 | 43 | Steintor-Opa | epic |
+| 44 | Beatrix-Franz | common |
 
 Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legendary 9 %, mystic 3 %.
 
