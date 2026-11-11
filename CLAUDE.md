@@ -58,6 +58,16 @@ Free-Tier-Limit: 0,5 GB Datenbankgröße. Stand 2026-09-01 (~121 Tage seit Start
 | `tired_events` | id uuid (PK), user_id, date, created_at — append-only Log jedes „Tired"-Klicks (kein UPDATE/DELETE), siehe „Aufmerksamkeits-Tracking" |
 | `mensa_menu_items` | id uuid (PK), mensa_key, date, dish_name, price_student, price_staff, price_guest, badges (text[]), allergen_codes (text[]), sort_order, scraped_at — täglicher Full-Replace (kein Verlauf) durch die `scrape-mensa-menu` Edge Function via `pg_cron`+`pg_net`, siehe „Mensa" |
 
+### Neue Tabelle anlegen
+
+Jede Migration, die eine neue Tabelle erstellt, muss im selben File auch den Data-API-Zugriff explizit grants (Supabase vergibt das ab 30.10.2026 nicht mehr automatisch; bestehende Tabellen sind davon nicht betroffen). Reihenfolge, wie in allen bisherigen Migrationen (z. B. `20260911000010_mensa_menu.sql`, `20260822000000_tired_events.sql`):
+
+1. `CREATE TABLE public.<table> (...)`
+2. `ALTER TABLE public.<table> ENABLE ROW LEVEL SECURITY;` + `CREATE POLICY ...`
+3. `GRANT <privileges> ON TABLE public.<table> TO anon, authenticated, service_role;`
+
+Privilegien so eng wie möglich scopen (nicht pauschal `GRANT ALL`) — z. B. nur `SELECT` für `anon`/`authenticated`, wenn Writes ausschließlich über eine `SECURITY DEFINER`-RPC laufen sollen (Vorbild: `mensa_menu_items`, `perfect_week_config`).
+
 `profiles.eggs` ist ein TEXT-String der Form `y-b-0-0-0-0-0-0-0-0` (10 Tokens, `-`-getrennt). Farb-IDs: `y/b/g/r`, `0` = leerer Slot.
 
 `profiles.clan_role` ist `'leader'` | `'member'` | null.
@@ -210,6 +220,7 @@ tradeOfferListingId / tradeOfferSelected // uuid | null, Set<int> — Ziel-Listi
 | `pomo_bento_profiles_v1` | Bis zu 5 gespeicherte Bento-Layout-Profile `{ activeId, profiles }`, siehe [[docs/bento-layout.md]] | — |
 | `pomo_recap_m2_seen_v1_<userId>` | `'1'` wenn der M2-Recap geschlossen wurde (kein erneutes Auto-Öffnen), siehe „M2-Recap" | — |
 | `pomo_focus_mode_v1` | `'1'`/`'0'` — Fokus-Modus-Zustand, geräte-lokal | — |
+| `pomo_track_v1` | `'m2'`/`'promo'` — aktiver Modus des M2/Promo-Umschalters, geräte-lokal; datenbezogene Keys oben bekommen in Promo per `trackKey()` den Suffix `__promo`, siehe „M2/Promo-Modus" | — |
 
 ---
 
@@ -389,6 +400,14 @@ Raritäten & Ziehwahrscheinlichkeiten: common 40 %, rare 30 %, epic 18 %, legend
 
 → Details (externe Datenquelle, Scrape-Mechanismus, Datenmodell, Check-in): [[docs/mensa.md]]
 
+## M2/Promo-Modus (Umschalter in der Titelzeile)
+
+Apple-Segmented-Control `#track-seg` („M2" | „Promo") neben der Überschrift. Promo ist eine 1:1-Kopie der App mit komplett eigener, anfangs leerer Datenwelt (Lernzeit, Stats, Ranglisten, Rennstrecke, Challenges **und** Spielwelt: Diamanten, Eier, Karten, Tauschbörse) im Postgres-Schema **`promo`**. Account, Profil-Identität, Einstellungen, Clan, Kataloge und Check-ins sind geteilt. Der Client wählt das Schema nur per PostgREST-Header (`schemaHeaders()` in `authHeaders()`), Tabellen-/RPC-Namen sind identisch; Wechsel = `localStorage pomo_track_v1` + Reload, bei laufendem Timer gesperrt. Eigener Hintergrund + Palette je Modus, hell/dunkel automatisch.
+
+**Wichtig:** Jede künftige Migration an einer gespiegelten Tabelle/RPC muss im `promo`-Schema nachgezogen werden; neue `/rest/v1`-Calls immer über `authHeaders()`, neue datenbezogene localStorage-Keys über `trackKey()`.
+
+→ Details (Schema-Aufbau, `promo.wallets`, `promo.profiles`-View mit INSTEAD-OF-Trigger, Cron-Jobs, Wartungsregeln): [[docs/promo.md]]
+
 ## M2-Recap (Overlay `#recapOverlay`)
 
 Einmaliger Story-Rückblick (8 Screens + PDF-Urkunde) zum M2, erscheint **frühestens am 04.10.2026 ab 04:00 Uhr Berlin**: doppeltes, fail-closed Datums-Gate aus `todayKey() >= RECAP_START` (Client, davor keinerlei Requests) **und** RPC `recap_available()` (Server). Danach einmalig automatisch nach dem Login, jederzeit erneut über „Recap ansehen" in der Stats-Card.
@@ -445,4 +464,4 @@ Neuer Tag beginnt um **04:00 Uhr Berliner Zeit** (`todayKey()`).
 - [[FocusFM/README|FocusFM]] — eigenständiges Projekt, nutzt ebenfalls die [[Web Audio API]] für synthetisierten Sound
 - [[Dashboard/README|Dashboard]] — verlinkt auf die online gehostete Pomodoro-Seite (`ragnarg-0.github.io/Pomodoro`)
 
-- [[docs/timer-details.md]], [[docs/bento-layout.md]], [[docs/focus-mode.md]], [[docs/challenges-rewards.md]], [[docs/admin.md]], [[docs/eggs.md]], [[docs/trading.md]], [[docs/racetrack.md]], [[docs/attention-tracking.md]], [[docs/mensa.md]], [[docs/recap.md]] — ausgelagerte Feature-Details dieser Doku (siehe oben, aus `CLAUDE.md` gekürzt wegen 150k-Zeichen-Limit)
+- [[docs/timer-details.md]], [[docs/bento-layout.md]], [[docs/focus-mode.md]], [[docs/challenges-rewards.md]], [[docs/admin.md]], [[docs/eggs.md]], [[docs/trading.md]], [[docs/racetrack.md]], [[docs/attention-tracking.md]], [[docs/mensa.md]], [[docs/recap.md]], [[docs/promo.md]] — ausgelagerte Feature-Details dieser Doku (siehe oben, aus `CLAUDE.md` gekürzt wegen 150k-Zeichen-Limit)

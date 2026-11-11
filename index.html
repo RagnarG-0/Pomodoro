@@ -21,6 +21,8 @@
     --balloon-string: rgba(0,0,0,0.28);
     --ring-outer: #0F6E56;
     --ring-inner: #5DCAA5;
+    --accent-fill: #0F6E56;   /* gefüllte Buttons mit Text darauf */
+    --on-accent: #ffffff;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -35,18 +37,117 @@
       --accent: #1D9E75;
       --accent-dark: #5DCAA5;
       --balloon-string: rgba(255,255,255,0.32);
+      --accent-fill: #5DCAA5;
+      --on-accent: #0b2a20;
+    }
+  }
+
+  /* ── Promo-Modus (Doktorarbeit): eigene Palette „Warmes Papier/Salbeigrün“ ── */
+  body[data-track="promo"] {
+    --bg: #f3f1ea;
+    --surface: #ffffff;
+    --surface2: #ece8dc;
+    --border: #ded8c5;
+    --border-strong: #cdc5ad;
+    --text: #2a2f2b;
+    --text-muted: #6b6457;
+    --accent: #3c6e58;
+    --accent-dark: #2c5443;
+    --accent-fill: #3c6e58;
+    --on-accent: #ffffff;
+    --ring-outer: #3c6e58;
+    --ring-inner: #96c2a6;
+  }
+  @media (prefers-color-scheme: dark) {
+    body[data-track="promo"] {
+      --bg: #14160f;
+      --surface: #20241a;
+      --surface2: #2a2f21;
+      --border: #33392a;
+      --border-strong: #4a5240;
+      --text: #e7e3d3;
+      --text-muted: #a3a894;
+      --accent: #7aa78c;
+      --accent-dark: #96c2a6;
+      --accent-fill: #7aa78c;
+      --on-accent: #14160f;
+      --ring-outer: #3c6e58;
+      --ring-inner: #96c2a6;
+    }
+  }
+
+  /* ── Hintergründe je Modus (M2: Punkteraster + Smaragd-Schimmer, Promo: liniertes Papier) ── */
+  body {
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(15,110,86,0.11) 1px, transparent 1.2px),
+                      radial-gradient(120% 60% at 50% -10%, rgba(29,158,117,0.16), rgba(29,158,117,0) 70%);
+    background-size: 22px 22px, 100% 100vh;
+    background-repeat: repeat, no-repeat;
+  }
+  body[data-track="promo"] {
+    background-image: linear-gradient(90deg, transparent 31px, rgba(164,69,58,0.20) 31px, rgba(164,69,58,0.20) 32px, transparent 32px),
+                      repeating-linear-gradient(180deg, transparent 0, transparent 27px, rgba(60,110,88,0.10) 27px, rgba(60,110,88,0.10) 28px),
+                      radial-gradient(140% 80% at 100% 0%, rgba(184,146,58,0.10), rgba(184,146,58,0) 60%);
+    background-size: 100% 100%, 100% 28px, 100% 100vh;
+    background-repeat: no-repeat, repeat, no-repeat;
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background-image: radial-gradient(rgba(93,202,165,0.08) 1px, transparent 1.2px),
+                        radial-gradient(120% 60% at 50% -10%, rgba(29,158,117,0.22), rgba(29,158,117,0) 70%);
+    }
+    body[data-track="promo"] {
+      background-image: linear-gradient(90deg, transparent 31px, rgba(217,122,104,0.18) 31px, rgba(217,122,104,0.18) 32px, transparent 32px),
+                        repeating-linear-gradient(180deg, transparent 0, transparent 27px, rgba(122,167,140,0.08) 27px, rgba(122,167,140,0.08) 28px),
+                        radial-gradient(140% 80% at 100% 0%, rgba(212,178,90,0.08), rgba(212,178,90,0) 60%);
     }
   }
 
   body {
     font-family: 'Georgia', 'Times New Roman', serif;
-    background: var(--bg);
     color: var(--text);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 2rem 1rem 3rem;
+  }
+
+  /* ── Titelzeile mit M2/Promo-Umschalter (Apple-Segmented-Control) ── */
+  #app-title {
+    width: 100%; max-width: 680px; padding-top: 1.5rem; margin-bottom: 0.75rem;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  #app-title h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+    font-size: 28px; font-weight: 600; letter-spacing: -0.01em; text-transform: none; color: var(--text);
+  }
+  .track-seg {
+    position: relative; display: flex; width: 200px; padding: 2px; border-radius: 9px;
+    background: rgba(118,118,128,0.12);
+  }
+  .track-seg::before {
+    content: ''; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px);
+    border-radius: 7px; background: #ffffff;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.04);
+    transition: transform 0.25s cubic-bezier(0.3, 0.7, 0.4, 1);
+  }
+  .track-seg[data-active="promo"]::before { transform: translateX(100%); }
+  .track-seg button {
+    position: relative; flex: 1; height: 32px; border: 0; border-radius: 7px; background: transparent;
+    font: 500 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--text); cursor: pointer;
+  }
+  .track-seg button[aria-checked="true"] { font-weight: 600; }
+  .track-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .track-seg-hint {
+    position: absolute; top: calc(100% + 6px); right: 0; white-space: nowrap;
+    font-size: 11px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .track-seg-hint.show { opacity: 1; }
+  @media (prefers-color-scheme: dark) {
+    .track-seg { background: rgba(118,118,128,0.24); }
+    .track-seg::before { background: #636366; box-shadow: 0 3px 8px rgba(0,0,0,0.3); }
+    .track-seg button[aria-checked="true"] { color: #ffffff; }
   }
 
   .header {
@@ -70,7 +171,7 @@
   .icon-btn:hover { background: var(--surface2); color: var(--text); }
   .icon-btn svg { width: 16px; height: 16px; }
   #gear-btn.open { transform: rotate(60deg); color: var(--accent); }
-  #focus-toggle-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #focus-toggle-btn.active { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); }
 
   /* ── Clan-Join Button (klanlose eingeloggte Nutzer) ── */
   #clan-join-wrap {
@@ -105,7 +206,7 @@
     cursor: pointer; font-family: Georgia, serif;
     transition: background 0.12s, color 0.12s;
   }
-  .clan-join-request-btn:hover { background: var(--accent); color: #fff; }
+  .clan-join-request-btn:hover { background: var(--accent-fill); color: var(--on-accent); }
   .clan-join-request-btn:disabled { opacity: 0.5; cursor: default; }
   .clan-join-pending { font-size: 11px; color: var(--text-muted); }
   .clan-mode-btn {
@@ -115,7 +216,7 @@
     cursor: pointer; font-family: Georgia, serif;
     transition: background 0.12s, color 0.12s;
   }
-  .clan-mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .clan-mode-btn.active { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); }
   #clan-new-name {
     width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 12px;
     border: 0.5px solid var(--border-strong); border-radius: 6px;
@@ -129,7 +230,7 @@
     cursor: pointer; font-family: Georgia, serif;
     transition: background 0.12s, color 0.12s;
   }
-  #clan-create-confirm-btn:hover { background: var(--accent); color: #fff; }
+  #clan-create-confirm-btn:hover { background: var(--accent-fill); color: var(--on-accent); }
   #clan-create-confirm-btn:disabled { opacity: 0.5; cursor: default; }
 
   /* ── Bell (alle eingeloggten Nutzer; Clan-Anfragen-Sektion nur für Leader) ── */
@@ -171,7 +272,7 @@
     color: var(--text-muted);
   }
   .bell-req-accept { color: var(--accent); border-color: var(--accent); }
-  .bell-req-accept:hover { background: var(--accent); color: #fff; }
+  .bell-req-accept:hover { background: var(--accent-fill); color: var(--on-accent); }
   .bell-req-reject:hover { background: var(--surface2); }
   .bell-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 4px 0; }
   .bell-section-label {
@@ -226,7 +327,7 @@
     color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit;
   }
   .mode-btn:hover { background: var(--surface2); color: var(--text); }
-  .mode-btn.active { background: var(--surface2); color: var(--text); }
+  .mode-btn.active { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); }
 
   .watch-wrap { display: flex; justify-content: center; margin-bottom: 1.25rem; }
 
@@ -258,8 +359,8 @@
     cursor: pointer; transition: background 0.12s; font-family: 'Georgia', serif; letter-spacing: 0.03em;
   }
   .ctrl-btn:hover { background: var(--surface2); }
-  #btn-start { background: var(--accent); color: #fff; border-color: var(--accent-dark); min-width: 100px; }
-  #btn-start:hover { background: var(--accent-dark); }
+  #btn-start { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); min-width: 100px; }
+  #btn-start:hover { background: var(--accent-fill); filter: brightness(1.08); }
   #btn-start.paused { background: transparent; color: var(--text); border-color: var(--border-strong); }
   #btn-start.paused:hover { background: var(--surface2); }
 
@@ -525,8 +626,8 @@
   .auth-field:focus { border-color: var(--accent); }
   .auth-btn {
     width: 100%; padding: 10px; font-size: 13px;
-    border: none; border-radius: 8px; background: var(--accent);
-    color: #fff; cursor: pointer; font-family: Georgia, serif;
+    border: none; border-radius: 8px; background: var(--accent-fill);
+    color: var(--on-accent); cursor: pointer; font-family: Georgia, serif;
     letter-spacing: 0.04em; transition: background 0.12s; margin-top: 0.25rem;
   }
   .auth-btn:hover { background: var(--accent-dark); }
@@ -545,7 +646,7 @@
     background: transparent; color: var(--text); cursor: pointer;
     font-family: Georgia, serif; transition: background 0.12s;
   }
-  .migrate-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .migrate-btn.primary { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); }
   .migrate-btn.primary:hover { background: var(--accent-dark); }
   #user-chip { display: flex; align-items: center; gap: 8px; margin-right: auto; }
   #user-name-display { font-size: 11px; color: var(--text-muted); font-family: Georgia, serif; }
@@ -993,7 +1094,7 @@
   }
   .merge-btn-yes { color: var(--accent); border-color: var(--accent); }
   .merge-btn-no:hover { background: var(--surface2); }
-  .merge-btn-yes:hover { background: var(--accent); color: #fff; }
+  .merge-btn-yes:hover { background: var(--accent-fill); color: var(--on-accent); }
 
   /* ── Timer confirmation banner ── */
   #timer-confirm-banner {
@@ -1029,7 +1130,7 @@
     font-size: 11px; font-family: Georgia, serif; letter-spacing: 0.02em;
     color: var(--accent); border-color: var(--accent);
   }
-  #btn-finish-early:hover { background: var(--accent); color: #fff; }
+  #btn-finish-early:hover { background: var(--accent-fill); color: var(--on-accent); }
 
   /* ── Label Stats: Period Tabs ── */
   .label-period-tabs {
@@ -1144,7 +1245,7 @@
     border: 0.5px solid var(--accent); background: transparent; color: var(--accent);
     cursor: pointer; font-family: Georgia, serif; transition: background 0.12s, transform 0.1s;
   }
-  .chall-claim-btn:hover:not(:disabled)  { background: var(--accent); color: #fff; }
+  .chall-claim-btn:hover:not(:disabled)  { background: var(--accent-fill); color: var(--on-accent); }
   .chall-claim-btn:active:not(:disabled) { transform: scale(0.96); }
   .chall-claim-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -1154,7 +1255,7 @@
     border: 0.5px solid var(--accent); background: transparent; color: var(--accent);
     cursor: pointer; font-family: Georgia, serif; transition: background 0.12s, transform 0.1s;
   }
-  .tired-btn:hover { background: var(--accent); color: #fff; }
+  .tired-btn:hover { background: var(--accent-fill); color: var(--on-accent); }
   .tired-btn:active { transform: scale(0.96); }
   .tired-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -1190,7 +1291,7 @@
   @media (prefers-color-scheme: dark) {
     .btn-unlock-incubator { background: rgba(93,202,165,0.12); }
   }
-  .btn-unlock-incubator:hover  { background: var(--accent); color: #fff; }
+  .btn-unlock-incubator:hover  { background: var(--accent-fill); color: var(--on-accent); }
   .btn-unlock-incubator:active { transform: scale(0.96); }
   .btn-unlock-incubator.visible { display: block; }
 
@@ -1275,7 +1376,7 @@
   }
   .deck-count-badge {
     position: absolute; top: -7px; right: -7px; width: 18px; height: 18px;
-    border-radius: 50%; background: var(--accent); color: #fff;
+    border-radius: 50%; background: var(--accent-fill); color: var(--on-accent);
     font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
     font-family: -apple-system, sans-serif;
   }
@@ -1341,7 +1442,7 @@
     background-size: 200% auto; animation: hatchShimmer 2s linear infinite; color: white;
   }
   .btn-to-deck {
-    font-family: 'Georgia', serif; background: var(--accent); color: #fff; border: none;
+    font-family: 'Georgia', serif; background: var(--accent-fill); color: var(--on-accent); border: none;
     padding: 12px 34px; border-radius: 10px; font-size: 15px; cursor: pointer;
     letter-spacing: 0.04em; transition: opacity 0.15s, transform 0.1s;
   }
@@ -1639,7 +1740,7 @@
     font-family: Georgia, serif; font-size: 13px; letter-spacing: 0.02em;
     cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.22); border: 0.5px solid;
   }
-  #bento-edit-done-btn { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+  #bento-edit-done-btn { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-dark); }
   #bento-edit-reset-btn { background: var(--surface); color: var(--text-muted); border-color: var(--border-strong); }
   #bento-edit-reset-btn:hover { color: var(--text); }
 
@@ -1993,10 +2094,19 @@
 </style>
 </head>
 <body>
+<script>
+  // M2/Promo-Modus vor dem ersten Paint setzen (Hintergrund/Palette), siehe docs/promo.md
+  try { document.body.dataset.track = localStorage.getItem('pomo_track_v1') === 'promo' ? 'promo' : 'm2'; }
+  catch (e) { document.body.dataset.track = 'm2'; }
+</script>
 
-
-<div id="app-title" style="width:100%;max-width:680px;text-align:center;padding-top:1.5rem;">
+<div id="app-title">
   <h1>Pomodoro</h1>
+  <div class="track-seg" id="track-seg" role="radiogroup" aria-label="Modus" data-active="m2">
+    <button type="button" role="radio" data-track="m2" aria-checked="true">M2</button>
+    <button type="button" role="radio" data-track="promo" aria-checked="false">Promo</button>
+    <span class="track-seg-hint" id="track-seg-hint">Erst den laufenden Timer beenden</span>
+  </div>
 </div>
 <div class="header">
   <div id="user-chip" style="display:none;">
@@ -2812,6 +2922,11 @@
 
 <script>
 (function () {
+  // M2/Promo-Modus (Titelzeile, siehe docs/promo.md), vom <body>-Inline-Script gesetzt.
+  // trackKey(): datenbezogene localStorage-Caches/Queues je Modus trennen; Einstellungen,
+  // Session und Design-Präferenzen bleiben geteilt (rohe Keys).
+  const TRACK = document.body.dataset.track === 'promo' ? 'promo' : 'm2';
+  function trackKey(k) { return TRACK === 'promo' ? k + '__promo' : k; }
   function esc(s) {
     return String(s ?? '')
       .replace(/&/g, '&amp;')
@@ -2821,9 +2936,9 @@
       .replace(/'/g, '&#39;');
   }
 
-  const KEY = 'pomo_heatmap_v3';
-  const LABELS_KEY = 'pomo_labels_v1';
-  const CURRENT_LABEL_KEY = 'pomo_current_label_v1'; // zuletzt verwendetes Session-Label, geräte-lokal, übersteht Reload
+  const KEY = trackKey('pomo_heatmap_v3');
+  const LABELS_KEY = trackKey('pomo_labels_v1');
+  const CURRENT_LABEL_KEY = trackKey('pomo_current_label_v1'); // zuletzt verwendetes Session-Label, geräte-lokal, übersteht Reload
   const CIRC = 2 * Math.PI * 68;
   const CIRC_RING = 2 * Math.PI * 72; // Ring-Radius 72 (dicker als der kleine Uhr-Radius 68) — Fokus-Modus UND normale Timer-Karte (Limitless-Doppel-Ring)
   const CIRC_RING_INNER = 2 * Math.PI * 56; // innerer Ring (Pausen-Fortschritt) des Limitless-Doppel-Rings
@@ -2874,16 +2989,16 @@
   function cacheDel(key) { try { localStorage.removeItem(key); } catch(e) {} }
 
   function lbRanksRefGet(period) {
-    try { return JSON.parse(localStorage.getItem(`pomo_lb_ranks_ref_${period}`) || 'null'); } catch(e) { return null; }
+    try { return JSON.parse(localStorage.getItem(trackKey(`pomo_lb_ranks_ref_${period}`)) || 'null'); } catch(e) { return null; }
   }
   function lbRanksRefSet(period, ranks) {
-    try { localStorage.setItem(`pomo_lb_ranks_ref_${period}`, JSON.stringify(ranks)); } catch(e) {}
+    try { localStorage.setItem(trackKey(`pomo_lb_ranks_ref_${period}`), JSON.stringify(ranks)); } catch(e) {}
   }
   function lbRanksCurGet(period) {
-    try { return JSON.parse(localStorage.getItem(`pomo_lb_ranks_cur_${period}`) || 'null'); } catch(e) { return null; }
+    try { return JSON.parse(localStorage.getItem(trackKey(`pomo_lb_ranks_cur_${period}`)) || 'null'); } catch(e) { return null; }
   }
   function lbRanksCurSet(period, ranks) {
-    try { localStorage.setItem(`pomo_lb_ranks_cur_${period}`, JSON.stringify(ranks)); } catch(e) {}
+    try { localStorage.setItem(trackKey(`pomo_lb_ranks_cur_${period}`), JSON.stringify(ranks)); } catch(e) {}
   }
   function computeRanks(list, isWins) {
     const result = {};
@@ -4072,7 +4187,7 @@
     } catch(e) { console.warn('addStudyMinutes error:', e); return false; }
   }
 
-  const PENDING_KEY = 'pomo_pending_credits';
+  const PENDING_KEY = trackKey('pomo_pending_credits');
 
   function queuePendingCredit(date, minutes, label, studyDone = false, sessionDone = false) {
     const queue = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
@@ -4124,7 +4239,7 @@
   // still direkt zu kreditieren — sonst würde genau der Bug wieder auftreten, den
   // dieses Feature verhindern soll (z.B. abgelaufener Token beim Aufwachen aus dem
   // Standby führt zu einem Netzwerkfehler, der sonst als "Direkt-Credit" behandelt würde).
-  const PENDING_STASH_KEY = 'pomo_pending_stash_v1';
+  const PENDING_STASH_KEY = trackKey('pomo_pending_stash_v1');
 
   function queuePendingStash(date, minutes, label, reason) {
     const queue = JSON.parse(localStorage.getItem(PENDING_STASH_KEY) || '[]');
@@ -5373,7 +5488,7 @@
   // Gemergter Pending-Blob statt additivem Array-Queue (wie PENDING_KEY) —
   // timer_state ist eine einzelne Zeile mit partiellen Feld-Updates, "letzter
   // Schreibversuch pro Feld gewinnt" ist hier das richtige Modell.
-  const PENDING_TIMER_KEY = 'pomo_pending_timer_state';
+  const PENDING_TIMER_KEY = trackKey('pomo_pending_timer_state');
 
   function getPendingTimerState() {
     try { return JSON.parse(localStorage.getItem(PENDING_TIMER_KEY) || 'null'); }
@@ -6076,8 +6191,16 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_6nyRZ6qvp--XRZZH3t6L0Q_ofNkwTgj';
   // ↑↑↑ ─────────────────────────────────────────── ↑↑↑
 
+  // M2/Promo-Modus: Promo liest/schreibt dieselben Tabellen- und RPC-Namen im Postgres-Schema
+  // `promo`, ausgewählt per PostgREST-Profil-Header. In M2 bleiben die Requests unverändert
+  // (Default-Schema public). Nur für /rest/v1, nicht für /auth oder /storage.
+  function schemaHeaders() {
+    return TRACK === 'promo' ? { 'Accept-Profile': 'promo', 'Content-Profile': 'promo' } : {};
+  }
+
   function sbHeaders() {
     return {
+      ...schemaHeaders(),
       'Content-Type': 'application/json',
       'apikey': SUPABASE_ANON_KEY,
       'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
@@ -6224,7 +6347,7 @@
     try {
       const token = await getValidToken() || SUPABASE_ANON_KEY;
       const res = await fetch(`${SUPABASE_URL}/rest/v1/race_checkpoint_claims?date=eq.${todayKey()}&select=checkpoint`, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+        headers: { ...schemaHeaders(), apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
       });
       if (!res.ok) return;
       const rows = await res.json();
@@ -6317,7 +6440,7 @@
   // eigenständige Kachel und zeigt immer die heutigen Positionen live.
   async function loadRaceTrackData(forceRefresh = false) {
     if (!supabaseReady()) return;
-    const cacheKey = 'pomo_lb_cache_today';
+    const cacheKey = trackKey('pomo_lb_cache_today');
     if (!forceRefresh) {
       const cached = cacheGet(cacheKey, CACHE_TTL_LB.today);
       if (cached) { await loadRaceCheckpointStatus(); await loadLibraryCheckins(); sweepRaceCheckpoints(); renderRaceTrack(cached.list); return; }
@@ -6326,7 +6449,7 @@
       const token = await getValidToken() || SUPABASE_ANON_KEY;
       const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/leaderboard_today`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+        headers: { ...schemaHeaders(), 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
         body: JSON.stringify({}),
       });
       if (!res.ok) return;
@@ -6726,8 +6849,8 @@
     if (period) lbPeriod = period;
     const status = document.getElementById('lb-status');
 
-    const cacheKey = `pomo_lb_cache_${lbPeriod}`;
-    const winnerCacheKey = 'pomo_lb_winner';
+    const cacheKey = trackKey(`pomo_lb_cache_${lbPeriod}`);
+    const winnerCacheKey = trackKey('pomo_lb_winner');
     if (!forceRefresh) {
       const cached = cacheGet(cacheKey, CACHE_TTL_LB[lbPeriod]);
       if (cached) {
@@ -6748,6 +6871,7 @@
     status.textContent = 'Wird geladen …';
     const token = await getValidToken() || SUPABASE_ANON_KEY;
     const headers = {
+      ...schemaHeaders(),
       'Content-Type': 'application/json',
       'apikey': SUPABASE_ANON_KEY,
       'Authorization': 'Bearer ' + token,
@@ -6955,6 +7079,7 @@
 
   function authHeaders(token) {
     return {
+      ...schemaHeaders(),
       'Content-Type': 'application/json',
       'apikey': SB_KEY,
       'Authorization': 'Bearer ' + (token || SB_KEY),
@@ -7781,7 +7906,7 @@
       content.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:1rem 0;">Bitte anmelden, um Label-Statistiken zu sehen.</div>';
       return;
     }
-    const cacheKey = `pomo_label_stats_${currentUser.id}`;
+    const cacheKey = trackKey(`pomo_label_stats_${currentUser.id}`);
     if (!forceRefresh) {
       const cached = cacheGet(cacheKey, CACHE_TTL_LABEL_STATS);
       if (cached) { renderLabelStats(cached); return; }
@@ -9035,14 +9160,14 @@
           showMergeBanner(labelName, newLabel,
             async () => {
               const ok = await renameLabelInDb(labelName, newLabel);
-              if (ok) { renameLabelInStorage(labelName, newLabel); cacheDel(`pomo_label_stats_${currentUser?.id}`); await loadLabelStats(true); }
+              if (ok) { renameLabelInStorage(labelName, newLabel); cacheDel(trackKey(`pomo_label_stats_${currentUser?.id}`)); await loadLabelStats(true); }
               else { restoreCell(); toast('Zusammenführen fehlgeschlagen – bitte erneut versuchen.'); }
             },
             () => restoreCell()
           );
         } else {
           const ok = await renameLabelInDb(labelName, newLabel);
-          if (ok) { renameLabelInStorage(labelName, newLabel); cacheDel(`pomo_label_stats_${currentUser?.id}`); await loadLabelStats(true); }
+          if (ok) { renameLabelInStorage(labelName, newLabel); cacheDel(trackKey(`pomo_label_stats_${currentUser?.id}`)); await loadLabelStats(true); }
           else { restoreCell(); toast('Umbenennen fehlgeschlagen – bitte erneut versuchen.'); }
         }
       }
@@ -9487,8 +9612,8 @@
         body: JSON.stringify({ p_user_id: userId }),
       });
       if (res.ok) {
-        ['today', 'week', 'month', 'alltime', 'wins'].forEach(p => cacheDel(`pomo_lb_cache_${p}`));
-        cacheDel('pomo_lb_winner');
+        ['today', 'week', 'month', 'alltime', 'wins'].forEach(p => cacheDel(trackKey(`pomo_lb_cache_${p}`)));
+        cacheDel(trackKey('pomo_lb_winner'));
         loadLeaderboard(lbPeriod, true);
       }
     } catch(e) { console.warn('removeClanMember error', e); }
@@ -9603,6 +9728,38 @@
   initAutoBreaksSetting();
   initFocusIntervalSetting();
   initNewDesignSetting();
+
+  // ── M2/Promo-Umschalter (Titelzeile) ──
+  // Der Modus wird vor dem ersten Paint im <body>-Inline-Script gesetzt; ein Wechsel lädt die
+  // Seite neu, damit kein globaler State (days, Caches, Timer) aus dem anderen Modus übrig bleibt.
+  // Bei laufendem/angefangenem Timer gesperrt, sonst bliebe dessen timer_state-Zeile im alten Modus.
+  function initTrackSwitch() {
+    const seg = document.getElementById('track-seg');
+    const hint = document.getElementById('track-seg-hint');
+    const current = document.body.dataset.track === 'promo' ? 'promo' : 'm2';
+    const buttons = [...seg.querySelectorAll('button[data-track]')];
+    seg.dataset.active = current;
+    buttons.forEach(b => b.setAttribute('aria-checked', String(b.dataset.track === current)));
+    let hintTimer = null;
+    const select = (track) => {
+      if (track === current) return;
+      if (running || hasProgress()) {
+        hint.classList.add('show');
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(() => hint.classList.remove('show'), 2500);
+        return;
+      }
+      seg.dataset.active = track;
+      try { localStorage.setItem('pomo_track_v1', track); } catch (e) {}
+      setTimeout(() => location.reload(), 260);
+    };
+    buttons.forEach(b => b.addEventListener('click', () => select(b.dataset.track)));
+    seg.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') select('m2');
+      if (e.key === 'ArrowRight') select('promo');
+    });
+  }
+  initTrackSwitch();
   applyBentoState(loadBentoState());
   initBentoEditMode();
   renderBentoProfilesList();
@@ -11106,6 +11263,7 @@
   async function maybeShowRecap() {
     const btn = document.getElementById('recap-open-btn');
     if (btn) btn.style.display = 'none';
+    if (TRACK !== 'm2') return;                                 // M2-Recap gibt es nur im M2-Modus
     if (!currentUser || !recapActive()) return;                // Client-Gate: vorher keinerlei Requests
     const totalMin = Object.values(days).reduce((a, b) => a + b, 0);
     if (!totalMin) return;
@@ -11563,7 +11721,7 @@
     // Angebote dieser Karte zurück (inkl. offener Gegenangebote darauf) —
     // lokale Listen und die Glocke synchron nachziehen, statt auf den
     // nächsten Poll zu warten.
-    cacheDel('pomo_market_cache');
+    cacheDel(trackKey('pomo_market_cache'));
     myListings = myListings.filter(l => l.card_id !== cardId);
     marketListings = marketListings.filter(l => !(l.card_id === cardId && l.seller_id === currentUser?.id));
     renderMarketGrid();
@@ -11609,7 +11767,7 @@
         body: JSON.stringify({ p_offer_id: offerId, p_accept: accept }),
       });
       if (!res.ok) { console.error('respond_to_trade_offer error:', await res.text()); return false; }
-      cacheDel('pomo_market_cache');
+      cacheDel(trackKey('pomo_market_cache'));
       return true;
     } catch(e) { console.error('respond_to_trade_offer error:', e); return false; }
   }
@@ -11856,7 +12014,7 @@
   let myListingsSeq = 0;
 
   async function fetchMarketListings(force = false) {
-    const cacheKey = 'pomo_market_cache';
+    const cacheKey = trackKey('pomo_market_cache');
     if (!force) {
       const cached = cacheGet(cacheKey, CACHE_TTL_MARKET);
       if (cached) { marketListings = cached; renderMarketGrid(); return; }
@@ -11943,7 +12101,7 @@
         body: JSON.stringify({ p_card_id: cardId }),
       });
       if (!res.ok) { console.error('create_listing error:', await res.text()); return false; }
-      cacheDel('pomo_market_cache');
+      cacheDel(trackKey('pomo_market_cache'));
       await fetchMyListings();
       return true;
     } catch(e) { console.error('create_listing error:', e); return false; }
@@ -11958,7 +12116,7 @@
         body: JSON.stringify({ p_listing_id: listingId }),
       });
       if (!res.ok) { console.error('cancel_listing error:', await res.text()); return false; }
-      cacheDel('pomo_market_cache');
+      cacheDel(trackKey('pomo_market_cache'));
       myListings = myListings.filter(l => l.id !== listingId);
       renderMarketGrid();
       return true;
