@@ -2106,7 +2106,7 @@
   <div class="track-seg" id="track-seg" role="radiogroup" aria-label="Modus" data-active="m2">
     <button type="button" role="radio" data-track="m2" aria-checked="true">M2</button>
     <button type="button" role="radio" data-track="promo" aria-checked="false">Promo</button>
-    <span class="track-seg-hint" id="track-seg-hint">Erst den laufenden Timer beenden</span>
+    <span class="track-seg-hint" id="track-seg-hint">Promo ist gerade nicht erreichbar</span>
   </div>
 </div>
 <div class="header">
@@ -4015,13 +4015,14 @@
     const dayBefore = days[key] || 0;
     days[key] = (days[key] || 0) + minutes;
     save();
+    let writePromise = Promise.resolve();
     if (currentUser && minutes > 0) {
       // Sicherheitsnetz: writeOrQueueCredit() queued selbst schon sauber bei
       // false-Rückgaben von addStudyMinutes()/savePomoSession() — dieser
       // catch() fängt nur noch echte, unerwartete Exceptions ab (z.B. falls
       // sbAuth() trotz Abhärtung doch einmal wirft), damit das lokal schon
       // gebumpte days[key] nie ohne Queue-Eintrag verwaist.
-      writeOrQueueCredit(key, minutes, label).catch(e => {
+      writePromise = writeOrQueueCredit(key, minutes, label).catch(e => {
         console.warn('writeOrQueueCredit unexpected error:', e);
         queuePendingCredit(key, minutes, label);
       });
@@ -4057,6 +4058,7 @@
       // gebauten, inzwischen veralteten Liste (Bugfix).
       renderAttentionChart(lastAttentionSessions, lastAttentionTiredEvents, refreshedAttentionDateKeys());
     }
+    return writePromise; // Server-Write bzw. Queue-Eintrag (stopTimerForTrackSwitch() wartet darauf)
   }
 
   function completePomo() {
@@ -5995,6 +5997,32 @@
     setTimeout(() => switchTo('short', false), 1400);
   }
 
+  // Moduswechsel (M2/Promo) mit laufendem/angefangenem Timer: anhalten und — nur bei
+  // Fokus — die schon gelaufenen vollen Minuten dem ALTEN Modus gutschreiben, wie
+  // finishEarly(), aber ohne Konfetti/Sound und ohne Wechsel in die Pause. Wartet auf den
+  // Server-Write (bzw. Queue-Eintrag im alten Modus), bevor die Seite neu lädt.
+  async function stopTimerForTrackSwitch() {
+    const wasWork = mode === 'work';
+    const wasLimitless = wasWork && limitless;
+    const totalElapsedMin = Math.floor(elapsedSec() / 60);
+    const creditMin = !wasWork ? 0
+      : wasLimitless ? Math.max(0, totalElapsedMin - limitlessCreditedMin) : totalElapsedMin;
+    clearInterval(tid); running = false; startedAt = null; unbrokenSince = null;
+    swSend({ type: 'TIMER_RESET' });
+    await clearTimerState();
+    limitlessCreditedMin = 0;
+    if (creditMin > 0) {
+      const key = pomoDay || todayKey();
+      pomoDay = null;
+      const label = currentLabel.trim() || 'not specified';
+      if (currentLabel.trim()) storeLabel(currentLabel.trim());
+      await creditFocusMinutes(key, creditMin, label);
+      toast(`${creditMin} min in ${TRACK === 'promo' ? 'Promo' : 'M2'} gutgeschrieben`);
+    }
+    pomoDay = null;
+    return creditMin;
+  }
+
   function skip() {
     if (mode === 'work') return;
     markTimerActivity();
@@ -6374,7 +6402,7 @@
       if (!token) return;
       const res = await fetch(`${SB}/rest/v1/rpc/get_library_checkins`, {
         method: 'POST',
-        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        headers: { ...authHeaders(token, 'public'), 'Content-Type': 'application/json' }, // Check-ins sind modusübergreifend
         body: JSON.stringify({}),
       });
       if (!res.ok) return;
@@ -6417,7 +6445,7 @@
       if (!token) return;
       const res = await fetch(`${SB}/rest/v1/rpc/get_mensa_checkins`, {
         method: 'POST',
-        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        headers: { ...authHeaders(token, 'public'), 'Content-Type': 'application/json' }, // Check-ins sind modusübergreifend
         body: JSON.stringify({}),
       });
       if (!res.ok) return;
@@ -7078,9 +7106,10 @@
   let currentUser = null; // Supabase user object
   let avatarUrl = null;   // public URL of uploaded avatar
 
-  function authHeaders(token) {
+  // schema = 'public' erzwingt das geteilte M2-Schema auch im Promo-Modus (z. B. Check-ins).
+  function authHeaders(token, schema) {
     return {
-      ...schemaHeaders(),
+      ...(schema === 'public' ? {} : schemaHeaders()),
       'Content-Type': 'application/json',
       'apikey': SB_KEY,
       'Authorization': 'Bearer ' + (token || SB_KEY),
@@ -9751,7 +9780,8 @@
   // ── M2/Promo-Umschalter (Titelzeile) ──
   // Der Modus wird vor dem ersten Paint im <body>-Inline-Script gesetzt; ein Wechsel lädt die
   // Seite neu, damit kein globaler State (days, Caches, Timer) aus dem anderen Modus übrig bleibt.
-  // Bei laufendem/angefangenem Timer gesperrt, sonst bliebe dessen timer_state-Zeile im alten Modus.
+  // Ein laufender/angefangener Timer wird vorher gestoppt und dem alten Modus gutgeschrieben
+  // (stopTimerForTrackSwitch()), sonst bliebe dessen timer_state-Zeile im alten Schema liegen.
   // Vorab-Check, ob das promo-Schema per Data-API erreichbar ist (exposed + migriert).
   async function promoAvailable() {
     try {
@@ -9797,7 +9827,6 @@
     let switching = false;
     const select = async (track) => {
       if (track === current || switching) return;
-      if (running || hasProgress()) { showHint('Erst den laufenden Timer beenden'); return; }
       switching = true;
       seg.dataset.active = track;                       // Schieber gleitet sofort
       if (track === 'promo' && !(await promoAvailable())) {
@@ -9806,12 +9835,16 @@
         showHint('Promo ist gerade nicht erreichbar');
         return;
       }
+      // Laufender/angefangener Timer: stoppen, Fokuszeit dem alten Modus gutschreiben
+      const creditedMin = (running || hasProgress()) ? await stopTimerForTrackSwitch() : 0;
       document.body.dataset.track = track;              // Palette/Hintergrund blenden über
       try {
         localStorage.setItem('pomo_track_v1', track);
         sessionStorage.setItem('pomo_track_scroll', String(window.scrollY));
       } catch (e) {}
-      setTimeout(() => location.reload(), 320);         // Daten des anderen Modus laden, gleiche Sitzung
+      // Daten des anderen Modus laden, gleiche Sitzung; nach einer Gutschrift etwas länger,
+      // damit der Toast lesbar bleibt
+      setTimeout(() => location.reload(), creditedMin > 0 ? 1400 : 320);
     };
     try {
       if (sessionStorage.getItem('pomo_track_fallback') === '1') {
@@ -12337,6 +12370,18 @@
     renderEggDeck(null, false);
   }
 
+  // Geteilte Profil-Felder (Bibliotheks-/Mensa-Check-in) direkt in public.profiles
+  // schreiben — eine einzige Quelle für M2 und Promo, siehe docs/promo.md.
+  async function saveSharedProfile(fields) {
+    const token = await getValidToken();
+    if (!token || !currentUser) return;
+    await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}`, {
+      method: 'PATCH',
+      headers: { ...authHeaders(token, 'public'), 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+  }
+
   // Supabase: Profile-Felder schreiben (eggs + diamonds)
   async function saveEggProfile(fields) {
     const token = await getValidToken();
@@ -12379,7 +12424,7 @@
     renderRaceTrack(); // ohne Argument: nutzt raceTodayList-Cache, siehe dort — NICHT lastLeaderboardData
                         // (das ist die Liste des aktiven Ranglisten-Tabs, z.B. 'alltime', andere Datenform)
 
-    await saveEggProfile({
+    await saveSharedProfile({
       library_checkin: newVal,
       library_checkin_date: newVal ? todayKey() : null,
     });
@@ -12400,7 +12445,7 @@
     if (newVal) mensaCheckins.push({ name: userName, avatar_url: avatarUrl, mensa: newVal });
     renderMensaCard();
 
-    await saveEggProfile({
+    await saveSharedProfile({
       mensa_checkin: newVal,
       mensa_checkin_date: newVal ? todayKey() : null,
     });
