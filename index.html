@@ -78,6 +78,7 @@
 
   /* ── Hintergründe je Modus (M2: Punkteraster + Smaragd-Schimmer, Promo: liniertes Papier) ── */
   body {
+    transition: background-color 0.3s ease, color 0.3s ease;
     background-color: var(--bg);
     background-image: radial-gradient(rgba(15,110,86,0.11) 1px, transparent 1.2px),
                       radial-gradient(120% 60% at 50% -10%, rgba(29,158,117,0.16), rgba(29,158,117,0) 70%);
@@ -5942,7 +5943,7 @@
     if (session) {
       await fetch(`${SB}/auth/v1/logout`, {
         method: 'POST',
-        headers: authHeaders(session.access_token),
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + session.access_token },
       });
     }
     setToken(null);
@@ -7144,11 +7145,22 @@
   }
 
   async function loadProfile(token) {
-    const res = await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}&select=*`, {
-      headers: authHeaders(token),
-    });
-    const rows = await res.json();
-    return rows[0] || null;
+    return (await loadProfileResult(token)).profile;
+  }
+
+  // ok=false: Request/Schema-Fehler (z. B. Promo-Schema nicht erreichbar) — dann darf
+  // onLoginSuccess() KEIN Ersatzprofil anlegen; ok=true + profile=null: Profil fehlt wirklich.
+  async function loadProfileResult(token) {
+    try {
+      const res = await fetch(`${SB}/rest/v1/profiles?id=eq.${currentUser.id}&select=*`, {
+        headers: authHeaders(token),
+      });
+      if (!res.ok) return { ok: false, profile: null };
+      const rows = await res.json();
+      return Array.isArray(rows) ? { ok: true, profile: rows[0] || null } : { ok: false, profile: null };
+    } catch (e) {
+      return { ok: false, profile: null };
+    }
   }
 
   async function saveProfile(token, data) {
@@ -7282,13 +7294,16 @@
     const token = session.access_token;
 
     // Load profile
-    let profile = await loadProfile(token);
-    if (!profile && isNew) {
+    let profileRes = await loadProfileResult(token);
+    if (!profileRes.profile && isNew) {
       await new Promise(r => setTimeout(r, 500));
-      profile = await loadProfile(token);
+      profileRes = await loadProfileResult(token);
     }
+    // Promo-Schema nicht erreichbar: Sitzung behalten, auf M2 zurückfallen statt abzumelden
+    if (!profileRes.ok && TRACK === 'promo') { fallBackToM2(); return; }
+    let profile = profileRes.profile;
     // Auto-create profile if still missing (e.g. registration failed previously)
-    if (!profile) {
+    if (!profile && profileRes.ok) {
       const fallbackUsername = currentUser.email?.split('@')[0] || 'Nutzer';
       await saveProfile(token, { username: fallbackUsername, public: true });
       profile = await loadProfile(token);
@@ -7797,6 +7812,9 @@
     // bei ausbleibender Reaktion denselben Ablauf auslöst (siehe triggerUnbrokenConfirm()).
     document.getElementById('logout-btn').addEventListener('click', logout);
 
+    // Promo-Modus, aber Schema nicht erreichbar → zurück zu M2 (Sitzung bleibt erhalten)
+    if (TRACK === 'promo' && !(await promoAvailable())) { fallBackToM2(); return; }
+
     // Try restoring session from localStorage
     const session = getToken();
     if (session?.refresh_token) {
@@ -7804,6 +7822,7 @@
         const refreshed = await refreshSession(session.refresh_token);
         if (refreshed) {
           await onLoginSuccess(refreshed, false);
+          restoreTrackScroll();
           return; // logged in — skip modal
         }
       } catch(e) { console.warn('Session refresh failed', e); }
@@ -9733,6 +9752,34 @@
   // Der Modus wird vor dem ersten Paint im <body>-Inline-Script gesetzt; ein Wechsel lädt die
   // Seite neu, damit kein globaler State (days, Caches, Timer) aus dem anderen Modus übrig bleibt.
   // Bei laufendem/angefangenem Timer gesperrt, sonst bliebe dessen timer_state-Zeile im alten Modus.
+  // Vorab-Check, ob das promo-Schema per Data-API erreichbar ist (exposed + migriert).
+  async function promoAvailable() {
+    try {
+      const token = (await getValidToken()) || SB_KEY;
+      const res = await fetch(`${SB}/rest/v1/wallets?select=user_id&limit=1`, {
+        headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + token, 'Accept-Profile': 'promo' },
+      });
+      return res.ok;
+    } catch (e) { return false; }
+  }
+
+  function fallBackToM2() {
+    try {
+      localStorage.setItem('pomo_track_v1', 'm2');
+      sessionStorage.setItem('pomo_track_fallback', '1');
+    } catch (e) {}
+    location.reload();
+  }
+
+  function restoreTrackScroll() {
+    try {
+      const y = sessionStorage.getItem('pomo_track_scroll');
+      if (y == null) return;
+      sessionStorage.removeItem('pomo_track_scroll');
+      requestAnimationFrame(() => window.scrollTo(0, Number(y) || 0));
+    } catch (e) {}
+  }
+
   function initTrackSwitch() {
     const seg = document.getElementById('track-seg');
     const hint = document.getElementById('track-seg-hint');
@@ -9741,18 +9788,37 @@
     seg.dataset.active = current;
     buttons.forEach(b => b.setAttribute('aria-checked', String(b.dataset.track === current)));
     let hintTimer = null;
-    const select = (track) => {
-      if (track === current) return;
-      if (running || hasProgress()) {
-        hint.classList.add('show');
-        clearTimeout(hintTimer);
-        hintTimer = setTimeout(() => hint.classList.remove('show'), 2500);
+    const showHint = (text) => {
+      hint.textContent = text;
+      hint.classList.add('show');
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(() => hint.classList.remove('show'), 2500);
+    };
+    let switching = false;
+    const select = async (track) => {
+      if (track === current || switching) return;
+      if (running || hasProgress()) { showHint('Erst den laufenden Timer beenden'); return; }
+      switching = true;
+      seg.dataset.active = track;                       // Schieber gleitet sofort
+      if (track === 'promo' && !(await promoAvailable())) {
+        seg.dataset.active = current;
+        switching = false;
+        showHint('Promo ist gerade nicht erreichbar');
         return;
       }
-      seg.dataset.active = track;
-      try { localStorage.setItem('pomo_track_v1', track); } catch (e) {}
-      setTimeout(() => location.reload(), 260);
+      document.body.dataset.track = track;              // Palette/Hintergrund blenden über
+      try {
+        localStorage.setItem('pomo_track_v1', track);
+        sessionStorage.setItem('pomo_track_scroll', String(window.scrollY));
+      } catch (e) {}
+      setTimeout(() => location.reload(), 320);         // Daten des anderen Modus laden, gleiche Sitzung
     };
+    try {
+      if (sessionStorage.getItem('pomo_track_fallback') === '1') {
+        sessionStorage.removeItem('pomo_track_fallback');
+        toast('Promo nicht erreichbar – zurück zu M2');
+      }
+    } catch (e) {}
     buttons.forEach(b => b.addEventListener('click', () => select(b.dataset.track)));
     seg.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowLeft') select('m2');
